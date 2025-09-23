@@ -559,9 +559,11 @@
 
         // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('📧 Email Automation v2.1 - Loading...');
             initializeEmailAutomation();
             setupEventListeners();
             setupEmailAttachments();
+            console.log('✅ Email Automation fully loaded');
         });
 
         // Initialize authentication and load data
@@ -1262,6 +1264,16 @@
         function setupEmailAttachments() {
             const fileInput = document.getElementById('emailAttachments');
             const uploadArea = document.querySelector('.attachment-upload-area');
+            const preview = document.getElementById('attachmentPreview');
+
+            // Clear any existing attachments and displays on page load
+            if (fileInput) fileInput.value = '';
+            if (preview) preview.innerHTML = '';
+
+            // Clear any old attachment displays that might be cached
+            document.querySelectorAll('.attachment-item').forEach(item => item.remove());
+
+            console.log('📎 Email attachments system initialized and cleared');
 
             // File input change handler
             fileInput.addEventListener('change', function(e) {
@@ -2281,8 +2293,11 @@
 
         // Send emails to selected or filtered leads
         async function sendFilteredEmails() {
+            console.log('🚀 Send Email button clicked');
+
             // Get selected email content type first for validation
             const emailContentType = document.getElementById('emailContentSelect').value;
+            console.log('📧 Selected email template:', emailContentType);
             
             // Validate email template before proceeding
             const templateValidation = await validateEmailTemplate(emailContentType);
