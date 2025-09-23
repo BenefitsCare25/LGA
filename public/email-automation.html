@@ -33,18 +33,36 @@
             gap: 8px;
         }
 
-        .attachment-input {
-            padding: 8px;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            font-size: 14px;
-            background-color: white;
+        .attachment-input-hidden {
+            display: none;
         }
 
-        .attachment-input:focus {
-            outline: none;
+        .attachment-upload-area {
+            border: 2px dashed #ced4da;
+            border-radius: 6px;
+            padding: 20px;
+            text-align: center;
+            background-color: #f8f9fa;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-bottom: 8px;
+        }
+
+        .attachment-upload-area:hover {
             border-color: #007bff;
-            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+            background-color: #e7f3ff;
+        }
+
+        .attachment-upload-text {
+            font-size: 14px;
+            color: #495057;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .attachment-upload-subtext {
+            font-size: 12px;
+            color: #6c757d;
         }
 
         .attachment-preview {
@@ -273,11 +291,12 @@
                     <div class="attachment-upload-wrapper">
                         <label class="attachment-label">📎 Email Attachments (Optional)</label>
                         <div class="attachment-upload-container">
-                            <input type="file" id="emailAttachments" class="attachment-input" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.txt,.csv,.xlsx,.xls" title="Select files to attach to emails">
-                            <div class="attachment-preview" id="attachmentPreview"></div>
-                            <div class="attachment-info">
-                                <small>📋 Max 10MB per file • PDF, Word, Excel, Images supported</small>
+                            <div class="attachment-upload-area" onclick="document.getElementById('emailAttachments').click()">
+                                <div class="attachment-upload-text">Click to select files or drag files here</div>
+                                <div class="attachment-upload-subtext">PDF, Word, Excel, Images • Max 10MB per file</div>
                             </div>
+                            <input type="file" id="emailAttachments" class="attachment-input-hidden" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.txt,.csv,.xlsx,.xls" title="Select files to attach to emails">
+                            <div class="attachment-preview" id="attachmentPreview"></div>
                         </div>
                     </div>
 
@@ -564,6 +583,7 @@
             initializeEmailAutomation();
             setupEventListeners();
             initializeAttachmentHandling();
+            setupDragAndDrop(); // Initialize attachment drag-and-drop
         });
 
         // Initialize authentication and load data
@@ -793,6 +813,59 @@
             const sizes = ['Bytes', 'KB', 'MB', 'GB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Setup drag and drop functionality
+        function setupDragAndDrop() {
+            const uploadArea = document.querySelector('.attachment-upload-area');
+            const fileInput = document.getElementById('emailAttachments');
+
+            if (!uploadArea || !fileInput) return;
+
+            // Prevent default drag behaviors
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, preventDefaults, false);
+                document.body.addEventListener(eventName, preventDefaults, false);
+            });
+
+            // Highlight drop area when item is dragged over it
+            ['dragenter', 'dragover'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, highlight, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, unhighlight, false);
+            });
+
+            // Handle dropped files
+            uploadArea.addEventListener('drop', handleDrop, false);
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            function highlight(e) {
+                uploadArea.style.borderColor = '#007bff';
+                uploadArea.style.backgroundColor = '#e7f3ff';
+            }
+
+            function unhighlight(e) {
+                uploadArea.style.borderColor = '#ced4da';
+                uploadArea.style.backgroundColor = '#f8f9fa';
+            }
+
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+
+                // Set files to input element
+                fileInput.files = files;
+
+                // Trigger change event
+                const event = new Event('change', { bubbles: true });
+                fileInput.dispatchEvent(event);
+            }
         }
 
         // Show authentication status
