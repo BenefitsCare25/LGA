@@ -1,5 +1,13 @@
-const { createOAuthDeviceAuth } = require('@octokit/auth-oauth-device');
-const { Octokit } = require('@octokit/rest');
+// Dynamic imports for ES modules
+async function loadOAuthDeviceAuth() {
+    const authModule = await import('@octokit/auth-oauth-device');
+    return authModule.createOAuthDeviceAuth;
+}
+
+async function loadOctokit() {
+    const octokitModule = await import('@octokit/rest');
+    return octokitModule.Octokit;
+}
 
 /**
  * GitHub Device Flow Authentication Manager
@@ -25,6 +33,10 @@ class GitHubAuthManager {
             if (!this.clientId) {
                 throw new Error('GitHub Client ID not configured');
             }
+
+            // Load ES modules dynamically
+            const createOAuthDeviceAuth = await loadOAuthDeviceAuth();
+            const Octokit = await loadOctokit();
 
             const auth = createOAuthDeviceAuth({
                 clientType: 'oauth-app',
