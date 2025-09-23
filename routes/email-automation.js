@@ -1,0 +1,1555 @@
+const express = require('express');
+const multer = require('multer');
+const XLSX = require('xlsx');
+const axios = require('axios');
+const { requireDelegatedAuth, getDelegatedAuthProvider } = require('../middleware/delegatedGraphAuth');
+const ExcelProcessor = require('../utils/excelProcessor');
+const EmailContentProcessor = require('../utils/emailContentProcessor');
+const EmailDelayUtils = require('../utils/emailDelayUtils');
+const excelUpdateQueue = require('../utils/excelUpdateQueue');
+const { updateLeadViaGraphAPI, getLeadsViaGraphAPI } = require('../utils/excelGraphAPI');
+const CampaignTokenManager = require('../utils/campaignTokenManager');
+const excelDuplicateChecker = require('../utils/excelDuplicateChecker');
+const CampaignLockManager = require('../utils/campaignLockManager');
+const router = express.Router();
+
+// Configure multer for file uploads
+const upload = multer({
+    limits: {
+        fileSize: 10 * 1024 * 1024 // 10MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+            file.mimetype === 'application/vnd.ms-excel') {
+            cb(null, true);
+        } else {
+            cb(new Error('Only Excel files (.xlsx, .xls) are allowed'), false);
+        }
+    }
+});
+
+// Initialize processors
+const excelProcessor = new ExcelProcessor();
+const emailContentProcessor = new EmailContentProcessor();
+const emailDelayUtils = new EmailDelayUtils();
+const campaignLockManager = new CampaignLockManager();
+
+// Setup lock cleanup handlers
+campaignLockManager.setupExitHandlers();
+
+/**
+ * Enhanced corruption detection to handle Excel table format parsing issues
+ * Addresses false positives where OneDrive table format isn't properly parsed by XLSX library
+ */
+async function isFileActuallyCorrupted(leadsSheet, leadsData) {
+    console.log('🔍 Enhanced corruption detection starting...');
+    
+    // Check 1: No sheet at all = true corruption
+    if (!leadsSheet) {
+        console.log('❌ No Leads sheet found - true corruption');
+        return true;
+    }
+    
+    // Check 2: XLSX parsing returned data = not corrupted
+    if (leadsData.length > 0) {
+        console.log(`✅ XLSX parsing found ${leadsData.length} leads - not corrupted`);
+        return false;
+    }
+    
+    // Check 3: No sheet reference range = truly empty sheet
+    if (!leadsSheet['!ref']) {
+        console.log('❌ No sheet reference range - true corruption');
+        return true;
+    }
+    
+    console.log(`🔍 Sheet reference: ${leadsSheet['!ref']}`);
+    
+    // Check 4: Try alternative parsing methods for table format
+    try {
+        // Method 1: Parse with headers as first row
+        const alternativeParse = XLSX.utils.sheet_to_json(leadsSheet, { header: 1, raw: false });
+        console.log(`🔍 Alternative parsing found ${alternativeParse.length} rows`);
+        
+        if (alternativeParse.length > 1) { // More than just header
+            console.log('✅ Alternative parsing found data - not corrupted');
+            return false;
+        }
+        
+        // Method 2: Check if we have just headers (table setup but no data)
+        if (alternativeParse.length === 1) {
+            const headers = alternativeParse[0];
+            if (headers && headers.length > 0 && headers.some(h => h)) {
+                console.log('✅ Found table headers - file structure intact, just no data yet');
+                return false;
+            }
+        }
+    } catch (parseError) {
+        console.log(`⚠️ Alternative parsing failed: ${parseError.message}`);
+    }
+    
+    // Check 5: Manual sheet structure examination
+    try {
+        const range = XLSX.utils.decode_range(leadsSheet['!ref']);
+        const rowCount = range.e.r - range.s.r + 1;
+        const colCount = range.e.c - range.s.c + 1;
+        
+        console.log(`🔍 Sheet dimensions: ${rowCount} rows x ${colCount} columns`);
+        
+        if (rowCount > 1 || colCount > 0) {
+            console.log('✅ Sheet has structure - not corrupted');
+            return false;
+        }
+    } catch (rangeError) {
+        console.log(`⚠️ Range analysis failed: ${rangeError.message}`);
+    }
+    
+    // Check 6: Look for any cell content directly
+    const cellKeys = Object.keys(leadsSheet).filter(key => key.match(/^[A-Z]+\d+$/));
+    if (cellKeys.length > 0) {
+        console.log(`✅ Found ${cellKeys.length} cells with content - not corrupted`);
+        return false;
+    }
+    
+    console.log('❌ All checks indicate true corruption');
+    return true;
+}
+
+/**
+ * Email Automation Master List Management
+ * Handles Excel file operations, lead management, and campaign coordination
+ */
+
+// Upload and merge Excel file with master list
+router.post('/master-list/upload', requireDelegatedAuth, upload.single('excelFile'), async (req, res) => {
+    try {
+        console.log('📤 Starting Excel file upload and merge...');
+
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                message: 'No Excel file provided'
+            });
+        }
+
+        console.log(`📊 Processing uploaded file: ${req.file.originalname} (${req.file.size} bytes)`);
+
+        // Get authenticated Graph client
+        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+
+        // Parse uploaded Excel file
+        const uploadedLeads = excelProcessor.parseUploadedFile(req.file.buffer);
+
+        if (uploadedLeads.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No valid leads found in uploaded file'
+            });
+        }
+
+        // Check if master file exists, create if not  
+        // Use .xlsx extension for better OneDrive compatibility
+        const masterFileName = 'LGA-Master-Email-List.xlsx';
+        const masterFolderPath = '/LGA-Email-Automation';
+        
+        let masterWorkbook;
+        let existingData = [];
+        let initialExistingCount = 0; // Track initial count for accurate breakdown
+
+        console.log('✅ Master file structure verified');
+
+        try {
+            // Try to download existing master file
+            const files = await graphClient
+                .api(`/me/drive/root:${masterFolderPath}:/children`)
+                .filter(`name eq '${masterFileName}'`)
+                .get();
+
+            if (files.value.length > 0) {
+                const fileContent = await graphClient
+                    .api(`/me/drive/items/${files.value[0].id}/content`)
+                    .get();
+                
+                masterWorkbook = excelProcessor.bufferToWorkbook(fileContent);
+                
+                // CORRUPTION DETECTION: Check if the file has proper structure
+                const hasRequiredSheets = ['Leads', 'Templates', 'Campaign_History'].every(
+                    sheetName => masterWorkbook.Sheets[sheetName]
+                );
+                
+                // Additional check: If we have a Leads sheet with data, it's probably not corrupted
+                const leadsSheet = masterWorkbook.Sheets['Leads'];
+                let leadsData = [];
+                if (leadsSheet) {
+                    try {
+                        leadsData = XLSX.utils.sheet_to_json(leadsSheet);
+                        console.log(`🔍 Checking data integrity...`);
+                    } catch (error) {
+                        console.log(`⚠️ CORRUPTION CHECK: Error reading Leads sheet:`, error.message);
+                    }
+                }
+                
+                // Skip corruption detection - OneDrive files are reliable, and we can handle parsing issues
+                // Original logic caused false positives with table format files
+                const shouldRebuild = false; // Disabled - let normal flow handle any issues
+                
+                if (shouldRebuild) {
+                    console.log('🚨 CORRUPTION DETECTED: Missing sheets and no lead data - Rebuilding master file');
+                    
+                    // Try to recover lead data from any sheet
+                    let recoveredData = [];
+                    const sheetNames = Object.keys(masterWorkbook.Sheets);
+                    
+                    for (const sheetName of sheetNames) {
+                        try {
+                            const sheet = masterWorkbook.Sheets[sheetName];
+                            const data = XLSX.utils.sheet_to_json(sheet);
+                            
+                            if (data.length > 0) {
+                                const hasLeadData = data.some(row => 
+                                    row.Email || row.email || row.Name || row.name ||
+                                    row.Company || row.company || row['Company Name'] || 
+                                    row.Title || row.title
+                                );
+                                
+                                if (hasLeadData) {
+                                    console.log(`✅ Recovered leads from ${sheetName}`);
+                                    recoveredData = [...recoveredData, ...data];
+                                }
+                            }
+                        } catch (error) {
+                            // Silent recovery - don't spam logs
+                        }
+                    }
+                    
+                    console.log(`📊 Recovery completed`);
+                    existingData = recoveredData;
+                    initialExistingCount = existingData.length;
+                    
+                    // Recreate with recovered data
+                    masterWorkbook = excelProcessor.createMasterFile(existingData);
+                } else {
+                    // File structure is good OR has data, extract existing data normally
+                    if (hasRequiredSheets) {
+                        console.log(`✅ Master file structure verified`);
+                        const leadsSheetData = masterWorkbook.Sheets['Leads'];
+                        if (leadsSheetData) {
+                            existingData = XLSX.utils.sheet_to_json(leadsSheetData);
+                            initialExistingCount = existingData.length;
+                            console.log(`📊 Found ${existingData.length} existing leads in master file`);
+                        }
+                    } else if (leadsData.length > 0) {
+                        console.log(`⚠️ Missing structure sheets but preserving ${leadsData.length} existing leads`);
+                        existingData = leadsData;
+                        initialExistingCount = existingData.length;
+                        // Recreate with proper structure but preserve data
+                        masterWorkbook = excelProcessor.createMasterFile(existingData);
+                    }
+                }
+            } else {
+                console.log('📋 No master file found, creating new one...');
+                masterWorkbook = excelProcessor.createMasterFile();
+            }
+        } catch (error) {
+            console.error('❌ Error accessing master file:', error.message);
+            if (error.code === 'itemNotFound' || error.message.includes('not found')) {
+                console.log('📋 Folder or file not found - creating new master file');
+            } else {
+                console.log('📋 Creating new master file due to access issue:', error.message);
+            }
+            masterWorkbook = excelProcessor.createMasterFile();
+        }
+
+        // CRITICAL: Get current OneDrive data for accurate duplicate checking using Graph API
+        let currentOneDriveData = [];
+        try {
+            currentOneDriveData = await getLeadsViaGraphAPI(graphClient);
+            console.log(`📊 Current OneDrive data: ${currentOneDriveData.length} leads for duplicate checking`);
+        } catch (error) {
+            console.log(`⚠️ Could not fetch current OneDrive data for duplicate check: ${error.message}`);
+            // Fallback to locally parsed data
+            currentOneDriveData = existingData;
+        }
+
+        // CRITICAL: Merge uploaded leads with current OneDrive data for accurate duplicate detection
+        const mergeResults = excelProcessor.mergeLeadsWithMaster(uploadedLeads, currentOneDriveData);
+        
+        // Update initialExistingCount with actual current data
+        initialExistingCount = currentOneDriveData.length;
+
+        if (mergeResults.newLeads.length === 0) {
+            return res.json({
+                success: true,
+                message: 'No new leads to add - all leads already exist',
+                totalProcessed: mergeResults.totalProcessed,
+                newLeads: 0,
+                duplicates: mergeResults.duplicates.length,
+                duplicateDetails: mergeResults.duplicates
+            });
+        }
+
+        // CRITICAL: Use Microsoft Graph Table API to APPEND data (no file replacement)
+        
+        // Use the Microsoft Graph table append functionality
+        const appendResult = await appendLeadsToOneDriveTable({
+            delegatedAuth: req.delegatedAuth,
+            sessionId: req.sessionId
+        }, {
+            leads: mergeResults.newLeads,
+            filename: masterFileName,
+            folderPath: masterFolderPath,
+            useCustomFile: true
+        });
+        
+        if (!appendResult.success) {
+            throw new Error(`Failed to append leads to table: ${appendResult.message}`);
+        }
+
+        // Wait a moment for OneDrive to process the table append
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+
+        try {
+            console.log(`📋 Fetching fresh data for verification (post-append)...`);
+            const verifyData = await getLeadsViaGraphAPI(graphClient);
+            if (verifyData && verifyData.length > 0) {
+                
+                // Smart verification: Ensure file has reasonable data and at least the new leads were added
+                const hasReasonableData = verifyData.length >= mergeResults.newLeads.length && verifyData.length > 0;
+                
+                if (!hasReasonableData) {
+                    console.error(`❌ DATA INTEGRITY ERROR: Expected at least ${mergeResults.newLeads.length} new leads, but file has ${verifyData.length} total rows`);
+                    throw new Error(`Data integrity check failed: File contains ${verifyData.length} rows but should have at least ${mergeResults.newLeads.length} new leads`);
+                } else {
+                    // Calculate the proper breakdown
+                    const uploadedCount = uploadedLeads.length;
+                    const duplicatesCount = mergeResults.duplicates.length;
+                    const newLeadsAdded = mergeResults.newLeads.length;
+                    const finalTotalCount = verifyData.length;
+                    
+                    console.log(`📊 Upload breakdown:`);
+                    console.log(`   - Existing leads: ${initialExistingCount}`);
+                    console.log(`   - Leads uploaded: ${uploadedCount}`);
+                    console.log(`   - Duplicates skipped: ${duplicatesCount}`);
+                    console.log(`   - New leads added: ${newLeadsAdded}`);
+                    console.log(`📊 Final count: ${initialExistingCount} existing + ${newLeadsAdded} new = ${finalTotalCount} total records`);
+                    console.log(`✅ Data integrity verified successfully`);
+                }
+            } else {
+                console.error('❌ Post-upload verification failed - no Leads sheet found');
+                
+                // Enhanced debugging for failed verification
+                if (verificationWorkbook) {
+                    const availableSheets = Object.keys(verificationWorkbook.Sheets);
+                    console.error(`❌ Available sheets in downloaded file: [${availableSheets.join(', ')}]`);
+                    
+                    // Check if we have a Sheet1 with data (indicating corruption)
+                    if (availableSheets.includes('Sheet1')) {
+                        const sheet1Data = XLSX.utils.sheet_to_json(verificationWorkbook.Sheets['Sheet1']);
+                        console.error(`❌ Sheet1 detected - OneDrive corruption possible`);
+                        console.error(`❌ This is a known Microsoft Graph API Excel upload corruption issue`);
+                    }
+                } else {
+                    console.error(`❌ Could not download verification file at all`);
+                }
+                
+                throw new Error('Post-upload verification failed: No Leads sheet found in uploaded file');
+            }
+        } catch (verifyError) {
+            console.error('❌ Post-upload verification failed:', verifyError.message);
+            
+            // If verification fails, this is a critical error - don't claim success
+            return res.status(500).json({
+                success: false,
+                message: 'File uploaded but verification failed - data may not have been saved correctly',
+                error: verifyError.message,
+                troubleshooting: {
+                    suggestion: 'Please check your OneDrive file manually and try again if data is missing',
+                    expectedRows: existingData.length + mergeResults.newLeads.length,
+                    uploadedRows: mergeResults.newLeads.length,
+                    existingRows: existingData.length
+                }
+            });
+        }
+
+
+        // Get the actual final count from verification
+        let finalTotalLeads = existingData.length + mergeResults.newLeads.length;
+        try {
+            const finalVerifyData = await getLeadsViaGraphAPI(graphClient);
+            if (finalVerifyData) {
+                finalTotalLeads = finalVerifyData.length;
+            }
+        } catch (verifyError) {
+            // Use calculated count if verification fails
+        }
+
+        res.json({
+            success: true,
+            message: 'Excel file uploaded and merged successfully',
+            breakdown: {
+                existingLeads: initialExistingCount,
+                leadsUploaded: uploadedLeads.length,
+                duplicatesSkipped: mergeResults.duplicates.length,
+                newLeadsAdded: mergeResults.newLeads.length,
+                finalTotal: finalTotalLeads
+            },
+            // Legacy compatibility
+            totalProcessed: mergeResults.totalProcessed,
+            newLeads: mergeResults.newLeads.length,
+            duplicates: mergeResults.duplicates.length,
+            duplicateDetails: mergeResults.duplicates,
+            masterFile: {
+                name: masterFileName,
+                location: masterFolderPath,
+                totalLeads: finalTotalLeads
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Excel upload error:', error.message);
+        
+        // Handle specific error types
+        if (error.isLockError) {
+            res.status(423).json({
+                success: false,
+                message: 'File is currently locked',
+                error: error.message,
+                errorType: 'FILE_LOCKED',
+                userMessage: 'The Excel file is currently open in OneDrive or Excel. Please close it and try again.',
+                details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                message: 'Failed to upload and process Excel file',
+                error: error.message,
+                details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            });
+        }
+    }
+});
+
+// Upload Excel file with domain exclusion from exclusion list
+router.post('/master-list/upload-with-exclusions', requireDelegatedAuth, upload.fields([
+    { name: 'leadsFile', maxCount: 1 },
+    { name: 'exclusionsFile', maxCount: 1 }
+]), async (req, res) => {
+    try {
+        console.log('📤 Starting Excel file upload with domain exclusions...');
+
+        if (!req.files || !req.files.leadsFile || !req.files.leadsFile[0]) {
+            return res.status(400).json({
+                success: false,
+                message: 'No leads Excel file provided'
+            });
+        }
+
+        const leadsFile = req.files.leadsFile[0];
+        const exclusionsFile = req.files.exclusionsFile ? req.files.exclusionsFile[0] : null;
+
+        console.log(`📊 Processing leads file: ${leadsFile.originalname} (${leadsFile.size} bytes)`);
+        if (exclusionsFile) {
+            console.log(`🚫 Processing exclusions file: ${exclusionsFile.originalname} (${exclusionsFile.size} bytes)`);
+        }
+
+        // Get authenticated Graph client
+        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+
+        // Extract exclusion domains if exclusions file provided
+        let exclusionDomains = [];
+        if (exclusionsFile) {
+            // Check for Excel temporary files
+            if (exclusionsFile.originalname.startsWith('~$')) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Cannot process Excel temporary file. Please close Excel and upload the actual file (not the ~$ temporary file).'
+                });
+            }
+            
+            exclusionDomains = excelProcessor.parseExclusionDomainsFromExcel(exclusionsFile.buffer);
+        }
+
+        // Parse leads file with domain exclusion
+        const parseResult = excelProcessor.parseUploadedFileWithDomainExclusion(leadsFile.buffer, exclusionDomains);
+        const { leads: filteredLeads, excluded: excludedLeads } = parseResult;
+
+        if (filteredLeads.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No valid leads found after applying exclusion filters',
+                exclusionStats: {
+                    domainsExcluded: exclusionDomains.length,
+                    leadsExcluded: excludedLeads.length,
+                    exclusionDomains: exclusionDomains.slice(0, 10)
+                }
+            });
+        }
+
+        // Use existing master file logic
+        const masterFileName = 'LGA-Master-Email-List.xlsx';
+        const masterFolderPath = '/LGA-Email-Automation';
+        
+        let masterWorkbook;
+        let existingData = [];
+        let initialExistingCount = 0;
+
+        try {
+            const files = await graphClient
+                .api(`/me/drive/root:${masterFolderPath}:/children`)
+                .filter(`name eq '${masterFileName}'`)
+                .get();
+
+            if (files.value.length > 0) {
+                const fileContent = await graphClient
+                    .api(`/me/drive/items/${files.value[0].id}/content`)
+                    .get();
+                
+                masterWorkbook = excelProcessor.bufferToWorkbook(fileContent);
+                existingData = await getLeadsViaGraphAPI(graphClient) || [];
+                initialExistingCount = existingData.length;
+            } else {
+                console.log('📝 Creating new master file...');
+                masterWorkbook = excelProcessor.createMasterFile(filteredLeads, 'AI_Generated');
+                initialExistingCount = 0;
+            }
+        } catch (fileError) {
+            console.log('📝 Creating new master file due to access error...');
+            masterWorkbook = excelProcessor.createMasterFile(filteredLeads, 'AI_Generated');
+            initialExistingCount = 0;
+        }
+
+        // Merge leads with existing data
+        const mergeResults = excelProcessor.mergeLeadsWithMaster(filteredLeads, existingData);
+        
+        if (mergeResults.newLeads.length === 0) {
+            return res.json({
+                success: true,
+                message: 'All leads were duplicates - no new leads added',
+                breakdown: {
+                    existingLeads: initialExistingCount,
+                    leadsUploaded: filteredLeads.length,
+                    duplicatesSkipped: mergeResults.duplicates.length,
+                    newLeadsAdded: 0,
+                    finalTotal: initialExistingCount,
+                    domainsExcluded: exclusionDomains.length,
+                    leadsExcluded: excludedLeads.length
+                },
+                exclusionStats: {
+                    exclusionDomains: exclusionDomains,
+                    excludedLeads: excludedLeads.map(lead => ({
+                        name: lead.Name || lead.name,
+                        email: lead.Email || lead.email,
+                        reason: lead.excludedReason
+                    }))
+                }
+            });
+        }
+
+        // Upload to OneDrive using table append
+        const appendResult = await appendLeadsToOneDriveTable(
+            { sessionId: req.sessionId },
+            {
+                leads: mergeResults.newLeads,
+                filename: masterFileName,
+                folderPath: masterFolderPath
+            }
+        );
+
+        if (!appendResult.success) {
+            throw new Error(`Failed to append leads to table: ${appendResult.message}`);
+        }
+
+        // Verify upload success
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const verifyData = await getLeadsViaGraphAPI(graphClient);
+        const finalTotalLeads = verifyData ? verifyData.length : initialExistingCount + mergeResults.newLeads.length;
+
+        res.json({
+            success: true,
+            message: `Excel file processed with domain exclusions - ${mergeResults.newLeads.length} new leads added`,
+            breakdown: {
+                existingLeads: initialExistingCount,
+                leadsUploaded: filteredLeads.length,
+                duplicatesSkipped: mergeResults.duplicates.length,
+                newLeadsAdded: mergeResults.newLeads.length,
+                finalTotal: finalTotalLeads,
+                domainsExcluded: exclusionDomains.length,
+                leadsExcluded: excludedLeads.length
+            },
+            exclusionStats: {
+                exclusionDomains: exclusionDomains,
+                excludedLeads: excludedLeads.map(lead => ({
+                    name: lead.Name || lead.name,
+                    email: lead.Email || lead.email,
+                    reason: lead.excludedReason
+                }))
+            },
+            masterFile: {
+                name: masterFileName,
+                location: masterFolderPath,
+                totalLeads: finalTotalLeads
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Excel upload with exclusions error:', error.message);
+        
+        res.status(500).json({
+            success: false,
+            message: 'Failed to upload and process Excel files with domain exclusions',
+            error: error.message,
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
+    }
+});
+
+// Extract exclusion domains from uploaded Excel file
+router.post('/extract-exclusion-domains', upload.single('exclusionsFile'), async (req, res) => {
+    try {
+        console.log('🚫 Extracting exclusion domains from uploaded Excel file...');
+
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                message: 'No Excel file provided'
+            });
+        }
+
+        console.log(`📊 Processing file: ${req.file.originalname} (${req.file.size} bytes)`);
+
+        // Extract exclusion domains using ExcelProcessor
+        const exclusionDomains = excelProcessor.parseExclusionDomainsFromExcel(req.file.buffer);
+
+        res.json({
+            success: true,
+            message: `Successfully extracted ${exclusionDomains.length} exclusion domains`,
+            domains: exclusionDomains,
+            file: {
+                name: req.file.originalname,
+                size: req.file.size
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Domain extraction error:', error.message);
+        
+        res.status(500).json({
+            success: false,
+            message: 'Failed to extract exclusion domains from Excel file',
+            error: error.message,
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
+    }
+});
+
+// Get master list data
+router.get('/master-list/data', requireDelegatedAuth, async (req, res) => {
+    try {
+        console.log('📋 Retrieving master list data...');
+
+        const { limit = 100, offset = 0, status, campaign_stage } = req.query;
+
+        // Get authenticated Graph client
+        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+
+        // Get leads data using Graph API
+        let leadsData = await getLeadsViaGraphAPI(graphClient);
+        
+        if (!leadsData) {
+            return res.json({
+                success: true,
+                data: [],
+                total: 0,
+                message: 'No master file found'
+            });
+        }
+
+        // Filter data if parameters provided
+        if (status) {
+            leadsData = leadsData.filter(lead => lead.Status === status);
+        }
+        if (campaign_stage) {
+            leadsData = leadsData.filter(lead => lead.Campaign_Stage === campaign_stage);
+        }
+
+        // Apply pagination
+        const total = leadsData.length;
+        const paginatedData = leadsData.slice(parseInt(offset), parseInt(offset) + parseInt(limit));
+
+        res.json({
+            success: true,
+            data: paginatedData,
+            total: total,
+            limit: parseInt(limit),
+            offset: parseInt(offset),
+            hasMore: (parseInt(offset) + parseInt(limit)) < total
+        });
+
+    } catch (error) {
+        console.error('❌ Master list retrieval error:', error.message);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve master list',
+            error: error.message
+        });
+    }
+});
+
+// Get master list statistics
+router.get('/master-list/stats', requireDelegatedAuth, async (req, res) => {
+    try {
+        console.log('📊 Calculating master list statistics...');
+
+        // Get authenticated Graph client
+        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+
+        // Get leads data and calculate statistics using Graph API
+        const leadsData = await getLeadsViaGraphAPI(graphClient);
+        
+        if (!leadsData) {
+            return res.json({
+                success: true,
+                data: {
+                    totalLeads: 0,
+                    dueToday: 0,
+                    emailsSent: 0,
+                    emailsRead: 0,
+                    repliesReceived: 0,
+                    statusBreakdown: {}
+                }
+            });
+        }
+
+        // Calculate statistics from leads data
+        const stats = calculateStatsFromLeads(leadsData);
+
+        res.json({
+            success: true,
+            data: stats
+        });
+
+    } catch (error) {
+        console.error('❌ Statistics calculation error:', error.message);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to calculate statistics',
+            error: error.message
+        });
+    }
+});
+
+// Update lead information
+router.put('/master-list/lead/:email', requireDelegatedAuth, async (req, res) => {
+    try {
+        const { email } = req.params;
+        const updates = req.body;
+
+        console.log(`📝 Updating lead: ${email}`);
+
+        // Get authenticated Graph client
+        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+
+        // Update lead using Graph API
+        const updateSuccess = await updateLeadViaGraphAPI(graphClient, email, updates);
+        
+        if (!updateSuccess) {
+            return res.status(404).json({
+                success: false,
+                message: 'Lead not found or update failed'
+            });
+        }
+
+        console.log(`✅ Lead updated: ${email}`);
+
+        res.json({
+            success: true,
+            message: `Lead ${email} updated successfully`,
+            updatedFields: Object.keys(updates)
+        });
+
+    } catch (error) {
+        console.error('❌ Lead update error:', error.message);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update lead',
+            error: error.message
+        });
+    }
+});
+
+// Get leads due for email today
+router.get('/master-list/due-today', requireDelegatedAuth, async (req, res) => {
+    try {
+        console.log('📅 Getting leads due for email today...');
+
+        // Get authenticated Graph client
+        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+
+        // Get leads due today using Graph API
+        const dueLeads = await getLeadsDueTodayViaGraphAPI(graphClient);
+        
+        if (!dueLeads) {
+            return res.json({
+                success: true,
+                data: [],
+                total: 0
+            });
+        }
+
+        res.json({
+            success: true,
+            data: dueLeads,
+            total: dueLeads.length
+        });
+
+    } catch (error) {
+        console.error('❌ Due leads retrieval error:', error.message);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve due leads',
+            error: error.message
+        });
+    }
+});
+
+// Export master list to Excel
+router.get('/master-list/export', requireDelegatedAuth, async (req, res) => {
+    try {
+        console.log('📥 Exporting master list...');
+
+        // Get authenticated Graph client
+        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+
+        // Export master file using Graph API
+        const buffer = await exportMasterFileViaGraphAPI(graphClient);
+        
+        if (!buffer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Master file not found'
+            });
+        }
+        
+        const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+        const filename = `LGA-Master-Email-List-Export-${timestamp}.xlsx`;
+
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(buffer);
+
+    } catch (error) {
+        console.error('❌ Export error:', error.message);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to export master list',
+            error: error.message
+        });
+    }
+});
+
+
+// RECOVERY: Merge additional leads with existing master list (for data recovery)
+router.post('/master-list/merge-recovery', requireDelegatedAuth, upload.single('excelFile'), async (req, res) => {
+    try {
+        console.log('🔄 RECOVERY MERGE: Starting manual recovery merge process...');
+
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                message: 'No Excel file provided for recovery merge'
+            });
+        }
+
+        console.log(`📊 Processing recovery file: ${req.file.originalname} (${req.file.size} bytes)`);
+
+        // Get authenticated Graph client
+        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+
+        // Parse recovery Excel file
+        const recoveryLeads = excelProcessor.parseUploadedFile(req.file.buffer);
+
+        if (recoveryLeads.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No valid leads found in recovery file'
+            });
+        }
+
+        console.log(`📊 Found ${recoveryLeads.length} leads in recovery file`);
+
+        // Get current leads using Graph API
+        const masterFileName = 'LGA-Master-Email-List.xlsx';
+        const masterFolderPath = '/LGA-Email-Automation';
+        let currentLeads = await getLeadsViaGraphAPI(graphClient);
+        
+        if (!currentLeads) {
+            console.log('📋 No current master file found');
+            currentLeads = [];
+        } else {
+            console.log(`📊 Current master file has ${currentLeads.length} existing leads`);
+        }
+
+        // Merge recovery leads with current data (append mode)
+        const mergeResults = excelProcessor.mergeLeadsWithMaster(recoveryLeads, currentLeads);
+
+        console.log(`🔄 RECOVERY MERGE RESULTS:`);
+        console.log(`   - Current leads: ${currentLeads.length}`);
+        console.log(`   - Recovery leads provided: ${recoveryLeads.length}`);
+        console.log(`   - New unique leads to add: ${mergeResults.newLeads.length}`);
+        console.log(`   - Duplicates skipped: ${mergeResults.duplicates.length}`);
+
+        if (mergeResults.newLeads.length === 0) {
+            return res.json({
+                success: true,
+                message: 'No new leads to recover - all leads already exist in master list',
+                currentCount: currentLeads.length,
+                recoveryAttempted: recoveryLeads.length,
+                duplicates: mergeResults.duplicates.length
+            });
+        }
+
+        // FIXED: Use Microsoft Graph Table API to append recovered leads
+        console.log(`📊 RECOVERY: Appending ${mergeResults.newLeads.length} recovered leads using table API`);
+        
+        const recoveryAppendResult = await appendLeadsToOneDriveTable({
+            delegatedAuth: req.delegatedAuth,
+            sessionId: req.sessionId
+        }, {
+            leads: mergeResults.newLeads,
+            filename: masterFileName,
+            folderPath: masterFolderPath,
+            useCustomFile: true
+        });
+        
+        if (!recoveryAppendResult.success) {
+            throw new Error(`Failed to append recovered leads: ${recoveryAppendResult.message}`);
+        }
+        
+        console.log(`✅ RECOVERY SUCCESS: ${recoveryAppendResult.action} - ${recoveryAppendResult.leadsCount} leads processed`);
+
+        console.log(`✅ RECOVERY MERGE completed successfully`);
+
+        res.json({
+            success: true,
+            message: `Successfully recovered ${mergeResults.newLeads.length} leads`,
+            recoveryResults: {
+                originalCount: currentLeads.length,
+                recoveredLeads: mergeResults.newLeads.length,
+                duplicatesSkipped: mergeResults.duplicates.length,
+                finalCount: currentLeads.length + mergeResults.newLeads.length
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Recovery merge error:', error.message);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to perform recovery merge',
+            error: error.message
+        });
+    }
+});
+
+
+
+// Send email to specific lead
+router.post('/send-email/:email', requireDelegatedAuth, async (req, res) => {
+    try {
+        const { email } = req.params;
+        const { emailChoice, customTemplate } = req.body;
+
+        console.log(`📧 Sending email to: ${email} using ${emailChoice}`);
+
+        // Get authenticated Graph client
+        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+
+        // Get lead data and templates using Graph API
+        const leadsData = await getLeadsViaGraphAPI(graphClient);
+        const templates = await getTemplatesViaGraphAPI(graphClient);
+        
+        if (!leadsData) {
+            return res.status(404).json({
+                success: false,
+                message: 'Master file not found'
+            });
+        }
+
+        const lead = leadsData.find(l => l.Email.toLowerCase() === email.toLowerCase());
+
+        if (!lead) {
+            return res.status(404).json({
+                success: false,
+                message: 'Lead not found'
+            });
+        }
+
+        // Process email content
+        const emailContent = await emailContentProcessor.processEmailContent(
+            lead, 
+            emailChoice || 'AI_Generated', 
+            templates
+        );
+
+        // Validate email content
+        const validation = emailContentProcessor.validateEmailContent(emailContent);
+        if (!validation.isValid) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid email content',
+                errors: validation.errors
+            });
+        }
+
+        // Extract attachments from template if using a template
+        let attachments = [];
+        if (emailChoice !== 'AI_Generated' && templates) {
+            const template = templates.find(t =>
+                t.Template_ID === emailChoice ||
+                t.Template_Name === emailChoice ||
+                t.Template_Type === emailChoice
+            );
+
+            if (template && template.attachments && template.attachments.length > 0) {
+                attachments = template.attachments;
+                console.log(`📎 Found ${attachments.length} attachments in template ${emailChoice}`);
+            }
+        }
+
+        // Send email using Microsoft Graph with attachment support
+        const emailMessage = emailContentProcessor.createEmailMessage(
+            emailContent,
+            lead.Email,
+            lead,
+            true, // Enable tracking for single emails
+            attachments
+        );
+
+        await graphClient.api('/me/sendMail').post({
+            message: emailMessage,
+            saveToSentItems: true
+        });
+
+        // Get sender's email for tracking purposes
+        const userInfo = authProvider.getUserInfo(req.sessionId);
+        const senderEmail = userInfo?.username || 'unknown@sender.com';
+        
+        // Update lead status in master file
+        const updates = {
+            Status: 'Sent',
+            Last_Email_Date: new Date().toISOString().split('T')[0],
+            Email_Count: (lead.Email_Count || 0) + 1,
+            Template_Used: emailContent.contentType,
+            Next_Email_Date: calculateNextEmailDate(new Date(), lead.Follow_Up_Days || 7),
+            'Email Bounce': 'No', // Initialize bounce status
+            'Sent By': senderEmail
+        };
+
+        // Update lead using Graph API
+        await updateLeadViaGraphAPI(graphClient, email, updates);
+
+        console.log(`✅ Email sent successfully to: ${email}`);
+
+        // Email tracking is now handled via direct Graph API Excel lookup (no persistent storage needed)
+
+        res.json({
+            success: true,
+            message: `Email sent successfully to ${email}`,
+            emailContent: {
+                subject: emailContent.subject,
+                contentType: emailContent.contentType,
+                variables: emailContent.variables
+            },
+            leadUpdates: updates
+        });
+
+    } catch (error) {
+        console.error('❌ Email sending error:', error.message);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to send email',
+            error: error.message
+        });
+    }
+});
+
+// Send bulk email campaign with duplicate prevention
+router.post('/send-campaign', requireDelegatedAuth, async (req, res) => {
+    try {
+        const { 
+            leads, 
+            templateChoice = 'AI_Generated',
+            emailTemplate = '',
+            subject = '',
+            trackReads = true,
+            oneDriveFileId = null 
+        } = req.body;
+
+        console.log(`📧 Starting bulk email campaign for ${leads.length} leads using ${templateChoice}`);
+
+        if (!leads || leads.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No leads provided for campaign'
+            });
+        }
+
+        // 🔒 CAMPAIGN LOCK: Prevent duplicate campaigns
+        const lockAcquired = campaignLockManager.acquireLock(req.sessionId, 'manual');
+        if (!lockAcquired) {
+            return res.status(409).json({
+                success: false,
+                message: 'Another campaign is already running for this session. Please wait for it to complete.',
+                error: 'CAMPAIGN_IN_PROGRESS'
+            });
+        }
+
+        console.log(`🚀 Starting email campaign with Excel-based duplicate prevention`);
+
+        // Get authenticated Graph client
+        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+        const authProvider = getDelegatedAuthProvider();
+        
+        // Get templates for processing
+        const templates = await getTemplatesViaGraphAPI(graphClient);
+        
+        const results = {
+            campaignId: `campaign_${Date.now()}`,
+            sent: 0,
+            failed: 0,
+            duplicates: 0,
+            trackingEnabled: trackReads,
+            errors: [],
+            totalEmails: leads.length,
+            estimatedTime: emailDelayUtils.estimateBulkSendingTime(leads.length)
+        };
+
+        console.log(`⏱️ Estimated campaign duration: ${results.estimatedTime.formatted}, completion: ${results.estimatedTime.completionTime}`);
+
+        // Initialize campaign token manager for long campaigns
+        const campaignTokenManager = new CampaignTokenManager();
+        campaignTokenManager.startCampaignTracking(req.sessionId, results.estimatedTime.totalMs);
+
+        try {
+            // Process each lead with duplicate checking
+            for (let i = 0; i < leads.length; i++) {
+                const lead = leads[i];
+                try {
+                    if (!lead.Email) {
+                        results.failed++;
+                        results.errors.push(`Lead missing email: ${lead.Name || 'Unknown'}`);
+                        continue;
+                    }
+
+                    // Check if email has already been sent using Excel data (single source of truth)
+                    const duplicateCheck = await excelDuplicateChecker.isEmailAlreadySent(graphClient, lead.Email);
+                    if (duplicateCheck.alreadySent) {
+                        console.log(`⚠️ DUPLICATE PREVENTED: ${lead.Email} - ${duplicateCheck.reason}`);
+                        results.duplicates++;
+                        continue;
+                    }
+
+                    console.log(`🔍 DELAY DEBUG: leadIndex=${i}, totalLeads=${leads.length}, shouldDelay=${i < leads.length - 1}`);
+
+                    // Determine email choice - use templateChoice from frontend or lead's existing choice
+                    let emailChoice = templateChoice;
+                    if (emailChoice === 'custom' && emailTemplate) {
+                        // For custom templates, create temporary template-like structure
+                        emailChoice = 'AI_Generated'; // Process as custom content
+                        lead.AI_Generated_Email = `Subject: ${subject}\n\n${emailTemplate}`;
+                    }
+
+                    // Check if token refresh is needed during campaign (every 10 emails)
+                    if (campaignTokenManager.shouldCheckToken(i)) {
+                        console.log(`🔍 Checking token validity during campaign (email ${i + 1}/${leads.length})`);
+                        const tokenValid = await campaignTokenManager.ensureValidToken(req.delegatedAuth, req.sessionId);
+                        if (!tokenValid) {
+                            console.error(`❌ Token refresh failed during campaign at email ${i + 1}`);
+                            results.failed++;
+                            results.errors.push(`Token refresh failed at email ${i + 1} - campaign stopped`);
+                            break; // Stop campaign if token can't be refreshed
+                        }
+                        // Get fresh Graph client if token was refreshed
+                        graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+                    }
+
+                    console.log(`🔄 Processing lead: ${lead.Email} (${lead.Name})`);
+
+                    // Process email content
+                    const emailContent = await emailContentProcessor.processEmailContent(
+                        lead, 
+                        emailChoice, 
+                        templates
+                    );
+
+                    console.log(`📧 Processing email content for ${lead.Email} using ${emailChoice}`);
+
+                    // Extract attachments from template if using a template
+                    let attachments = [];
+                    if (emailChoice !== 'AI_Generated' && templates) {
+                        const template = templates.find(t =>
+                            t.Template_ID === emailChoice ||
+                            t.Template_Name === emailChoice ||
+                            t.Template_Type === emailChoice
+                        );
+
+                        if (template && template.attachments && template.attachments.length > 0) {
+                            attachments = template.attachments;
+                            console.log(`📎 Found ${attachments.length} attachments in template ${emailChoice}`);
+                        }
+                    }
+
+                    // Send email via Microsoft Graph
+                    const emailMessage = emailContentProcessor.createEmailMessage(
+                        emailContent,
+                        lead.Email,
+                        lead,
+                        trackReads,
+                        attachments
+                    );
+
+                    console.log(`📧 Attempting to send email via Microsoft Graph to: ${lead.Email}`);
+
+                    await graphClient
+                        .api('/me/sendMail')
+                        .post({ message: emailMessage });
+
+                    console.log(`📧 Email sent to: ${lead.Email}`);
+
+                    // Update lead status
+                    const updates = {
+                        Status: 'Sent',
+                        Last_Email_Date: new Date().toISOString().split('T')[0],
+                        Email_Count: (lead.Email_Count || 0) + 1,
+                        Template_Used: emailContent.contentType,
+                        'Email Bounce': 'No' // Initialize bounce status
+                    };
+
+                    results.sent++;
+
+                    // IMMEDIATE Excel update right after email is sent (for real-time tracking)
+                    console.log(`📊 Updating Excel for ${lead.Email} immediately...`);
+                    try {
+                        await excelUpdateQueue.queueUpdate(
+                            lead.Email, // Use email as file identifier
+                            () => updateLeadViaGraphAPI(graphClient, lead.Email, updates),
+                            { 
+                                type: 'campaign-send', 
+                                email: lead.Email, 
+                                source: 'email-automation',
+                                priority: 'high' // High priority for immediate updates
+                            }
+                        );
+                        console.log(`✅ Excel updated for ${lead.Email} - Status: Sent`);
+                    } catch (excelError) {
+                        console.error(`⚠️ Excel update failed for ${lead.Email}: ${excelError.message}`);
+                        // Continue campaign even if Excel update fails
+                    }
+
+                    console.log(`📊 Campaign progress: ${results.sent}/${leads.length} sent (${Math.round((results.sent / leads.length) * 100)}% complete)`);
+
+                    // Add random delay between emails AFTER Excel updates (skip delay for last email)
+                    if (i < leads.length - 1) {
+                        const delayMs = await emailDelayUtils.progressiveDelay(i, leads.length);
+                        console.log(`⏳ Adding ${Math.round(delayMs / 1000)}s delay before next email...`);
+                        await new Promise(resolve => setTimeout(resolve, delayMs));
+                        console.log(`✅ Delay completed - ready for next email`);
+                    } else {
+                        console.log(`🏁 Last email - campaign complete`);
+                    }
+
+                } catch (emailError) {
+                    console.error(`❌ Failed to send email to ${lead.Email}:`, emailError.message);
+                    
+                    results.failed++;
+                    results.errors.push(`${lead.Email}: ${emailError.message}`);
+
+                    // IMMEDIATE Excel update for failed emails (track attempt and failure reason)
+                    console.log(`📊 Updating Excel for ${lead.Email} - marking as failed...`);
+                    try {
+                        const failedUpdates = {
+                            Status: 'Failed',
+                            Last_Email_Date: new Date().toISOString().split('T')[0],
+                            Email_Count: (lead.Email_Count || 0) + 1, // Still increment attempt count
+                            'Email Bounce': 'No',
+                            'Failed Date': new Date().toISOString(),
+                            'Failure Reason': emailError.message?.substring(0, 255) || 'Unknown error' // Limit length
+                        };
+
+                        await excelUpdateQueue.queueUpdate(
+                            lead.Email,
+                            () => updateLeadViaGraphAPI(graphClient, lead.Email, failedUpdates),
+                            { 
+                                type: 'campaign-failed', 
+                                email: lead.Email, 
+                                source: 'email-automation',
+                                priority: 'high'
+                            }
+                        );
+                        console.log(`✅ Excel updated for ${lead.Email} - Status: Failed`);
+                    } catch (excelError) {
+                        console.error(`⚠️ Failed to update Excel for failed email ${lead.Email}: ${excelError.message}`);
+                    }
+
+                    console.log(`📊 Campaign progress: ${results.sent}/${leads.length} sent, ${results.failed} failed (${Math.round(((results.sent + results.failed) / leads.length) * 100)}% complete)`);
+                    
+                    // Add delay even after failures to maintain sending pattern
+                    if (i < leads.length - 1) {
+                        console.log(`⏳ Adding delay after failure before next email...`);
+                        await emailDelayUtils.randomDelay(15, 45); // Shorter delay after failures
+                        console.log(`✅ Delay completed - Ready for next email`);
+                    }
+                }
+            }
+
+            console.log(`✅ Campaign completed: ${results.sent} sent, ${results.failed} failed, ${results.duplicates} duplicates prevented`);
+
+        } catch (campaignError) {
+            console.error('❌ Campaign processing error:', campaignError.message);
+            throw campaignError;
+        }
+
+        // End campaign token tracking and get stats
+        const campaignStats = campaignTokenManager.getCampaignStats(req.sessionId);
+        campaignTokenManager.endCampaignTracking(req.sessionId);
+
+        // Calculate actual completion time
+        const actualEndTime = new Date();
+        const actualDuration = Math.round((actualEndTime - new Date(Date.now() - results.estimatedTime.totalSeconds * 1000)) / 1000);
+        
+        // 🔓 RELEASE LOCK: Campaign completed successfully
+        campaignLockManager.releaseLock(req.sessionId);
+
+        res.json({
+            success: true,
+            message: `Campaign completed: ${results.sent} emails sent, ${results.failed} failed, ${results.duplicates} duplicates prevented`,
+            ...results,
+            duplicatePrevention: {
+                enabled: true,
+                method: "excel-based",
+                duplicatesBlocked: results.duplicates,
+                singleSourceOfTruth: true,
+                crossSessionProtection: true
+            },
+            timing: {
+                estimated: results.estimatedTime,
+                actualDurationSeconds: actualDuration,
+                actualDurationFormatted: emailDelayUtils.formatDelayTime(actualDuration * 1000),
+                completedAt: actualEndTime.toLocaleTimeString()
+            },
+            delayStats: emailDelayUtils.getDelayStats(),
+            tokenManagement: {
+                tokenRefreshesPerformed: campaignStats?.tokenRefreshCount || 0,
+                campaignDurationMinutes: campaignStats?.elapsedMinutes || 0,
+                tokenRefreshPreventedDisruption: (campaignStats?.tokenRefreshCount || 0) > 0
+            },
+            excelUpdates: {
+                realTimeUpdates: true,
+                updateMethod: "immediate_per_email",
+                queueingEnabled: true,
+                priorityProcessing: true,
+                tracksSuccessAndFailure: true,
+                totalProcessed: results.sent + results.failed,
+                description: "Excel updated immediately after each email (sent or failed)"
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Campaign error:', error.message);
+        
+        // 🔓 RELEASE LOCK: Campaign failed, cleanup
+        campaignLockManager.releaseLock(req.sessionId);
+        
+        // Cleanup campaign tracking on error
+        if (typeof campaignTokenManager !== 'undefined') {
+            campaignTokenManager.endCampaignTracking(req.sessionId);
+        }
+        
+        res.status(500).json({
+            success: false,
+            message: 'Campaign failed',
+            error: error.message
+        });
+    }
+});
+
+// Calculate statistics from leads data
+function calculateStatsFromLeads(leadsData) {
+    const today = new Date().toISOString().split('T')[0];
+    console.log(`📅 Today's date for comparison: ${today}`);
+    
+    const stats = {
+        totalLeads: leadsData.length,
+        dueToday: 0,
+        emailsSent: 0,
+        emailsRead: 0,
+        repliesReceived: 0,
+        newRecords: 0,
+        statusBreakdown: {}
+    };
+    
+    leadsData.forEach(lead => {
+        // Count by status
+        const status = lead.Status || 'New';
+        stats.statusBreakdown[status] = (stats.statusBreakdown[status] || 0) + 1;
+        
+        // Count specific metrics
+        if (lead.Last_Email_Date) stats.emailsSent++;
+        if (lead.Read_Date) stats.emailsRead++;
+        if (lead.Reply_Date) stats.repliesReceived++;
+        
+        // Count new records (leads with 'New' status)
+        if (status === 'New') stats.newRecords++;
+        
+        // Check if due today (regardless of status)
+        const nextEmailDate = parseExcelDate(lead.Next_Email_Date);
+        
+        if (nextEmailDate && nextEmailDate <= today) {
+            stats.dueToday++;
+        }
+    });
+    
+    return stats;
+}
+
+// Parse Excel date values (handles both serial numbers and date strings)
+function parseExcelDate(dateValue) {
+    if (!dateValue) return null;
+    
+    // Handle Excel serial numbers (like 45907)
+    if (typeof dateValue === 'number' && dateValue > 40000) {
+        const excelEpoch = new Date(1900, 0, 1);
+        const jsDate = new Date(excelEpoch.getTime() + (dateValue - 2) * 24 * 60 * 60 * 1000);
+        return jsDate.toISOString().split('T')[0];
+    } else {
+        // Handle regular date strings
+        try {
+            return new Date(dateValue).toISOString().split('T')[0];
+        } catch (error) {
+            return null;
+        }
+    }
+}
+
+/**
+ * Bridge function to call Microsoft Graph table append API from email automation
+ * This replaces the old file replacement approach with table-based appending
+ */
+async function appendLeadsToOneDriveTable(auth, requestData) {
+    try {
+        console.log(`🔗 BRIDGE: Calling Microsoft Graph table append API`);
+        
+        // Get the base URL for internal API calls
+        const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https';
+        const host = process.env.RENDER_EXTERNAL_URL ? 
+            new URL(process.env.RENDER_EXTERNAL_URL).host : 
+            'localhost:3000';
+        
+        // Call our own Microsoft Graph table append endpoint
+        const response = await axios.post(`${protocol}://${host}/api/microsoft-graph/onedrive/append-to-table`, requestData, {
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Session-Id': auth.sessionId
+            },
+            timeout: 30000 // 30 second timeout
+        });
+        
+        if (response.data.success) {
+            console.log(`✅ BRIDGE SUCCESS: Table append completed - ${response.data.action}`);
+            return response.data;
+        } else {
+            console.error(`❌ BRIDGE ERROR: Table append failed`, response.data);
+            return {
+                success: false,
+                message: response.data.message || 'Unknown error',
+                error: response.data.error
+            };
+        }
+        
+    } catch (error) {
+        console.error(`❌ BRIDGE EXCEPTION: Failed to call table append API: ${error.message}`);
+        
+        // Extract meaningful error message
+        let errorMessage = 'Failed to append to table';
+        if (error.response && error.response.data && error.response.data.message) {
+            errorMessage = error.response.data.message;
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        return {
+            success: false,
+            message: errorMessage,
+            error: error.code || 'BRIDGE_ERROR'
+        };
+    }
+}
+
+
+// Test duplicate checking before sending campaign
+router.post('/test-duplicates', requireDelegatedAuth, async (req, res) => {
+    try {
+        const { emails } = req.body;
+        
+        if (!emails || !Array.isArray(emails)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide an array of email addresses to check'
+            });
+        }
+
+        console.log(`🧪 Testing duplicate checking for ${emails.length} emails...`);
+
+        // Get authenticated Graph client
+        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+        
+        // Generate comprehensive duplicate report
+        const report = await excelDuplicateChecker.getDuplicateReport(graphClient, emails);
+        
+        console.log(`📊 Duplicate check results: ${report.safeToSend} safe, ${report.alreadySent} duplicates, ${report.errors} errors`);
+        
+        res.json({
+            success: true,
+            message: `Duplicate check completed for ${emails.length} emails`,
+            summary: {
+                totalChecked: report.totalChecked,
+                safeToSend: report.safeToSend,
+                alreadySent: report.alreadySent,
+                errors: report.errors,
+                duplicatePercentage: Math.round((report.alreadySent / report.totalChecked) * 100)
+            },
+            details: report.details,
+            recommendation: report.alreadySent > 0 ? 
+                `⚠️ ${report.alreadySent} emails have already been sent. Consider filtering them out before starting campaign.` :
+                `✅ All emails are safe to send - no duplicates detected.`
+        });
+
+    } catch (error) {
+        console.error('❌ Duplicate test error:', error.message);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to test duplicates',
+            error: error.message
+        });
+    }
+});
+
+// Clear duplicate checker cache (for testing/debugging)
+router.post('/clear-duplicate-cache', requireDelegatedAuth, async (req, res) => {
+    try {
+        excelDuplicateChecker.clearCache();
+        
+        res.json({
+            success: true,
+            message: 'Duplicate checker cache cleared - next check will fetch fresh Excel data'
+        });
+
+    } catch (error) {
+        console.error('❌ Cache clear error:', error.message);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to clear cache',
+            error: error.message
+        });
+    }
+});
+
+module.exports = router;

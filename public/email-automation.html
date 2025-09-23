@@ -1,0 +1,2565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Automation - LGA</title>
+    <link rel="stylesheet" href="styles/email-automation.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav-bar">
+        <div class="nav-container">
+            <div class="nav-title">Lead Generation Automation</div>
+            <div class="nav-links">
+                <a href="/" class="nav-link">Lead Scraping</a>
+                <a href="/email-automation" class="nav-link active">Email Automation</a>
+                <a href="/prompt-editor" class="nav-link">Prompt Editor</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Authentication Status -->
+        <div id="authStatus" class="auth-status hidden">
+            <div id="authMessage"></div>
+        </div>
+
+        <!-- Dashboard Stats -->
+        <div class="card full-width">
+            <div class="card-header">
+                <h2 class="card-title">Email Automation Dashboard</h2>
+                <div class="flex gap-sm">
+                    <button class="btn" onclick="refreshDashboard()" title="Refresh Dashboard Data">
+                        Refresh
+                    </button>
+                </div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card" onclick="showLeadDetails('total')" title="Click to view all leads">
+                    <div class="stat-number" id="totalLeads">-</div>
+                    <div class="stat-label">Total Leads</div>
+                </div>
+                <div class="stat-card" onclick="showLeadDetails('due')" title="Click to view leads due today">
+                    <div class="stat-number" id="dueToday">-</div>
+                    <div class="stat-label">Due Today</div>
+                </div>
+                <div class="stat-card" onclick="showEmailStats('sent')" title="Click to view sent email details">
+                    <div class="stat-number" id="emailsSent">-</div>
+                    <div class="stat-label">Emails Sent</div>
+                </div>
+                <div class="stat-card" onclick="showEmailStats('read')" title="Click to view read email details">
+                    <div class="stat-number" id="emailsRead">-</div>
+                    <div class="stat-label">Emails Read</div>
+                </div>
+                <div class="stat-card" onclick="showEmailStats('replies')" title="Click to view replies">
+                    <div class="stat-number" id="repliesReceived">-</div>
+                    <div class="stat-label">Replies Received</div>
+                </div>
+                <div class="stat-card stat-card-new" onclick="showNewRecords()" title="Click to view new records ready to send">
+                    <div class="stat-number" id="newRecords">-</div>
+                    <div class="stat-label">New Records</div>
+                    <div class="stat-action">
+                        <button class="btn btn-success btn-sm" onclick="sendNewEmails(event)" title="Send emails to all new records">
+                            Send New Emails
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-grid">
+            <!-- Upload Section -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Upload Lead List</h3>
+                    <div class="auth-status-container">
+                        <span id="uploadAuthStatus" class="auth-indicator">Checking...</span>
+                        <button class="btn btn-outline" onclick="showUploadHelp()" title="Upload Help">
+                            Help
+                        </button>
+                    </div>
+                </div>
+                <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                    <div class="upload-icon"></div>
+                    <div class="upload-text">Click or drag Excel file here</div>
+                    <div class="upload-subtext">Supports .xlsx files up to 10MB</div>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls" />
+                </div>
+                <div id="uploadProgress" class="hidden">
+                    <div class="upload-loading">
+                        <div class="spinner"></div>
+                        <div class="loading-text">
+                            <div id="uploadStatus">Uploading and processing Excel file...</div>
+                            <div class="loading-subtext">Please wait while we process your lead data</div>
+                        </div>
+                    </div>
+                </div>
+                <div id="uploadResults" class="hidden">
+                    <div class="mb-lg">
+                        <h4>Upload Results</h4>
+                    </div>
+                    <div id="uploadSummary"></div>
+                </div>
+            </div>
+
+            <!-- Template Management -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Email Templates</h3>
+                    <div class="flex gap-sm">
+                        <button class="btn btn-success" onclick="openTemplateModal()" title="Create New Template">
+                            New Template
+                        </button>
+                    </div>
+                </div>
+                <div id="templatesList">
+                    <div class="flex-center">
+                        <div class="spinner"></div>
+                        <span class="ml-md">Loading templates...</span>
+                    </div>
+                </div>
+                <div class="mt-lg">
+                    <div class="template-stats" id="templateStats">
+                        <span class="text-muted">0 templates</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Master List Table -->
+        <div class="card full-width">
+            <div class="card-header">
+                <h3 class="card-title">Master Lead List</h3>
+                <!-- Email Actions in Header -->
+                <div class="header-email-actions">
+                    <div class="template-selector-wrapper">
+                        <label class="template-selector-label">Choose Email Template</label>
+                        <select id="emailContentSelect" class="form-select email-content-select" title="Choose email content to send">
+                            <option value="AI_Generated">AI Generated</option>
+                            <option value="Template_1">Template 1</option>
+                            <option value="Template_2">Template 2</option>
+                            <option value="Template_3">Template 3</option>
+                            <option value="Template_4">Template 4</option>
+                            <option value="Template_5">Template 5</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-success primary-action-btn" onclick="sendFilteredEmails()" title="Send emails to filtered leads">
+                        📤 Send Emails
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Simplified Filter Controls -->
+            <div class="filter-only-controls">
+                <div class="filter-section-header">
+                    <span class="section-label">
+                        <span class="section-icon">🔍</span>
+                        Filter & Search Leads
+                    </span>
+                </div>
+                <div class="filter-controls">
+                    <input type="text" id="searchLeads" class="form-input search-input" placeholder="Search by name, email, or company...">
+                    <select id="filterStatus" class="form-select filter-select">
+                        <option value="">All Status</option>
+                        <option value="new">New</option>
+                        <option value="sent">Sent</option>
+                        <option value="read">Read</option>
+                        <option value="replied">Replied</option>
+                        <option value="bounced">Bounced</option>
+                    </select>
+                    <select id="filterTemplate" class="form-select filter-select">
+                        <option value="">All Email Content</option>
+                        <option value="AI_Generated">AI Generated</option>
+                        <option value="Template_1">Template 1</option>
+                        <option value="Template_2">Template 2</option>
+                        <option value="Template_3">Template 3</option>
+                        <option value="Template_4">Template 4</option>
+                        <option value="Template_5">Template 5</option>
+                    </select>
+                    <select id="filterLastEmail" class="form-select filter-select">
+                        <option value="">Last Email Sent</option>
+                        <option value="7-13">Last Email Past 7-13 Days</option>
+                        <option value="14-20">Last Email Past 14-20 Days</option>
+                        <option value="21+">Last Email Past 21+ Days</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Quick Stats Bar -->
+            <div class="flex-between mb-lg" id="listStats">
+                <div class="flex gap-md">
+                    <span class="text-muted">Showing: <strong id="showingCount">0</strong> of <strong id="totalCount">0</strong> leads</span>
+                </div>
+                <div class="flex gap-sm">
+                    <button class="btn btn-outline" onclick="selectAllLeads()" title="Select all visible leads">
+                        Select All
+                    </button>
+                    <button class="btn btn-outline" onclick="clearSelection()" title="Clear selection">
+                        Clear
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table" id="masterListTable">
+                    <thead>
+                        <tr>
+                            <th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()"></th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Company</th>
+                            <th>Status</th>
+                            <th>Email Count</th>
+                            <th>Last Email</th>
+                        </tr>
+                    </thead>
+                    <tbody id="masterListBody">
+                        <tr>
+                            <td colspan="7" class="text-center loading-cell">
+                                <div class="flex-center">
+                                    <div class="spinner"></div>
+                                    <span class="ml-md">Loading master list...</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="flex-between mt-lg" id="pagination">
+                <div class="flex gap-sm">
+                    <span class="text-muted">Items per page:</span>
+                    <select id="itemsPerPage" class="form-select pagination-select" onchange="changeItemsPerPage()">
+                        <option value="25">25</option>
+                        <option value="30" selected>30</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+                <div class="flex gap-sm" id="paginationControls">
+                    <!-- Pagination controls will be added here dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Template Modal -->
+    <div id="templateModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Email Template Editor</h2>
+                <span class="close" onclick="closeTemplateModal()">&times;</span>
+            </div>
+            <form id="templateForm">
+                <div class="form-group">
+                    <label class="form-label">Template Name:</label>
+                    <input type="text" id="templateName" class="form-input" placeholder="e.g., First Contact Template" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Template Type:</label>
+                    <select id="templateType" class="form-select" required>
+                        <option value="">Select type...</option>
+                        <option value="Template_1">Template 1</option>
+                        <option value="Template_2">Template 2</option>
+                        <option value="Template_3">Template 3</option>
+                        <option value="Template_4">Template 4</option>
+                        <option value="Template_5">Template 5</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Subject Line:</label>
+                    <div class="input-with-variables">
+                        <input type="text" id="templateSubject" class="form-input" placeholder="Enter subject line..." required>
+                        <div class="variable-helpers">
+                            <span class="variable-label">Quick Insert:</span>
+                            <button type="button" class="variable-btn" onclick="insertVariable('templateSubject', '{Name}')">Name</button>
+                            <button type="button" class="variable-btn" onclick="insertVariable('templateSubject', '{Company}')">Company</button>
+                            <button type="button" class="variable-btn" onclick="insertVariable('templateSubject', '{Title}')">Title</button>
+                            <button type="button" class="variable-btn" onclick="showVariableModal('templateSubject')">More...</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email Content:</label>
+                    <div class="input-with-variables">
+                        <textarea id="templateContent" class="form-textarea" placeholder="Enter email content..." required></textarea>
+                        <div class="variable-helpers">
+                            <span class="variable-label">Quick Insert:</span>
+                            <button type="button" class="variable-btn" onclick="insertVariable('templateContent', '{Name}')">Name</button>
+                            <button type="button" class="variable-btn" onclick="insertVariable('templateContent', '{Company}')">Company</button>
+                            <button type="button" class="variable-btn" onclick="insertVariable('templateContent', '{Title}')">Title</button>
+                            <button type="button" class="variable-btn" onclick="insertVariable('templateContent', '{Email}')">Email</button>
+                            <button type="button" class="variable-btn" onclick="showVariableModal('templateContent')">More...</button>
+                        </div>
+                    </div>
+                    <div class="template-preview" id="templatePreview" style="display: none;">
+                        <h4>Preview with Sample Data:</h4>
+                        <div class="preview-content">
+                            <div class="preview-subject">
+                                <strong>Subject:</strong> <span id="previewSubject"></span>
+                            </div>
+                            <div class="preview-body">
+                                <strong>Body:</strong> <span id="previewBody"></span>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-secondary" onclick="togglePreview()">Hide Preview</button>
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="togglePreview()" id="showPreviewBtn">Show Preview</button>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Attachments:</label>
+                    <div class="attachment-upload-area">
+                        <input type="file" id="templateAttachments" class="attachment-input" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.txt,.csv" />
+                        <label for="templateAttachments" class="attachment-label">
+                            <div class="attachment-icon">📎</div>
+                            <div class="attachment-text">Click to select files or drag & drop</div>
+                            <div class="attachment-subtext">PDF, Word, Excel, PowerPoint, Images (max 25MB each, 5 files total)</div>
+                        </label>
+                        <div id="selectedAttachments" class="selected-attachments hidden">
+                            <h4>Selected Files:</h4>
+                            <div id="attachmentsList" class="attachments-list"></div>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="clearAttachments()">Clear All</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Active:</label>
+                    <select id="templateActive" class="form-select">
+                        <option value="Yes">Yes</option>
+                        <option value="No">No</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn" onclick="previewTemplate()">Preview</button>
+                    <button type="submit" class="btn btn-success">Save Template</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Campaign Modal -->
+    <div id="campaignModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Start Email Campaign</h2>
+                <span class="close" onclick="closeCampaignModal()">&times;</span>
+            </div>
+            <form id="campaignForm">
+                <div class="form-group">
+                    <label class="form-label">Campaign Name:</label>
+                    <input type="text" id="campaignName" class="form-input" placeholder="e.g., January 2025 Outreach" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email Content Type:</label>
+                    <select id="emailContentType" class="form-select" required>
+                        <option value="">Select content type...</option>
+                        <option value="AI_Generated">AI-Generated (Personalized)</option>
+                        <option value="Template_1">Template 1</option>
+                        <option value="Template_2">Template 2</option>
+                        <option value="Template_3">Template 3</option>
+                        <option value="Template_4">Template 4</option>
+                        <option value="Template_5">Template 5</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Target Leads:</label>
+                    <select id="targetLeads" class="form-select" required>
+                        <option value="new">New Leads Only</option>
+                        <option value="due">Due Today</option>
+                        <option value="all_new">All New + Due</option>
+                        <option value="custom">Custom Selection</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Send Schedule:</label>
+                    <select id="sendSchedule" class="form-select" required>
+                        <option value="immediate">Send Immediately</option>
+                        <option value="scheduled">Schedule for Later</option>
+                    </select>
+                </div>
+                <div id="scheduleDateTime" class="form-group hidden">
+                    <label class="form-label">Schedule Date & Time:</label>
+                    <input type="datetime-local" id="scheduledTime" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Follow-up Days:</label>
+                    <input type="number" id="followUpDays" class="form-input" value="7" min="1" max="30" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn" onclick="previewCampaign()">Preview</button>
+                    <button type="submit" class="btn btn-success">Start Campaign</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let sessionId = null;
+        let masterListData = [];
+        let templates = [];
+
+        // Utility function to convert Excel serial numbers to JavaScript dates
+        function parseExcelDateForDisplay(dateValue) {
+            if (!dateValue) return null;
+            
+            // Handle Excel serial numbers (like 45907)
+            if (typeof dateValue === 'number' && dateValue > 40000) {
+                // Convert Excel serial number to JavaScript date
+                // Excel epoch is January 1, 1900 (but Excel treats 1900 as leap year incorrectly)
+                const excelEpoch = new Date(1900, 0, 1);
+                const jsDate = new Date(excelEpoch.getTime() + (dateValue - 2) * 24 * 60 * 60 * 1000);
+                return jsDate;
+            } else {
+                // Handle regular date strings
+                try {
+                    return new Date(dateValue);
+                } catch (error) {
+                    return null;
+                }
+            }
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeEmailAutomation();
+            setupEventListeners();
+            initializeAttachmentHandling();
+        });
+
+        // Initialize authentication and load data
+        async function initializeEmailAutomation() {
+            console.log('🚀 Initializing Email Automation...');
+            
+            try {
+                // Check if we have a sessionId from URL parameters (after auth callback)
+                const urlParams = new URLSearchParams(window.location.search);
+                const urlSessionId = urlParams.get('sessionId');
+                
+                if (urlSessionId) {
+                    sessionId = urlSessionId;
+                    // Store in localStorage for cross-platform consistency
+                    localStorage.setItem('msGraph_sessionId', sessionId);
+                    // Remove sessionId from URL
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+                
+                // Check for existing session in localStorage
+                if (!sessionId) {
+                    sessionId = localStorage.getItem('msGraph_sessionId');
+                }
+                
+                // Check authentication status
+                const authUrl = sessionId ? `/auth/status?sessionId=${sessionId}` : '/auth/status';
+                const authResponse = await fetch(authUrl);
+                const authData = await authResponse.json();
+                
+                if (authData.authenticated) {
+                    sessionId = authData.sessionId;
+                    // Ensure sessionId is stored in localStorage
+                    localStorage.setItem('msGraph_sessionId', sessionId);
+                    showAuthStatus('✅ Connected to Microsoft 365', 'success');
+                    
+                    // Load initial data
+                    await Promise.all([
+                        refreshDashboard(),
+                        loadTemplates(),
+                        loadMasterList()
+                    ]);
+                } else {
+                    // No authentication - need to initiate Microsoft 365 login
+                    showAuthStatus('🔑 Connecting to Microsoft 365...', 'info');
+                    
+                    // Initiate authentication
+                    console.log('🔍 Attempting to initiate Microsoft 365 login...');
+                    const loginResponse = await fetch('/auth/login?redirect=/email-automation');
+                    
+                    console.log('📡 Login response status:', loginResponse.status);
+                    
+                    if (!loginResponse.ok) {
+                        const errorText = await loginResponse.text();
+                        console.error('❌ Login endpoint error:', errorText);
+                        showAuthStatus(`❌ Login service unavailable (${loginResponse.status})`, 'error');
+                        return;
+                    }
+                    
+                    const loginData = await loginResponse.json();
+                    console.log('📋 Login response data:', loginData);
+                    
+                    if (loginData.success && loginData.authUrl) {
+                        showAuthStatus('🔑 Redirecting to Microsoft 365 login...', 'info');
+                        console.log('🚀 Redirecting to:', loginData.authUrl);
+                        
+                        // Store sessionId and redirect to Microsoft auth
+                        sessionStorage.setItem('pendingSessionId', loginData.sessionId);
+                        window.location.href = loginData.authUrl;
+                    } else {
+                        console.error('❌ Login failed:', loginData);
+                        showAuthStatus(`❌ Failed to initiate Microsoft 365 login: ${loginData.message || 'Unknown error'}`, 'error');
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Initialization error:', error);
+                showAuthStatus('❌ Failed to connect to Microsoft 365. Please try again.', 'error');
+            }
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // File upload
+            const fileInput = document.getElementById('fileInput');
+            const uploadArea = document.querySelector('.upload-area');
+            
+            fileInput.addEventListener('change', handleFileUpload);
+            
+            // Drag and drop
+            uploadArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    fileInput.files = files;
+                    handleFileUpload();
+                }
+            });
+
+            // Forms
+            document.getElementById('templateForm').addEventListener('submit', saveTemplate);
+            document.getElementById('campaignForm').addEventListener('submit', startCampaign);
+            
+            // Modal close on background click
+            window.addEventListener('click', function(e) {
+                if (e.target.classList.contains('modal')) {
+                    e.target.style.display = 'none';
+                }
+            });
+
+            // Email content type change
+            document.getElementById('emailContentType').addEventListener('change', function() {
+                updateCampaignPreview();
+            });
+
+            // Send schedule change
+            document.getElementById('sendSchedule').addEventListener('change', function() {
+                const scheduleDiv = document.getElementById('scheduleDateTime');
+                if (this.value === 'scheduled') {
+                    scheduleDiv.classList.remove('hidden');
+                } else {
+                    scheduleDiv.classList.add('hidden');
+                }
+            });
+
+            // Search and filter functionality
+            document.getElementById('searchLeads').addEventListener('input', function() {
+                filterMasterList();
+            });
+
+            document.getElementById('filterStatus').addEventListener('change', function() {
+                filterMasterList();
+            });
+
+            document.getElementById('filterTemplate').addEventListener('change', function() {
+                filterMasterList();
+            });
+
+            document.getElementById('filterLastEmail').addEventListener('change', function() {
+                filterMasterList();
+            });
+        }
+
+        // Show authentication status
+        function showAuthStatus(message, type) {
+            const statusDiv = document.getElementById('authStatus');
+            const messageDiv = document.getElementById('authMessage');
+            
+            statusDiv.className = `auth-status auth-${type}`;
+            messageDiv.textContent = message;
+            statusDiv.classList.remove('hidden');
+            
+            // Update upload auth status indicator
+            const uploadAuthStatus = document.getElementById('uploadAuthStatus');
+            if (uploadAuthStatus) {
+                if (type === 'success') {
+                    uploadAuthStatus.innerHTML = '✅ Ready';
+                    uploadAuthStatus.style.color = '#10b981';
+                } else if (type === 'info') {
+                    uploadAuthStatus.innerHTML = '🔄 Connecting...';
+                    uploadAuthStatus.style.color = '#3b82f6';
+                } else {
+                    uploadAuthStatus.innerHTML = '❌ Not Connected';
+                    uploadAuthStatus.style.color = '#ef4444';
+                }
+            }
+        }
+
+        // Handle file upload
+        async function handleFileUpload() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) return;
+            
+            // Check authentication first
+            if (!sessionId) {
+                document.getElementById('uploadSummary').innerHTML = `
+                    <strong>🔑 Authentication Required</strong><br>
+                    Please connect to Microsoft 365 first.<br>
+                    <button onclick="initializeEmailAutomation()" class="btn btn-primary" style="margin-top: 10px;">Connect Now</button>
+                `;
+                document.getElementById('uploadResults').classList.remove('hidden');
+                return;
+            }
+            
+            console.log('📤 Uploading file:', file.name);
+            
+            // Show progress
+            document.getElementById('uploadProgress').classList.remove('hidden');
+            document.getElementById('uploadResults').classList.add('hidden');
+            
+            const formData = new FormData();
+            formData.append('excelFile', file);
+            
+            try {
+                const response = await fetch('/api/email-automation/master-list/upload', {
+                    method: 'POST',
+                    headers: {
+                        'X-Session-Id': sessionId
+                    },
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Show results
+                    document.getElementById('uploadSummary').innerHTML = `
+                        <strong>✅ Upload Completed</strong><br>
+                        📊 Total Processed: ${result.totalProcessed}<br>
+                        ✨ New Leads Added: ${result.newLeads}<br>
+                        🔄 Duplicates Skipped: ${result.duplicates}
+                    `;
+                    
+                    document.getElementById('uploadResults').classList.remove('hidden');
+                    
+                    // Refresh dashboard and master list
+                    console.log('🔄 Refreshing dashboard and master list after upload...');
+                    await Promise.all([
+                        refreshDashboard(),
+                        loadMasterList()
+                    ]);
+                    console.log('✅ Dashboard and master list refresh completed');
+                } else {
+                    // Handle specific error types with detailed debugging
+                    console.error('❌ Upload failed - Full response:', {
+                        status: response.status,
+                        statusText: response.statusText,
+                        result: result
+                    });
+                    
+                    if (response.status === 503 || result.error === 'Service Unavailable') {
+                        document.getElementById('uploadSummary').innerHTML = `
+                            <strong>⚙️ Service Configuration Error</strong><br>
+                            Email automation is currently disabled.<br>
+                            <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; font-size: 0.9em;">
+                                <strong>🔧 Admin Action Required:</strong><br>
+                                ${result.troubleshooting ? `
+                                1. ${result.troubleshooting.step1}<br>
+                                2. ${result.troubleshooting.step2}<br>
+                                3. ${result.troubleshooting.step3}` : 'Check Azure configuration in Render environment variables'}
+                            </div>
+                            <div style="margin-top: 10px; font-size: 0.8em; color: #666;">
+                                Missing: ${result.missingCredentials ? result.missingCredentials.join(', ') : 'Azure credentials'}
+                            </div>
+                        `;
+                    } else if (response.status === 401 || result.error === 'Authentication Required') {
+                        document.getElementById('uploadSummary').innerHTML = `
+                            <strong>🔑 Authentication ${result.troubleshooting?.issue || 'Required'}</strong><br>
+                            ${result.message || 'Your Microsoft 365 session has expired. Please reconnect.'}<br>
+                            ${result.troubleshooting ? `
+                            <div style="margin-top: 10px; font-size: 0.9em; color: #666;">
+                                Debug: ${result.troubleshooting.issue}<br>
+                                Active sessions: ${result.troubleshooting.activeSessions || 0}
+                            </div>` : ''}
+                            <button onclick="window.location.reload()" class="btn btn-primary" style="margin-top: 10px;">Reconnect</button>
+                        `;
+                        sessionId = null; // Reset session
+                        localStorage.removeItem('msGraph_sessionId'); // Clean up localStorage
+                    } else if (response.status === 423 || result.errorType === 'FILE_LOCKED') {
+                        document.getElementById('uploadSummary').innerHTML = `
+                            <strong>🔒 File is Locked</strong><br>
+                            ${result.userMessage || result.message}<br>
+                            <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; font-size: 0.9em;">
+                                <strong>💡 Quick Fix:</strong><br>
+                                1. Close the Excel file if it's open in OneDrive or Excel<br>
+                                2. Wait 30 seconds for the sync to complete<br>
+                                3. Try uploading again
+                            </div>
+                            <button onclick="handleFileUpload()" class="btn btn-primary" style="margin-top: 10px;">Try Again</button>
+                        `;
+                    } else {
+                        document.getElementById('uploadSummary').innerHTML = `
+                            <strong>❌ Upload Failed</strong><br>
+                            ${result.message || 'Unknown error occurred'}
+                        `;
+                    }
+                    document.getElementById('uploadResults').classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('❌ Upload error:', error);
+                
+                // Check if it's a network/server error
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    document.getElementById('uploadSummary').innerHTML = `
+                        <strong>🌐 Connection Error</strong><br>
+                        Unable to connect to server. Please check your internet connection and try again.
+                    `;
+                } else {
+                    document.getElementById('uploadSummary').innerHTML = `
+                        <strong>❌ Upload Failed</strong><br>
+                        ${error.message || 'An unexpected error occurred'}
+                    `;
+                }
+                document.getElementById('uploadResults').classList.remove('hidden');
+            } finally {
+                document.getElementById('uploadProgress').classList.add('hidden');
+                fileInput.value = ''; // Reset file input
+            }
+        }
+
+        // Refresh dashboard statistics
+        async function refreshDashboard() {
+            console.log('📊 Refreshing dashboard...');
+            
+            try {
+                const response = await fetch('/api/email-automation/master-list/stats', {
+                    headers: {
+                        'X-Session-Id': sessionId
+                    }
+                });
+                
+                const stats = await response.json();
+                
+                if (stats.success) {
+                    document.getElementById('totalLeads').textContent = stats.data.totalLeads || 0;
+                    document.getElementById('dueToday').textContent = stats.data.dueToday || 0;
+                    document.getElementById('emailsSent').textContent = stats.data.emailsSent || 0;
+                    document.getElementById('emailsRead').textContent = stats.data.emailsRead || 0;
+                    document.getElementById('repliesReceived').textContent = stats.data.repliesReceived || 0;
+                    document.getElementById('newRecords').textContent = stats.data.newRecords || 0;
+                }
+                
+                // Also refresh templates when dashboard is refreshed
+                await loadTemplates();
+                
+            } catch (error) {
+                console.error('❌ Dashboard refresh error:', error);
+            }
+        }
+
+        // Load templates
+        async function loadTemplates() {
+            console.log('📝 Loading templates...');
+            
+            try {
+                const response = await fetch('/api/email-templates', {
+                    headers: {
+                        'X-Session-Id': sessionId
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    templates = result.templates || [];
+                    window.templates = templates; // Store globally for editing
+                    displayTemplates(templates);
+                    updateTemplateDropdowns(templates);
+                } else {
+                    document.getElementById('templatesList').innerHTML = '<p>No templates found.</p>';
+                    // Still update dropdowns with empty template list (shows all available slots)
+                    updateTemplateDropdowns([]);
+                }
+            } catch (error) {
+                console.error('❌ Templates loading error:', error);
+                document.getElementById('templatesList').innerHTML = '<p>Error loading templates.</p>';
+                // Initialize dropdowns with empty template list (shows all available slots)
+                updateTemplateDropdowns([]);
+            }
+        }
+
+        // Display templates
+        function displayTemplates(templateList) {
+            const container = document.getElementById('templatesList');
+            const statsContainer = document.getElementById('templateStats');
+            
+            // Update stats
+            const activeCount = templateList.filter(t => t.Active === 'Yes').length;
+            statsContainer.innerHTML = `
+                <span class="text-muted">${templateList.length} templates (${activeCount} active)</span>
+            `;
+            
+            if (templateList.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center" style="padding: var(--space-xl);">
+                        <div style="font-size: 48px; margin-bottom: var(--space-md);">📝</div>
+                        <p>No templates created yet.</p>
+                        <p class="text-muted">Create your first email template to get started.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = templateList.map(template => `
+                <div class="template-item">
+                    <div class="template-header">
+                        <div class="flex gap-sm">
+                            <strong class="template-name">${template.Template_Name}</strong>
+                            <span class="status-badge ${template.Active === 'Yes' ? 'status-read' : 'status-new'}">
+                                ${template.Active === 'Yes' ? '✅ Active' : '⏸️ Inactive'}
+                            </span>
+                        </div>
+                        <div class="template-actions">
+                            <button class="btn" onclick="editTemplate('${template.Template_ID}')" title="Edit template">
+                                ✏️ Edit
+                            </button>
+                            <button class="btn btn-warning" onclick="toggleTemplate('${template.Template_ID}')" title="${template.Active === 'Yes' ? 'Deactivate' : 'Activate'} template">
+                                ${template.Active === 'Yes' ? '⏸️ Deactivate' : '▶️ Activate'}
+                            </button>
+                            <button class="btn btn-danger" onclick="deleteTemplate('${template.Template_ID}')" title="Delete template">
+                                🗑️ Delete
+                            </button>
+                        </div>
+                    </div>
+                    <div class="template-meta">
+                        <span>📋 Type: ${template.Template_Type.replace('_', ' ')}</span>
+                        <span>📧 Subject: ${template.Subject.substring(0, 50)}${template.Subject.length > 50 ? '...' : ''}</span>
+                        ${template.Attachment_Count > 0 ? `<span>📎 Attachments: ${template.Attachment_Count} file${template.Attachment_Count > 1 ? 's' : ''}</span>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Update template dropdowns with current templates
+        function updateTemplateDropdowns(templateList) {
+            const activeTemplates = templateList.filter(t => t.Active === 'Yes');
+
+            // Handle template creation dropdown differently from content selection dropdowns
+            const templateTypeDropdown = document.getElementById('templateType');
+            const contentDropdowns = [
+                document.getElementById('emailContentSelect'),
+                document.getElementById('filterTemplate'),
+                document.querySelector('#scheduleEmailModal select[id*="content"]')
+            ].filter(Boolean);
+
+            // Update Template Type dropdown for creation (show available slots)
+            if (templateTypeDropdown) {
+                updateTemplateTypeDropdown(templateTypeDropdown, templateList);
+            }
+
+            // Update content selection dropdowns (show existing active templates)
+            contentDropdowns.forEach(dropdown => {
+                // Store current value
+                const currentValue = dropdown.value;
+
+                // Get existing static options (like AI_Generated)
+                const staticOptions = Array.from(dropdown.querySelectorAll('option')).filter(option =>
+                    !option.value.startsWith('Template_') || option.value === ''
+                );
+
+                // Clear all options
+                dropdown.innerHTML = '';
+
+                // Re-add static options
+                staticOptions.forEach(option => dropdown.appendChild(option.cloneNode(true)));
+
+                // Add dynamic template options (existing active templates)
+                activeTemplates.forEach(template => {
+                    const option = document.createElement('option');
+                    option.value = template.Template_Type;
+                    option.textContent = template.Template_Name;
+                    dropdown.appendChild(option);
+                });
+
+                // Restore previous value if it still exists
+                if (currentValue && Array.from(dropdown.options).some(opt => opt.value === currentValue)) {
+                    dropdown.value = currentValue;
+                }
+            });
+
+            console.log(`📝 Updated template dropdowns with ${activeTemplates.length} active templates`);
+        }
+
+        // Update Template Type dropdown for template creation/editing
+        function updateTemplateTypeDropdown(dropdown, templateList) {
+            // Store current value
+            const currentValue = dropdown.value;
+
+            // Define all possible template types (Template_1 through Template_5)
+            const allTemplateTypes = ['Template_1', 'Template_2', 'Template_3', 'Template_4', 'Template_5'];
+
+            // Check if we're in editing mode
+            const templateForm = document.getElementById('templateForm');
+            const isEditing = templateForm && templateForm.dataset.editingId;
+
+            // Get existing template types
+            const existingTypes = templateList.map(t => t.Template_Type);
+
+            // Determine which types to show
+            let typesToShow;
+            if (isEditing) {
+                // When editing, show ALL template types so user can see current value
+                typesToShow = allTemplateTypes;
+                console.log(`📝 Editing mode: showing all template types`);
+            } else {
+                // When creating, show only available template types
+                typesToShow = allTemplateTypes.filter(type => !existingTypes.includes(type));
+                console.log(`📝 Creation mode: showing ${typesToShow.length} available slots`);
+            }
+
+            // Clear dropdown
+            dropdown.innerHTML = '';
+
+            // Add default option
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = 'Select type...';
+            dropdown.appendChild(defaultOption);
+
+            // Add template type options
+            typesToShow.forEach(type => {
+                const option = document.createElement('option');
+                option.value = type;
+                option.textContent = type.replace('_', ' ');
+
+                // If this type is already used by another template (and we're editing), mark it
+                if (isEditing && existingTypes.includes(type)) {
+                    const templateUsingType = templateList.find(t => t.Template_Type === type);
+                    const editingId = templateForm.dataset.editingId;
+
+                    // Only disable if it's used by a DIFFERENT template
+                    if (templateUsingType && templateUsingType.Template_ID !== editingId) {
+                        option.disabled = true;
+                        option.textContent += ` (used by ${templateUsingType.Template_Name})`;
+                    }
+                }
+
+                dropdown.appendChild(option);
+            });
+
+            // If no types to show in creation mode, show message
+            if (!isEditing && typesToShow.length === 0) {
+                const noSlotsOption = document.createElement('option');
+                noSlotsOption.value = '';
+                noSlotsOption.textContent = 'All template slots are used';
+                noSlotsOption.disabled = true;
+                dropdown.appendChild(noSlotsOption);
+            }
+
+            // Restore previous value
+            if (currentValue && (isEditing || typesToShow.includes(currentValue))) {
+                dropdown.value = currentValue;
+                console.log(`📝 Set dropdown value to: ${currentValue}`);
+            }
+
+            console.log(`📝 Template Type dropdown updated: ${typesToShow.length} types shown (${typesToShow.join(', ')})`);
+        }
+
+        // Global pagination variables
+        let currentPage = 1;
+        let leadsPerPage = 30;
+        let totalLeads = 0;
+        let filteredLeadsData = [];
+
+        // Load master list with all data
+        async function loadMasterList() {
+            console.log('📋 Loading complete master list...');
+            
+            try {
+                // Load ALL data by setting a high limit
+                const response = await fetch('/api/email-automation/master-list/data?limit=10000', {
+                    headers: {
+                        'X-Session-Id': sessionId
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    masterListData = result.data || [];
+                    totalLeads = result.total || masterListData.length;
+                    console.log(`📊 Loaded ${masterListData.length} leads from master file (Total: ${totalLeads})`);
+                    
+                    // Store original data for filtering
+                    window.originalMasterListData = [...masterListData];
+                    filteredLeadsData = [...masterListData];
+                    
+                    // Reset to first page
+                    currentPage = 1;
+                    displayMasterListWithPagination(filteredLeadsData);
+                } else {
+                    document.getElementById('masterListBody').innerHTML = `
+                        <tr><td colspan="7" style="text-align: center; padding: 40px;">No leads found.</td></tr>
+                    `;
+                }
+            } catch (error) {
+                console.error('❌ Master list loading error:', error);
+                document.getElementById('masterListBody').innerHTML = `
+                    <tr><td colspan="7" style="text-align: center; padding: 40px;">Error loading master list.</td></tr>
+                `;
+            }
+        }
+
+        // Display master list with pagination
+        function displayMasterListWithPagination(data) {
+            filteredLeadsData = data;
+            const totalPages = Math.ceil(data.length / leadsPerPage);
+            const startIndex = (currentPage - 1) * leadsPerPage;
+            const endIndex = startIndex + leadsPerPage;
+            const pageData = data.slice(startIndex, endIndex);
+            
+            const tbody = document.getElementById('masterListBody');
+            const showingCount = document.getElementById('showingCount');
+            const totalCount = document.getElementById('totalCount');
+            
+            // Update counts
+            showingCount.textContent = pageData.length;
+            totalCount.textContent = data.length;
+            
+            if (data.length === 0) {
+                tbody.innerHTML = `
+                    <tr><td colspan="7" class="text-center loading-cell">
+                        <div style="padding: var(--space-xl);">
+                            <div style="font-size: 48px; margin-bottom: var(--space-md);">📋</div>
+                            <p>No leads match the current filters.</p>
+                            <p class="text-muted">Try adjusting your search criteria.</p>
+                        </div>
+                    </td></tr>
+                `;
+                updatePaginationControls(0, 0);
+                return;
+            }
+            
+            tbody.innerHTML = pageData.map((lead, index) => {
+                const globalIndex = startIndex + index;
+                return `
+                <tr>
+                    <td><input type="checkbox" class="lead-checkbox" data-email="${lead.Email}" data-index="${globalIndex}"></td>
+                    <td title="${lead.Name || 'No name'}">${lead.Name || '<span class="text-muted">No name</span>'}</td>
+                    <td title="${lead.Email}">${lead.Email || ''}</td>
+                    <td title="${lead['Company Name'] || 'No company'}">${lead['Company Name'] || '<span class="text-muted">No company</span>'}</td>
+                    <td><span class="status-badge status-${(lead.Status || 'new').toLowerCase()}">${lead.Status || 'New'}</span></td>
+                    <td title="Number of emails sent to this lead">${lead.Email_Count || 0}</td>
+                    <td title="${lead.Last_Email_Date ? parseExcelDateForDisplay(lead.Last_Email_Date).toLocaleString() : 'Never sent'}">${lead.Last_Email_Date ? parseExcelDateForDisplay(lead.Last_Email_Date).toLocaleDateString() : '-'}</td>
+                </tr>
+                `;
+            }).join('');
+            
+            // Update pagination controls
+            updatePaginationControls(totalPages, data.length);
+        }
+
+        // Legacy function for backward compatibility
+        function displayMasterList(data) {
+            displayMasterListWithPagination(data);
+        }
+
+        // Modal functions
+        function openTemplateModal() {
+            document.getElementById('templateModal').style.display = 'block';
+
+            // Clear form and edit mode
+            document.getElementById('templateForm').reset();
+            delete document.getElementById('templateForm').dataset.editingId;
+
+            // Refresh Template Type dropdown to show available slots for new templates
+            const templateTypeDropdown = document.getElementById('templateType');
+            if (templateTypeDropdown && window.templates) {
+                updateTemplateTypeDropdown(templateTypeDropdown, window.templates);
+            }
+
+            console.log('📝 New template modal opened, editing mode cleared');
+        }
+
+        function closeTemplateModal() {
+            document.getElementById('templateModal').style.display = 'none';
+
+            // Clear editing mode
+            const templateForm = document.getElementById('templateForm');
+            delete templateForm.dataset.editingId;
+
+            // Reset form
+            templateForm.reset();
+
+            // Refresh Template Type dropdown to show available slots for new templates
+            const templateTypeDropdown = document.getElementById('templateType');
+            if (templateTypeDropdown && window.templates) {
+                updateTemplateTypeDropdown(templateTypeDropdown, window.templates);
+            }
+
+            console.log('📝 Template modal closed, editing mode cleared');
+        }
+
+        function openCampaignModal() {
+            document.getElementById('campaignModal').style.display = 'block';
+            // Clear form
+            document.getElementById('campaignForm').reset();
+        }
+
+        function closeCampaignModal() {
+            document.getElementById('campaignModal').style.display = 'none';
+        }
+
+        // Attachment handling variables
+        let selectedFiles = [];
+
+        // Initialize attachment handling
+        function initializeAttachmentHandling() {
+            const attachmentInput = document.getElementById('templateAttachments');
+            const attachmentLabel = document.querySelector('.attachment-label');
+
+            // File input change handler
+            attachmentInput.addEventListener('change', function(e) {
+                handleFileSelection(e.target.files);
+            });
+
+            // Drag and drop handlers
+            attachmentLabel.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                attachmentLabel.classList.add('drag-over');
+            });
+
+            attachmentLabel.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                attachmentLabel.classList.remove('drag-over');
+            });
+
+            attachmentLabel.addEventListener('drop', function(e) {
+                e.preventDefault();
+                attachmentLabel.classList.remove('drag-over');
+                handleFileSelection(e.dataTransfer.files);
+            });
+        }
+
+        // Handle file selection
+        function handleFileSelection(files) {
+            const maxFiles = 5;
+            const maxSize = 25 * 1024 * 1024; // 25MB
+
+            // Validate file count
+            if (selectedFiles.length + files.length > maxFiles) {
+                alert(`❌ Too many files\n\nMaximum ${maxFiles} files allowed. You currently have ${selectedFiles.length} files selected.`);
+                return;
+            }
+
+            // Validate and add files
+            Array.from(files).forEach(file => {
+                // Check file size
+                if (file.size > maxSize) {
+                    alert(`❌ File too large\n\n"${file.name}" is ${Math.round(file.size / 1024 / 1024)}MB. Maximum size is 25MB.`);
+                    return;
+                }
+
+                // Check if file already selected
+                if (selectedFiles.some(f => f.name === file.name && f.size === file.size)) {
+                    alert(`⚠️ File already selected\n\n"${file.name}" is already in your selection.`);
+                    return;
+                }
+
+                selectedFiles.push(file);
+            });
+
+            updateAttachmentsList();
+        }
+
+        // Update attachments display
+        function updateAttachmentsList() {
+            const selectedAttachments = document.getElementById('selectedAttachments');
+            const attachmentsList = document.getElementById('attachmentsList');
+
+            if (selectedFiles.length === 0) {
+                selectedAttachments.classList.add('hidden');
+                return;
+            }
+
+            selectedAttachments.classList.remove('hidden');
+
+            attachmentsList.innerHTML = selectedFiles.map((file, index) => `
+                <div class="attachment-item">
+                    <div class="attachment-info">
+                        <div class="attachment-file-icon">${getFileIcon(file.name)}</div>
+                        <div class="attachment-details">
+                            <div class="attachment-name" title="${file.name}">${file.name}</div>
+                            <div class="attachment-size">${formatFileSize(file.size)}</div>
+                        </div>
+                    </div>
+                    <button class="attachment-remove" onclick="removeAttachment(${index})" title="Remove file">
+                        ×
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        // Remove attachment
+        function removeAttachment(index) {
+            selectedFiles.splice(index, 1);
+            updateAttachmentsList();
+        }
+
+        // Clear all attachments
+        function clearAttachments() {
+            selectedFiles = [];
+            updateAttachmentsList();
+            document.getElementById('templateAttachments').value = '';
+        }
+
+        // Get file icon based on extension
+        function getFileIcon(fileName) {
+            const ext = fileName.toLowerCase().split('.').pop();
+            const icons = {
+                'pdf': '📄',
+                'doc': '📝', 'docx': '📝',
+                'xls': '📊', 'xlsx': '📊',
+                'ppt': '📽️', 'pptx': '📽️',
+                'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️', 'gif': '🖼️',
+                'txt': '📃',
+                'csv': '📈'
+            };
+            return icons[ext] || '📎';
+        }
+
+        // Format file size
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+
+        // Save template
+        async function saveTemplate(e) {
+            e.preventDefault();
+
+            const form = document.getElementById('templateForm');
+            const editingId = form.dataset.editingId;
+            const isEditing = !!editingId;
+
+            try {
+                // Create FormData to handle both text data and file uploads
+                const formData = new FormData();
+                formData.append('Template_Name', document.getElementById('templateName').value);
+                formData.append('Template_Type', document.getElementById('templateType').value);
+                formData.append('Subject', document.getElementById('templateSubject').value);
+                formData.append('Body', document.getElementById('templateContent').value);
+                formData.append('Active', document.getElementById('templateActive').value);
+
+                // Add attachments to FormData
+                selectedFiles.forEach(file => {
+                    formData.append('attachments', file);
+                });
+
+                console.log(`📎 Saving template with ${selectedFiles.length} attachments`);
+
+                const response = await fetch(
+                    isEditing
+                        ? `/api/email-templates/${editingId}`
+                        : '/api/email-templates',
+                    {
+                        method: isEditing ? 'PUT' : 'POST',
+                        headers: {
+                            'X-Session-Id': sessionId
+                            // Note: Don't set Content-Type when using FormData, browser sets it automatically with boundary
+                        },
+                        body: formData
+                    }
+                );
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    closeTemplateModal();
+                    await loadTemplates();
+                    alert(`✅ Template ${isEditing ? 'updated' : 'created'} successfully!`);
+                } else {
+                    alert(`❌ Failed to ${isEditing ? 'update' : 'create'} template: ` + result.message);
+                }
+            } catch (error) {
+                console.error('❌ Template save error:', error);
+                alert(`❌ Failed to ${isEditing ? 'update' : 'create'} template.`);
+            }
+        }
+
+        // Start campaign
+        async function startCampaign(e) {
+            e.preventDefault();
+            
+            const campaignData = {
+                campaignName: document.getElementById('campaignName').value,
+                emailContentType: document.getElementById('emailContentType').value,
+                targetLeads: document.getElementById('targetLeads').value,
+                sendSchedule: document.getElementById('sendSchedule').value,
+                scheduledTime: document.getElementById('scheduledTime').value,
+                followUpDays: parseInt(document.getElementById('followUpDays').value)
+            };
+            
+            try {
+                const response = await fetch('/api/email-scheduler/campaigns/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Session-Id': sessionId
+                    },
+                    body: JSON.stringify(campaignData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    closeCampaignModal();
+                    await refreshDashboard();
+                    alert(`✅ Campaign started successfully! ${result.emailsSent} emails queued.`);
+                } else {
+                    alert('❌ Failed to start campaign: ' + result.message);
+                }
+            } catch (error) {
+                console.error('❌ Campaign start error:', error);
+                alert('❌ Failed to start campaign.');
+            }
+        }
+
+        // Utility functions
+
+        function previewCampaign() {
+            alert('Campaign preview functionality coming soon!');
+        }
+
+        async function editTemplate(templateId) {
+            try {
+                // First try to find template in cached data
+                let template = null;
+                if (window.templates && window.templates.length > 0) {
+                    template = window.templates.find(t => t.Template_ID === templateId);
+                }
+
+                // If not found in cache, try API
+                if (!template) {
+                    console.log('📝 Template not in cache, fetching from API...');
+                    const response = await fetch(`/api/email-templates/${templateId}`, {
+                        headers: {
+                            'X-Session-Id': sessionId
+                        }
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        template = result.template;
+                    } else {
+                        alert('❌ Failed to load template: ' + result.message);
+                        return;
+                    }
+                }
+
+                if (template) {
+                    console.log('📝 Editing template:', template);
+
+                    // Store template ID for updating FIRST (this enables editing mode)
+                    document.getElementById('templateForm').dataset.editingId = templateId;
+
+                    // Refresh the Template Type dropdown to show all types in editing mode
+                    const templateTypeDropdown = document.getElementById('templateType');
+                    if (templateTypeDropdown && window.templates) {
+                        updateTemplateTypeDropdown(templateTypeDropdown, window.templates);
+                    }
+
+                    // Populate form with template data
+                    document.getElementById('templateName').value = template.Template_Name || '';
+                    document.getElementById('templateType').value = template.Template_Type || '';
+                    document.getElementById('templateSubject').value = template.Subject || '';
+                    document.getElementById('templateContent').value = template.Body || '';
+                    document.getElementById('templateActive').value = template.Active || 'Yes';
+
+                    // Update preview if visible
+                    updatePreview();
+
+                    console.log(`📝 Template form populated with type: ${template.Template_Type}`);
+
+                    // Open modal
+                    document.getElementById('templateModal').style.display = 'block';
+                } else {
+                    alert('❌ Template not found.');
+                }
+            } catch (error) {
+                console.error('❌ Template edit error:', error);
+                alert('❌ Failed to load template for editing.');
+            }
+        }
+
+        async function toggleTemplate(templateId) {
+            try {
+                const response = await fetch(`/api/email-templates/${templateId}/toggle`, {
+                    method: 'PATCH',
+                    headers: {
+                        'X-Session-Id': sessionId
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    await loadTemplates(); // Refresh template list
+                    alert(`✅ ${result.message}`);
+                } else {
+                    alert('❌ Failed to toggle template: ' + result.message);
+                }
+            } catch (error) {
+                console.error('❌ Template toggle error:', error);
+                alert('❌ Failed to toggle template status.');
+            }
+        }
+
+        function editLead(email) {
+            alert('Lead editing functionality coming soon!');
+        }
+
+        async function sendNow(email) {
+            if (confirm(`Send email to ${email} now?`)) {
+                try {
+                    const response = await fetch(`/api/email-automation/send-email/${encodeURIComponent(email)}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Session-Id': sessionId
+                        },
+                        body: JSON.stringify({
+                            emailChoice: 'AI_Generated' // Use default, could be made configurable
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        await refreshDashboard(); // Refresh to show updated stats
+                        alert(`✅ ${result.message}`);
+                    } else {
+                        alert('❌ Failed to send email: ' + result.message);
+                    }
+                } catch (error) {
+                    console.error('❌ Send now error:', error);
+                    alert('❌ Failed to send email.');
+                }
+            }
+        }
+
+        async function showDueLeads() {
+            try {
+                const response = await fetch('/api/email-automation/master-list/due-today', {
+                    headers: {
+                        'X-Session-Id': sessionId
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    const dueLeads = result.data;
+                    if (dueLeads.length === 0) {
+                        alert('📅 No leads due for email today.');
+                        return;
+                    }
+                    
+                    let dueLeadsMessage = `📅 LEADS DUE TODAY (${dueLeads.length})\n\n`;
+                    dueLeads.forEach((lead, index) => {
+                        dueLeadsMessage += `${index + 1}. ${lead.Name || 'Unknown'}\n`;
+                        dueLeadsMessage += `   📧 ${lead.Email}\n`;
+                        dueLeadsMessage += `   🏢 ${lead['Company Name'] || 'No company'}\n`;
+                        dueLeadsMessage += `   📄 Status: ${lead.Status || 'New'}\n`;
+                        dueLeadsMessage += `   📅 Next: ${lead.Next_Email_Date || 'Not scheduled'}\n\n`;
+                    });
+                    
+                    alert(dueLeadsMessage);
+                } else {
+                    alert('❌ Failed to load due leads: ' + result.message);
+                }
+            } catch (error) {
+                console.error('❌ Due leads error:', error);
+                alert('❌ Failed to load due leads.');
+            }
+        }
+
+        // New Records Functions
+        async function showNewRecords() {
+            try {
+                const response = await fetch('/api/email-automation/master-list/data?status=New&limit=100', {
+                    headers: {
+                        'X-Session-Id': sessionId
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    const newLeads = result.data;
+                    if (newLeads.length === 0) {
+                        alert('📝 No new records found.');
+                        return;
+                    }
+                    
+                    let newLeadsMessage = `📝 NEW RECORDS (${newLeads.length})\n\n`;
+                    newLeads.forEach((lead, index) => {
+                        newLeadsMessage += `${index + 1}. ${lead.Name || 'Unknown'}\n`;
+                        newLeadsMessage += `   📧 ${lead.Email}\n`;
+                        newLeadsMessage += `   🏢 ${lead['Company Name'] || 'No company'}\n`;
+                        newLeadsMessage += `\n`;
+                    });
+                    
+                    alert(newLeadsMessage);
+                } else {
+                    alert('❌ Failed to load new records: ' + result.message);
+                }
+            } catch (error) {
+                console.error('❌ New records error:', error);
+                alert('❌ Failed to load new records.');
+            }
+        }
+
+        async function sendNewEmails(event) {
+            // Prevent parent click event
+            if (event) event.stopPropagation();
+            
+            const newRecordsCount = document.getElementById('newRecords').textContent;
+            
+            if (newRecordsCount === '0' || newRecordsCount === '-') {
+                alert('📝 No new records to send emails to.');
+                return;
+            }
+            
+            if (!confirm(`📧 Send emails to all ${newRecordsCount} new records?\n\nThis will send emails with rate limiting (5 per batch, 2s delays) to avoid being marked as spam.`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/email-scheduler/campaigns/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Session-Id': sessionId
+                    },
+                    body: JSON.stringify({
+                        campaignName: `Manual Send - ${new Date().toLocaleDateString()}`,
+                        emailContentType: 'AI_Generated',
+                        targetLeads: 'new', // Target only new leads
+                        sendSchedule: 'immediate',
+                        followUpDays: 7
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    await refreshDashboard(); // Refresh to show updated stats
+                    alert(`✅ Successfully started sending emails to ${result.emailsSent || newRecordsCount} new leads!\n\nEmails are being sent with proper rate limiting to maintain deliverability.`);
+                } else {
+                    alert('❌ Failed to send emails: ' + result.message);
+                }
+            } catch (error) {
+                console.error('❌ Send new emails error:', error);
+                alert('❌ Failed to send emails to new records.');
+            }
+        }
+
+        function showScheduledCampaigns() {
+            alert('Scheduled campaigns view coming soon!');
+        }
+
+        function viewMasterList() {
+            loadMasterList();
+        }
+
+        async function exportMasterList() {
+            try {
+                const response = await fetch('/api/email-automation/master-list/export', {
+                    headers: {
+                        'X-Session-Id': sessionId
+                    }
+                });
+                
+                if (response.ok) {
+                    // Get filename from response header or use default
+                    const contentDisposition = response.headers.get('content-disposition');
+                    const filename = contentDisposition 
+                        ? contentDisposition.split('filename=')[1].replace(/"/g, '')
+                        : `LGA-Master-Email-List-Export-${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.xlsx`;
+                    
+                    // Create blob and download
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    alert('✅ Master list exported successfully!');
+                } else {
+                    const error = await response.json();
+                    alert('❌ Failed to export master list: ' + (error.message || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('❌ Export error:', error);
+                alert('❌ Failed to export master list.');
+            }
+        }
+
+        function openAutomationSettings() {
+            alert('Automation settings coming soon!');
+        }
+
+        function pauseAutomation() {
+            if (confirm('Pause all automated email campaigns?')) {
+                alert('Pause automation functionality coming soon!');
+            }
+        }
+
+        function resumeAutomation() {
+            if (confirm('Resume all automated email campaigns?')) {
+                alert('Resume automation functionality coming soon!');
+            }
+        }
+
+        function updateCampaignPreview() {
+            // Update campaign preview based on selected content type
+            const contentType = document.getElementById('emailContentType').value;
+            console.log('Content type changed to:', contentType);
+        }
+
+        // New Enhanced UX Functions
+
+        // Toggle select all leads - this will select ALL filtered leads, not just visible ones
+        function toggleSelectAll() {
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            
+            if (selectAllCheckbox.checked) {
+                // Select ALL filtered leads (not just visible ones)
+                selectAllFilteredLeads();
+            } else {
+                // Deselect all visible leads and clear global selection
+                const leadCheckboxes = document.querySelectorAll('.lead-checkbox');
+                leadCheckboxes.forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+                // Clear global selection
+                window.allSelectedEmails = [];
+            }
+            
+            console.log(`${selectAllCheckbox.checked ? 'Selected' : 'Deselected'} all leads`);
+        }
+        
+        // New function to select ALL leads that match current filters
+        function selectAllFilteredLeads() {
+            // Get current filter criteria
+            const searchTerm = document.getElementById('searchLeads').value.toLowerCase();
+            const statusFilter = document.getElementById('filterStatus').value.toLowerCase();
+            const templateFilter = document.getElementById('filterTemplate').value;
+            const lastEmailFilter = document.getElementById('filterLastEmail').value;
+            
+            // Get all leads that match current filters
+            if (!window.originalMasterListData) {
+                window.originalMasterListData = [...masterListData];
+            }
+            
+            const filteredData = window.originalMasterListData.filter(lead => {
+                // Same filter logic as in sendFilteredEmails
+                const matchesSearch = !searchTerm || 
+                    (lead.Name && lead.Name.toLowerCase().includes(searchTerm)) ||
+                    (lead.Email && lead.Email.toLowerCase().includes(searchTerm)) ||
+                    (lead['Company Name'] && lead['Company Name'].toLowerCase().includes(searchTerm));
+                
+                const matchesStatus = !statusFilter || 
+                    (lead.Status && lead.Status.toLowerCase() === statusFilter);
+                
+                const matchesTemplate = !templateFilter || 
+                    (lead.Template_Used && lead.Template_Used === templateFilter);
+                
+                let matchesLastEmail = true;
+                if (lastEmailFilter && lead.Last_Email_Date) {
+                    const lastEmailDate = parseExcelDateForDisplay(lead.Last_Email_Date);
+                    const currentDate = new Date();
+                    const daysDifference = Math.floor((currentDate - lastEmailDate) / (1000 * 60 * 60 * 24));
+                    
+                    if (lastEmailFilter === '7-13') {
+                        matchesLastEmail = daysDifference >= 7 && daysDifference <= 13;
+                    } else if (lastEmailFilter === '14-20') {
+                        matchesLastEmail = daysDifference >= 14 && daysDifference <= 20;
+                    } else if (lastEmailFilter === '21+') {
+                        matchesLastEmail = daysDifference >= 21;
+                    }
+                } else if (lastEmailFilter && !lead.Last_Email_Date) {
+                    matchesLastEmail = false;
+                }
+                
+                return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail;
+            });
+            
+            // Store the selected emails globally so sendFilteredEmails can access them
+            window.allSelectedEmails = filteredData.map(lead => lead.Email);
+            
+            // Check visible checkboxes that match our filtered selection
+            const leadCheckboxes = document.querySelectorAll('.lead-checkbox');
+            leadCheckboxes.forEach(checkbox => {
+                if (window.allSelectedEmails.includes(checkbox.dataset.email)) {
+                    checkbox.checked = true;
+                }
+            });
+            
+            console.log(`Selected all ${filteredData.length} filtered leads (only ${leadCheckboxes.length} visible on current page)`);
+        }
+
+        // Select all leads (including those not currently visible due to pagination)
+        function selectAllLeads() {
+            if (!window.originalMasterListData || window.originalMasterListData.length === 0) {
+                alert('No leads available to select.');
+                return;
+            }
+            
+            // Ask user to confirm selecting all leads vs just visible ones
+            const totalLeads = filteredLeadsData.length;
+            const visibleLeads = document.querySelectorAll('.lead-checkbox').length;
+            
+            if (totalLeads > visibleLeads) {
+                const confirmed = confirm(
+                    `Select All Leads?\n\n` +
+                    `You have ${totalLeads} leads that match your current filters, but only ${visibleLeads} are visible on this page.\n\n` +
+                    `✅ OK = Select ALL ${totalLeads} leads (including those on other pages)\n` +
+                    `❌ Cancel = Select only the ${visibleLeads} visible leads`
+                );
+                
+                if (confirmed) {
+                    // Select all filtered leads (store globally for email sending)
+                    window.globalSelectedEmails = filteredLeadsData.map(lead => lead.Email);
+                    
+                    // Also check all visible checkboxes
+                    const leadCheckboxes = document.querySelectorAll('.lead-checkbox');
+                    leadCheckboxes.forEach(checkbox => checkbox.checked = true);
+                    document.getElementById('selectAllCheckbox').checked = true;
+                    
+                    // Show visual indicator that all leads are selected
+                    alert(`✅ All ${totalLeads} leads selected!\n\nThis includes leads on all pages that match your current filters.`);
+                    console.log(`Selected all ${totalLeads} filtered leads across all pages`);
+                    return;
+                }
+            }
+            
+            // Fallback: Select only visible leads
+            const leadCheckboxes = document.querySelectorAll('.lead-checkbox');
+            leadCheckboxes.forEach(checkbox => checkbox.checked = true);
+            document.getElementById('selectAllCheckbox').checked = true;
+            
+            // Clear global selection if it exists
+            delete window.globalSelectedEmails;
+            
+            console.log('Selected all visible leads on current page');
+        }
+
+        // Clear all selections
+        function clearSelection() {
+            const leadCheckboxes = document.querySelectorAll('.lead-checkbox');
+            leadCheckboxes.forEach(checkbox => checkbox.checked = false);
+            document.getElementById('selectAllCheckbox').checked = false;
+            
+            // Clear global selection if it exists
+            delete window.globalSelectedEmails;
+            console.log('Cleared all selections');
+        }
+
+        // Update pagination controls
+        function updatePaginationControls(totalPages, totalItems) {
+            const paginationControls = document.getElementById('paginationControls');
+            const listStats = document.getElementById('listStats');
+            
+            if (totalPages <= 1) {
+                paginationControls.innerHTML = '';
+                return;
+            }
+            
+            const startItem = ((currentPage - 1) * leadsPerPage) + 1;
+            const endItem = Math.min(currentPage * leadsPerPage, totalItems);
+            
+            // Update showing info
+            const showingSpan = listStats.querySelector('#showingCount');
+            const totalSpan = listStats.querySelector('#totalCount');
+            if (showingSpan) showingSpan.textContent = `${startItem}-${endItem}`;
+            if (totalSpan) totalSpan.textContent = totalItems;
+            
+            let controlsHTML = '<div class="flex gap-sm align-center">';
+            
+            // Previous button
+            if (currentPage > 1) {
+                controlsHTML += `<button class="btn btn-outline" onclick="goToPage(${currentPage - 1})" title="Previous page">‹ Previous</button>`;
+            }
+            
+            // Page numbers
+            controlsHTML += '<div class="flex gap-sm">';
+            const maxPagesToShow = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+            let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+            
+            if (endPage - startPage + 1 < maxPagesToShow) {
+                startPage = Math.max(1, endPage - maxPagesToShow + 1);
+            }
+            
+            // First page and ellipsis
+            if (startPage > 1) {
+                controlsHTML += `<button class="btn btn-outline" onclick="goToPage(1)">1</button>`;
+                if (startPage > 2) {
+                    controlsHTML += '<span class="pagination-ellipsis">...</span>';
+                }
+            }
+            
+            // Page number buttons
+            for (let page = startPage; page <= endPage; page++) {
+                const isActive = page === currentPage;
+                controlsHTML += `<button class="btn ${isActive ? 'btn-primary' : 'btn-outline'}" onclick="goToPage(${page})" ${isActive ? 'disabled' : ''}>${page}</button>`;
+            }
+            
+            // Last page and ellipsis
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    controlsHTML += '<span class="pagination-ellipsis">...</span>';
+                }
+                controlsHTML += `<button class="btn btn-outline" onclick="goToPage(${totalPages})">${totalPages}</button>`;
+            }
+            
+            controlsHTML += '</div>';
+            
+            // Next button
+            if (currentPage < totalPages) {
+                controlsHTML += `<button class="btn btn-outline" onclick="goToPage(${currentPage + 1})" title="Next page">Next ›</button>`;
+            }
+            
+            // Page info
+            controlsHTML += `<span class="text-muted ml-md">Page ${currentPage} of ${totalPages}</span>`;
+            controlsHTML += '</div>';
+            
+            paginationControls.innerHTML = controlsHTML;
+        }
+        
+        // Go to specific page
+        function goToPage(page) {
+            const totalPages = Math.ceil(filteredLeadsData.length / leadsPerPage);
+            if (page < 1 || page > totalPages) return;
+            
+            currentPage = page;
+            displayMasterListWithPagination(filteredLeadsData);
+            
+            // Scroll to top of table
+            document.getElementById('masterListTable').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Change items per page
+        function changeItemsPerPage() {
+            const newItemsPerPage = parseInt(document.getElementById('itemsPerPage').value);
+            if (newItemsPerPage !== leadsPerPage) {
+                leadsPerPage = newItemsPerPage;
+                currentPage = 1; // Reset to first page
+                displayMasterListWithPagination(filteredLeadsData);
+                console.log(`Items per page changed to: ${leadsPerPage}`);
+            }
+        }
+
+        // Load more leads (legacy function - now redirects to pagination)
+        function loadMoreLeads() {
+            if (currentPage < Math.ceil(filteredLeadsData.length / leadsPerPage)) {
+                goToPage(currentPage + 1);
+            }
+        }
+
+        // Show dashboard insights
+        function showInsights() {
+            alert('📈 Analytics insights coming soon!\n\n- Email performance metrics\n- Response rate analytics\n- Best performing templates\n- Lead engagement trends');
+        }
+
+
+        // Show lead details by type
+        function showLeadDetails(type) {
+            const messages = {
+                'total': 'Showing all leads in the system',
+                'due': 'Showing leads due for email today'
+            };
+            console.log(`Showing lead details: ${type}`);
+            alert(`📊 ${messages[type] || 'Lead details'}\n\nThis will open a detailed view with filtering options.`);
+        }
+
+        // Show email statistics
+        function showEmailStats(type) {
+            const messages = {
+                'sent': 'Email sending statistics and history',
+                'read': 'Email open rates and read receipts',
+                'replies': 'Email replies and engagement tracking'
+            };
+            console.log(`Showing email stats: ${type}`);
+            alert(`📈 ${messages[type] || 'Email statistics'}\n\nDetailed analytics coming soon!`);
+        }
+
+        // Show upload help
+        function showUploadHelp() {
+            alert('📤 Upload Help\n\n' +
+                  '✅ Supported formats: .xlsx, .xls\n' +
+                  '✅ Maximum file size: 10MB\n' +
+                  '✅ Required columns: Name, Email, Company\n' +
+                  '✅ Optional columns: Title, Phone, Industry\n\n' +
+                  '💡 Tip: Duplicate emails will be automatically merged!');
+        }
+
+
+        // Show campaign history
+        function showCampaignHistory() {
+            alert('📈 Campaign History\n\nView detailed history of:\n- All past campaigns\n- Performance metrics\n- Success rates\n- Timeline analysis\n\nComing soon!');
+        }
+
+        // Bulk actions
+        function bulkActions() {
+            const selectedLeads = document.querySelectorAll('.lead-checkbox:checked');
+            if (selectedLeads.length === 0) {
+                alert('Please select leads first using the checkboxes.');
+                return;
+            }
+            
+            const actions = [
+                'Send bulk email campaign',
+                'Update campaign stage',
+                'Change email choice',
+                'Export selected leads',
+                'Delete selected leads'
+            ];
+            
+            alert(`📦 Bulk Actions\n\nSelected ${selectedLeads.length} leads\n\nAvailable actions:\n- ${actions.join('\n- ')}\n\nComing soon!`);
+        }
+
+        // View automation logs
+        function viewAutomationLogs() {
+            alert('📋 Automation Activity Logs\n\n' +
+                  '📊 Recent Activity:\n' +
+                  '- Email campaigns sent\n' +
+                  '- Scheduled tasks executed\n' +
+                  '- System notifications\n' +
+                  '- Error tracking\n\n' +
+                  'Detailed logs coming soon!');
+        }
+
+        // View lead history
+        function viewLeadHistory(email) {
+            console.log('Viewing history for:', email);
+            alert(`📊 Lead History: ${email}\n\n` +
+                  '📧 Email History:\n' +
+                  '- All sent emails\n' +
+                  '- Open/click tracking\n' +
+                  '- Reply history\n\n' +
+                  '📝 Activity Timeline:\n' +
+                  '- Stage changes\n' +
+                  '- Status updates\n' +
+                  '- Notes and interactions\n\n' +
+                  'Detailed history coming soon!');
+        }
+
+        // Delete template (new function)
+        async function deleteTemplate(templateId) {
+            if (confirm('🗑️ Delete Template\n\nAre you sure you want to delete this template?\n\nThis action cannot be undone.')) {
+                try {
+                    const response = await fetch(`/api/email-templates/${templateId}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'X-Session-Id': sessionId
+                        }
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        await loadTemplates(); // Refresh template list
+                        alert('✅ Template deleted successfully!');
+                    } else {
+                        alert('❌ Failed to delete template: ' + result.message);
+                    }
+                } catch (error) {
+                    console.error('❌ Template delete error:', error);
+                    alert('❌ Failed to delete template.');
+                }
+            }
+        }
+
+        // Preview template (enhanced)
+        function previewTemplate(templateId) {
+            if (templateId) {
+                console.log('Previewing template:', templateId);
+                alert('👁️ Template Preview\n\nShowing template with sample data:\n- Personalized variables filled\n- Formatting preview\n- Mobile/desktop view\n\nEnhanced preview coming soon!');
+            } else {
+                alert('👁️ Template Preview\n\nPreview functionality coming soon!\n- Real-time preview\n- Sample data insertion\n- Mobile responsiveness check');
+            }
+        }
+
+        // Debug helper function - call this in browser console if needed
+        window.debugAuth = async function() {
+            console.log('🔧 DEBUG: Testing authentication endpoints...');
+            
+            try {
+                // Test auth status
+                console.log('1️⃣ Testing /auth/status...');
+                const statusResponse = await fetch('/auth/status');
+                const statusData = await statusResponse.json();
+                console.log('Status response:', statusData);
+                
+                // Test auth login
+                console.log('2️⃣ Testing /auth/login...');
+                const loginResponse = await fetch('/auth/login?redirect=/email-automation');
+                const loginData = await loginResponse.json();
+                console.log('Login response:', loginData);
+                
+                if (loginData.success && loginData.authUrl) {
+                    console.log('✅ Authentication endpoints working. Auth URL generated:', loginData.authUrl);
+                    console.log('💡 You can manually navigate to this URL to test login');
+                } else {
+                    console.error('❌ Authentication endpoint failed:', loginData);
+                }
+                
+            } catch (error) {
+                console.error('❌ Debug test failed:', error);
+            }
+        };
+
+        // Filter master list based on search, status, template, and last email sent
+        function filterMasterList() {
+            const searchTerm = document.getElementById('searchLeads').value.toLowerCase();
+            const statusFilter = document.getElementById('filterStatus').value.toLowerCase();
+            const templateFilter = document.getElementById('filterTemplate').value;
+            const lastEmailFilter = document.getElementById('filterLastEmail').value;
+            
+            // If no original data stored, store it
+            if (!window.originalMasterListData) {
+                window.originalMasterListData = [...masterListData];
+            }
+            
+            let filteredData = window.originalMasterListData.filter(lead => {
+                // Search filter
+                const matchesSearch = !searchTerm || 
+                    (lead.Name && lead.Name.toLowerCase().includes(searchTerm)) ||
+                    (lead.Email && lead.Email.toLowerCase().includes(searchTerm)) ||
+                    (lead['Company Name'] && lead['Company Name'].toLowerCase().includes(searchTerm));
+                
+                // Status filter
+                const matchesStatus = !statusFilter || 
+                    (lead.Status && lead.Status.toLowerCase() === statusFilter);
+                
+                // Template filter (check Template_Used field)
+                const matchesTemplate = !templateFilter || 
+                    (lead.Template_Used && lead.Template_Used === templateFilter);
+                
+                // Last Email Sent filter - shows leads based on when their last email was sent
+                let matchesLastEmail = true;
+                if (lastEmailFilter && lead.Last_Email_Date) {
+                    const lastEmailDate = parseExcelDateForDisplay(lead.Last_Email_Date);
+                    const currentDate = new Date();
+                    const daysDifference = Math.floor((currentDate - lastEmailDate) / (1000 * 60 * 60 * 24));
+                    
+                    if (lastEmailFilter === '7-13') {
+                        // Show leads with last email sent 7-13 days ago
+                        matchesLastEmail = daysDifference >= 7 && daysDifference <= 13;
+                    } else if (lastEmailFilter === '14-20') {
+                        // Show leads with last email sent 14-20 days ago
+                        matchesLastEmail = daysDifference >= 14 && daysDifference <= 20;
+                    } else if (lastEmailFilter === '21+') {
+                        // Show leads with last email sent 21 or more days ago
+                        matchesLastEmail = daysDifference >= 21;
+                    }
+                } else if (lastEmailFilter && !lead.Last_Email_Date) {
+                    // If filter is selected but lead has no email sent to them, exclude it
+                    matchesLastEmail = false;
+                }
+                
+                return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail;
+            });
+            
+            // Reset to first page when filters change
+            currentPage = 1;
+            
+            // Update display with pagination
+            displayMasterListWithPagination(filteredData);
+            
+            console.log(`Filtered ${filteredData.length} leads from ${window.originalMasterListData.length} total (Search: "${searchTerm}", Status: "${statusFilter}", Template: "${templateFilter}", Last Email: "${lastEmailFilter || 'none'}")`);
+        }
+
+        // Validate email template content
+        async function validateEmailTemplate(templateType) {
+            if (templateType === 'AI_Generated') {
+                // AI Generated is always valid as it creates content dynamically
+                return { isValid: true };
+            }
+            
+            try {
+                // Check if template exists and has content
+                const response = await fetch('/api/email-templates', {
+                    headers: {
+                        'X-Session-Id': sessionId
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (!result.success) {
+                    return { 
+                        isValid: false, 
+                        message: 'Unable to load email templates. Please try again.' 
+                    };
+                }
+                
+                // Find the selected template
+                const selectedTemplate = result.templates.find(template => 
+                    template.Template_Type === templateType
+                );
+                
+                if (!selectedTemplate) {
+                    return { 
+                        isValid: false, 
+                        message: `${templateType.replace('_', ' ')} does not exist.\n\nPlease create this template first or select a different email content type.` 
+                    };
+                }
+                
+                // Check if template is active
+                if (selectedTemplate.Active !== 'Yes') {
+                    return { 
+                        isValid: false, 
+                        message: `${templateType.replace('_', ' ')} is currently inactive.\n\nPlease activate the template or select a different email content type.` 
+                    };
+                }
+                
+                // Check if template has content
+                if (!selectedTemplate.Subject || !selectedTemplate.Body || 
+                    selectedTemplate.Subject.trim() === '' || selectedTemplate.Body.trim() === '') {
+                    return { 
+                        isValid: false, 
+                        message: `${templateType.replace('_', ' ')} is missing content.\n\nPlease add subject and body content to the template or select a different email content type.` 
+                    };
+                }
+                
+                return { isValid: true };
+                
+            } catch (error) {
+                console.error('Template validation error:', error);
+                return { 
+                    isValid: false, 
+                    message: 'Unable to validate email template. Please check your connection and try again.' 
+                };
+            }
+        }
+
+        // Send emails to selected or filtered leads
+        async function sendFilteredEmails() {
+            // Get selected email content type first for validation
+            const emailContentType = document.getElementById('emailContentSelect').value;
+            
+            // Validate email template before proceeding
+            const templateValidation = await validateEmailTemplate(emailContentType);
+            if (!templateValidation.isValid) {
+                alert(`❌ Email Template Error\n\n${templateValidation.message}`);
+                return;
+            }
+            
+            // First, check if any leads are manually selected via checkboxes or global selection
+            const selectedCheckboxes = document.querySelectorAll('.lead-checkbox:checked');
+            const manuallySelectedEmails = Array.from(selectedCheckboxes).map(cb => cb.dataset.email);
+            
+            // Check if we have a global selection (from "Select All" across all pages)
+            const selectedEmails = window.globalSelectedEmails && window.globalSelectedEmails.length > 0 
+                ? window.globalSelectedEmails 
+                : manuallySelectedEmails;
+            
+            const searchTerm = document.getElementById('searchLeads').value.toLowerCase();
+            const statusFilter = document.getElementById('filterStatus').value.toLowerCase();
+            const templateFilter = document.getElementById('filterTemplate').value;
+            const lastEmailFilter = document.getElementById('filterLastEmail').value;
+            
+            // Get currently filtered data
+            if (!window.originalMasterListData) {
+                window.originalMasterListData = [...masterListData];
+            }
+            
+            let filteredData = window.originalMasterListData.filter(lead => {
+                // Search filter
+                const matchesSearch = !searchTerm || 
+                    (lead.Name && lead.Name.toLowerCase().includes(searchTerm)) ||
+                    (lead.Email && lead.Email.toLowerCase().includes(searchTerm)) ||
+                    (lead['Company Name'] && lead['Company Name'].toLowerCase().includes(searchTerm));
+                
+                // Status filter
+                const matchesStatus = !statusFilter || 
+                    (lead.Status && lead.Status.toLowerCase() === statusFilter);
+                
+                // Template filter
+                const matchesTemplate = !templateFilter || 
+                    (lead.Template_Used && lead.Template_Used === templateFilter);
+                
+                // Last Email Sent filter - shows leads based on when their last email was sent
+                let matchesLastEmail = true;
+                if (lastEmailFilter && lead.Last_Email_Date) {
+                    const lastEmailDate = parseExcelDateForDisplay(lead.Last_Email_Date);
+                    const currentDate = new Date();
+                    const daysDifference = Math.floor((currentDate - lastEmailDate) / (1000 * 60 * 60 * 24));
+                    
+                    if (lastEmailFilter === '7-13') {
+                        // Show leads with last email sent 7-13 days ago
+                        matchesLastEmail = daysDifference >= 7 && daysDifference <= 13;
+                    } else if (lastEmailFilter === '14-20') {
+                        // Show leads with last email sent 14-20 days ago
+                        matchesLastEmail = daysDifference >= 14 && daysDifference <= 20;
+                    } else if (lastEmailFilter === '21+') {
+                        // Show leads with last email sent 21 or more days ago
+                        matchesLastEmail = daysDifference >= 21;
+                    }
+                } else if (lastEmailFilter && !lead.Last_Email_Date) {
+                    // If filter is selected but lead has no email sent to them, exclude it
+                    matchesLastEmail = false;
+                }
+                
+                return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail;
+            });
+            
+            // Determine which leads to send emails to: selected leads take priority
+            let targetLeads = [];
+            let emailMode = '';
+            
+            if (selectedEmails.length > 0) {
+                // Priority 1: Use selected leads (either manual checkboxes or global selection)
+                targetLeads = window.originalMasterListData.filter(lead => 
+                    selectedEmails.includes(lead.Email)
+                );
+                
+                // Determine if this is a global selection or manual selection
+                const isGlobalSelection = window.globalSelectedEmails && window.globalSelectedEmails.length > 0;
+                emailMode = isGlobalSelection ? 'global_selected' : 'selected';
+            } else if (filteredData.length > 0) {
+                // Priority 2: Use filtered leads if no manual selection
+                const hasActiveFilters = searchTerm || statusFilter || templateFilter || lastEmailFilter;
+                
+                if (hasActiveFilters) {
+                    // User has applied filters, send to filtered results
+                    targetLeads = filteredData;
+                    emailMode = 'filtered';
+                } else {
+                    // No filters and no selection - ask user to select leads or apply filters
+                    alert('📧 No Leads Selected\n\nPlease either:\n• Select specific leads using the checkboxes, OR\n• Apply filters (Status, Template, etc.) to target specific leads\n\nThis prevents accidentally sending emails to all leads.');
+                    return;
+                }
+            } else {
+                alert('📧 No leads match the current filter criteria.\n\nPlease adjust your filters or select specific leads and try again.');
+                return;
+            }
+            
+            // Build description for confirmation
+            let confirmationTitle = '';
+            let confirmationMessage = '';
+            let criteriaDescription = '';
+            
+            if (emailMode === 'selected' || emailMode === 'global_selected') {
+                const selectionType = emailMode === 'global_selected' ? 'globally selected' : 'manually selected';
+                confirmationTitle = '📧 Send Emails to Selected Leads';
+                confirmationMessage = `This will send emails to ${targetLeads.length} ${selectionType} leads.`;
+                
+                // Show which leads are selected
+                const selectedNames = targetLeads.map(lead => 
+                    `• ${lead.Name || 'No name'} (${lead.Email})`
+                ).slice(0, 5); // Show first 5
+                
+                if (targetLeads.length <= 5) {
+                    criteriaDescription = `\n\nSelected leads:\n${selectedNames.join('\n')}`;
+                } else {
+                    criteriaDescription = `\n\nSelected leads (first 5 of ${targetLeads.length}):\n${selectedNames.join('\n')}\n... and ${targetLeads.length - 5} more`;
+                }
+                
+                // Add note for global selection
+                if (emailMode === 'global_selected') {
+                    criteriaDescription += '\n\n✅ Note: This includes leads from all pages that match your current filters.';
+                }
+                
+            } else if (emailMode === 'filtered') {
+                confirmationTitle = '📧 Send Emails to Filtered Leads';
+                confirmationMessage = `This will send emails to ${targetLeads.length} leads that match your current filter settings.`;
+                
+                // Show active filters
+                const filterDesc = [];
+                if (searchTerm) filterDesc.push(`Search: "${searchTerm}"`);
+                if (statusFilter) filterDesc.push(`Status: ${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}`);
+                if (templateFilter) filterDesc.push(`Template: ${templateFilter.replace('_', ' ')}`);
+                if (lastEmailFilter) {
+                    let filterLabel = '';
+                    if (lastEmailFilter === '7-13') {
+                        filterLabel = 'Last Email Sent: 7-13 Days Ago';
+                    } else if (lastEmailFilter === '14-20') {
+                        filterLabel = 'Last Email Sent: 14-20 Days Ago';
+                    } else if (lastEmailFilter === '21+') {
+                        filterLabel = 'Last Email Sent: 21+ Days Ago';
+                    }
+                    filterDesc.push(filterLabel);
+                }
+                criteriaDescription = filterDesc.length > 0 ? `\n\nActive filters:\n${filterDesc.join('\n')}` : '';
+            }
+            
+            // emailContentType already declared at the beginning of the function
+            
+            // Confirmation dialog
+            const confirmed = confirm(
+                `${confirmationTitle}\n\n` +
+                confirmationMessage +
+                criteriaDescription +
+                `\n\nEmail Content: ${emailContentType.replace('_', ' ')}\n` +
+                `\n\nEmails will be sent with rate limiting to maintain deliverability.\n\n` +
+                `Do you want to proceed?`
+            );
+            
+            if (!confirmed) {
+                return;
+            }
+            
+            
+            try {
+                const campaignName = (emailMode === 'selected' || emailMode === 'global_selected') 
+                    ? `Selected Campaign - ${new Date().toLocaleDateString()} - ${targetLeads.length} leads`
+                    : `Filtered Campaign - ${new Date().toLocaleDateString()} - ${targetLeads.length} leads`;
+                    
+                console.log(`🚀 Starting ${emailMode} email campaign to ${targetLeads.length} leads...`);
+                
+                const campaignData = {
+                    campaignName: campaignName,
+                    emailContentType: emailContentType,
+                    targetLeads: 'custom', // We'll use custom since we have our own target list
+                    sendSchedule: 'immediate',
+                    followUpDays: 7,
+                    customLeadList: targetLeads.map(lead => lead.Email) // Send email list for targeted sending
+                };
+                
+                const response = await fetch('/api/email-scheduler/campaigns/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Session-Id': sessionId
+                    },
+                    body: JSON.stringify(campaignData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    await refreshDashboard(); // Refresh to show updated stats
+                    await loadMasterList(); // Refresh master list to show updated statuses
+                    
+                    const modeText = emailMode === 'global_selected' ? 'globally selected (all pages)' : 
+                                   emailMode === 'selected' ? 'manually selected' : 'filtered';
+                    alert(
+                        `✅ Email Campaign Started Successfully!\n\n` +
+                        `📊 Campaign Details:\n` +
+                        `• Leads targeted: ${targetLeads.length} (${modeText})\n` +
+                        `• Emails queued: ${result.emailsSent || result.emailsQueued || targetLeads.length}\n` +
+                        `• Template used: ${emailContentType.replace('_', ' ')}\n` +
+                        `• Campaign ID: ${result.campaignId}\n\n` +
+                        `Emails are being sent with proper rate limiting to maintain deliverability.`
+                    );
+                } else {
+                    alert('❌ Failed to start email campaign: ' + result.message);
+                }
+                
+            } catch (error) {
+                console.error('❌ Send filtered emails error:', error);
+                alert('❌ Failed to send emails to filtered leads.');
+            }
+        }
+
+        // Variable Helper Functions
+
+        const availableVariables = {
+            personal: [
+                { name: '{Name}', description: 'Contact name' },
+                { name: '{Title}', description: 'Job title' },
+                { name: '{Email}', description: 'Email address' }
+            ],
+            company: [
+                { name: '{Company}', description: 'Company name' },
+                { name: '{Industry}', description: 'Industry type' },
+                { name: '{Size}', description: 'Company size' },
+                { name: '{Location}', description: 'Company location' },
+                { name: '{Website}', description: 'Company website' }
+            ],
+            social: [
+                { name: '{LinkedIn_URL}', description: 'LinkedIn profile' }
+            ],
+            meta: [
+                { name: '{Date}', description: 'Current date' },
+                { name: '{Time}', description: 'Current time' }
+            ]
+        };
+
+        const sampleData = {
+            Name: 'John Smith',
+            Title: 'Marketing Director',
+            Email: 'john.smith@acmecorp.com',
+            Company: 'ACME Corporation',
+            Industry: 'Technology',
+            Size: '100-500 employees',
+            Location: 'Singapore',
+            Website: 'www.acmecorp.com',
+            LinkedIn_URL: 'https://linkedin.com/in/johnsmith',
+            Date: new Date().toLocaleDateString(),
+            Time: new Date().toLocaleTimeString()
+        };
+
+        // Insert variable at cursor position
+        function insertVariable(fieldId, variable) {
+            const field = document.getElementById(fieldId);
+            const cursorPos = field.selectionStart;
+            const textBefore = field.value.substring(0, cursorPos);
+            const textAfter = field.value.substring(field.selectionEnd);
+
+            field.value = textBefore + variable + textAfter;
+
+            // Update cursor position
+            const newPos = cursorPos + variable.length;
+            field.focus();
+            field.setSelectionRange(newPos, newPos);
+
+            // Update preview if visible
+            updatePreview();
+        }
+
+        // Show variable modal
+        function showVariableModal(fieldId) {
+            const modal = document.createElement('div');
+            modal.className = 'variable-modal';
+            modal.onclick = (e) => { if (e.target === modal) closeVariableModal(modal); };
+
+            modal.innerHTML = `
+                <div class="variable-modal-content">
+                    <div class="variable-modal-header">
+                        <h3 class="variable-modal-title">Insert Variable</h3>
+                        <button class="variable-modal-close" onclick="closeVariableModal(this.closest('.variable-modal'))">&times;</button>
+                    </div>
+                    <div class="variable-categories">
+                        ${Object.entries(availableVariables).map(([category, variables]) => `
+                            <div class="variable-category">
+                                <h4>${category.charAt(0).toUpperCase() + category.slice(1)} Information</h4>
+                                <div class="variable-grid">
+                                    ${variables.map(variable => `
+                                        <div class="variable-item" onclick="insertVariableFromModal('${fieldId}', '${variable.name}', this.closest('.variable-modal'))">
+                                            <div>${variable.name}</div>
+                                            <div class="variable-description">${variable.description}</div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+        }
+
+        // Insert variable from modal
+        function insertVariableFromModal(fieldId, variable, modal) {
+            insertVariable(fieldId, variable);
+            closeVariableModal(modal);
+        }
+
+        // Close variable modal
+        function closeVariableModal(modal) {
+            modal.remove();
+        }
+
+        // Toggle preview
+        function togglePreview() {
+            const preview = document.getElementById('templatePreview');
+            const btn = document.getElementById('showPreviewBtn');
+
+            if (preview.style.display === 'none') {
+                preview.style.display = 'block';
+                btn.style.display = 'none';
+                updatePreview();
+            } else {
+                preview.style.display = 'none';
+                btn.style.display = 'block';
+            }
+        }
+
+        // Update preview with sample data
+        function updatePreview() {
+            const subjectField = document.getElementById('templateSubject');
+            const contentField = document.getElementById('templateContent');
+            const previewSubject = document.getElementById('previewSubject');
+            const previewBody = document.getElementById('previewBody');
+
+            if (!previewSubject || !previewBody) return;
+
+            let subject = subjectField.value;
+            let body = contentField.value;
+
+            // Replace variables with sample data
+            Object.entries(sampleData).forEach(([key, value]) => {
+                const regex = new RegExp(`\\{${key}\\}`, 'g');
+                subject = subject.replace(regex, `<span class="variable-highlight">${value}</span>`);
+                body = body.replace(regex, `<span class="variable-highlight">${value}</span>`);
+            });
+
+            previewSubject.innerHTML = subject || '<em>Enter subject line...</em>';
+            previewBody.innerHTML = body.replace(/\n/g, '<br>') || '<em>Enter email content...</em>';
+        }
+
+        // Add event listeners for real-time preview updates
+        document.addEventListener('DOMContentLoaded', function() {
+            const subjectField = document.getElementById('templateSubject');
+            const contentField = document.getElementById('templateContent');
+
+            if (subjectField && contentField) {
+                subjectField.addEventListener('input', updatePreview);
+                contentField.addEventListener('input', updatePreview);
+            }
+        });
+
+        // Variable highlighting in text areas (basic implementation)
+        function highlightVariables(fieldId) {
+            const field = document.getElementById(fieldId);
+            const text = field.value;
+
+            // Simple validation - check for unmatched braces or invalid variables
+            const variables = text.match(/\{[^}]*\}/g) || [];
+            const invalidVariables = variables.filter(variable => {
+                const varName = variable.slice(1, -1);
+                return !Object.values(availableVariables).flat().some(v => v.name === variable);
+            });
+
+            if (invalidVariables.length > 0) {
+                console.warn('Invalid variables found:', invalidVariables);
+                return false;
+            }
+
+            return true;
+        }
+    </script>
+</body>
+</html>
