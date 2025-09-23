@@ -10,116 +10,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
-        /* Attachment Upload Styles */
-        .attachment-upload-wrapper {
-            margin: 10px 0;
-            padding: 12px;
-            border: 1px solid #e1e5e9;
-            border-radius: 6px;
-            background-color: #f8f9fa;
-        }
-
-        .attachment-label {
-            display: block;
-            font-size: 14px;
-            font-weight: 500;
-            color: #495057;
-            margin-bottom: 8px;
-        }
-
-        .attachment-upload-container {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .attachment-input-hidden {
-            display: none;
-        }
-
-        .attachment-upload-area {
-            border: 2px dashed #ced4da;
-            border-radius: 6px;
-            padding: 20px;
-            text-align: center;
-            background-color: #f8f9fa;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            margin-bottom: 8px;
-        }
-
-        .attachment-upload-area:hover {
-            border-color: #007bff;
-            background-color: #e7f3ff;
-        }
-
-        .attachment-upload-text {
-            font-size: 14px;
-            color: #495057;
-            font-weight: 500;
-            margin-bottom: 4px;
-        }
-
-        .attachment-upload-subtext {
-            font-size: 12px;
-            color: #6c757d;
-        }
-
-        .attachment-preview {
-            min-height: 0;
-            padding: 4px 0;
-        }
-
-        .attachment-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 6px 8px;
-            background-color: white;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            margin-bottom: 4px;
-            font-size: 13px;
-        }
-
-        .attachment-item-info {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .attachment-icon {
-            font-size: 16px;
-        }
-
-        .attachment-name {
-            font-weight: 500;
-            color: #495057;
-        }
-
-        .attachment-size {
-            color: #6c757d;
-            font-size: 12px;
-        }
-
-        .attachment-remove {
-            background: none;
-            border: none;
-            color: #dc3545;
-            cursor: pointer;
-            font-size: 16px;
-            padding: 2px 4px;
-        }
-
-        .attachment-remove:hover {
-            background-color: #f8d7da;
-            border-radius: 2px;
-        }
-
-        .attachment-info small {
-            color: #6c757d;
-            font-size: 12px;
-        }
 
         /* Make template selector more compact */
         .template-selector-wrapper {
@@ -287,18 +177,6 @@
                         </select>
                     </div>
 
-                    <!-- Attachment Upload Section -->
-                    <div class="attachment-upload-wrapper">
-                        <label class="attachment-label">📎 Email Attachments (Optional)</label>
-                        <div class="attachment-upload-container">
-                            <div class="attachment-upload-area" onclick="document.getElementById('emailAttachments').click()">
-                                <div class="attachment-upload-text">Click to select files or drag files here</div>
-                                <div class="attachment-upload-subtext">PDF, Word, Excel, Images • Max 10MB per file</div>
-                            </div>
-                            <input type="file" id="emailAttachments" class="attachment-input-hidden" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.txt,.csv,.xlsx,.xls" title="Select files to attach to emails">
-                            <div class="attachment-preview" id="attachmentPreview"></div>
-                        </div>
-                    </div>
 
                     <button class="btn btn-success primary-action-btn" onclick="sendFilteredEmails()" title="Send emails to filtered leads">
                         📤 Send Emails
@@ -583,7 +461,6 @@
             initializeEmailAutomation();
             setupEventListeners();
             initializeAttachmentHandling();
-            setupDragAndDrop(); // Initialize attachment drag-and-drop
         });
 
         // Initialize authentication and load data
@@ -735,138 +612,8 @@
                 filterMasterList();
             });
 
-            // Attachment handling
-            document.getElementById('emailAttachments').addEventListener('change', function(e) {
-                handleAttachmentSelection(e);
-            });
         }
 
-        // Handle attachment file selection
-        function handleAttachmentSelection(event) {
-            const files = Array.from(event.target.files);
-            const preview = document.getElementById('attachmentPreview');
-            const maxFileSize = 10 * 1024 * 1024; // 10MB
-
-            // Clear previous preview
-            preview.innerHTML = '';
-
-            if (files.length === 0) {
-                return;
-            }
-
-            files.forEach((file, index) => {
-                // Check file size
-                if (file.size > maxFileSize) {
-                    alert(`File "${file.name}" is too large (${formatFileSize(file.size)}). Maximum size is 10MB.`);
-                    return;
-                }
-
-                // Create preview item
-                const item = document.createElement('div');
-                item.className = 'attachment-item';
-                item.innerHTML = `
-                    <div class="attachment-item-info">
-                        <span class="attachment-icon">${getFileIcon(file.type)}</span>
-                        <span class="attachment-name">${file.name}</span>
-                        <span class="attachment-size">(${formatFileSize(file.size)})</span>
-                    </div>
-                    <button type="button" class="attachment-remove" onclick="removeAttachment(${index})" title="Remove attachment">
-                        ✕
-                    </button>
-                `;
-                preview.appendChild(item);
-            });
-
-            console.log(`📎 ${files.length} attachment(s) selected for email sending`);
-        }
-
-        // Remove attachment from selection
-        function removeAttachment(index) {
-            const input = document.getElementById('emailAttachments');
-            const dt = new DataTransfer();
-            const files = Array.from(input.files);
-
-            files.forEach((file, i) => {
-                if (i !== index) {
-                    dt.items.add(file);
-                }
-            });
-
-            input.files = dt.files;
-            handleAttachmentSelection({ target: input });
-        }
-
-        // Get file icon based on file type
-        function getFileIcon(mimeType) {
-            if (mimeType.startsWith('image/')) return '🖼️';
-            if (mimeType.includes('pdf')) return '📄';
-            if (mimeType.includes('word') || mimeType.includes('document')) return '📝';
-            if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return '📊';
-            if (mimeType.includes('text')) return '📄';
-            return '📎';
-        }
-
-        // Format file size for display
-        function formatFileSize(bytes) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-
-        // Setup drag and drop functionality
-        function setupDragAndDrop() {
-            const uploadArea = document.querySelector('.attachment-upload-area');
-            const fileInput = document.getElementById('emailAttachments');
-
-            if (!uploadArea || !fileInput) return;
-
-            // Prevent default drag behaviors
-            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                uploadArea.addEventListener(eventName, preventDefaults, false);
-                document.body.addEventListener(eventName, preventDefaults, false);
-            });
-
-            // Highlight drop area when item is dragged over it
-            ['dragenter', 'dragover'].forEach(eventName => {
-                uploadArea.addEventListener(eventName, highlight, false);
-            });
-
-            ['dragleave', 'drop'].forEach(eventName => {
-                uploadArea.addEventListener(eventName, unhighlight, false);
-            });
-
-            // Handle dropped files
-            uploadArea.addEventListener('drop', handleDrop, false);
-
-            function preventDefaults(e) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-
-            function highlight(e) {
-                uploadArea.style.borderColor = '#007bff';
-                uploadArea.style.backgroundColor = '#e7f3ff';
-            }
-
-            function unhighlight(e) {
-                uploadArea.style.borderColor = '#ced4da';
-                uploadArea.style.backgroundColor = '#f8f9fa';
-            }
-
-            function handleDrop(e) {
-                const dt = e.dataTransfer;
-                const files = dt.files;
-
-                // Set files to input element
-                fileInput.files = files;
-
-                // Trigger change event
-                const event = new Event('change', { bubbles: true });
-                fileInput.dispatchEvent(event);
-            }
-        }
 
         // Show authentication status
         function showAuthStatus(message, type) {
@@ -2632,9 +2379,8 @@
                     
                 console.log(`🚀 Starting ${emailMode} email campaign to ${targetLeads.length} leads...`);
                 
-                // Get selected attachments
-                const attachmentInput = document.getElementById('emailAttachments');
-                const selectedFiles = Array.from(attachmentInput.files);
+                // No attachments for this simplified version
+                const selectedFiles = [];
 
                 // Prepare campaign data with attachments
                 const formData = new FormData();
@@ -2645,14 +2391,10 @@
                 formData.append('followUpDays', '7');
                 formData.append('customLeadList', JSON.stringify(targetLeads.map(lead => lead.Email)));
 
-                // Add attachments to form data
-                selectedFiles.forEach((file, index) => {
-                    formData.append(`attachments`, file);
-                });
+                // No attachments to add
+                console.log(`📤 Sending campaign without attachments`);
 
-                console.log(`📎 Sending campaign with ${selectedFiles.length} attachment(s)`);
-
-                const response = await fetch('/api/email-scheduler/campaigns/start-with-attachments', {
+                const response = await fetch('/api/email-scheduler/campaigns/start', {
                     method: 'POST',
                     headers: {
                         'X-Session-Id': sessionId
