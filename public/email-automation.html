@@ -1439,7 +1439,7 @@
             };
             
             try {
-                const response = await fetch('/api/email-scheduler/campaigns/start', {
+                const response = await fetch('/api/email-automation/send-campaign', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1675,7 +1675,7 @@
             }
             
             try {
-                const response = await fetch('/api/email-scheduler/campaigns/start', {
+                const response = await fetch('/api/email-automation/send-campaign', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -2488,7 +2488,7 @@
                 });
                 console.log(`📎 Sending campaign with ${selectedFiles.length} attachment(s)`);
 
-                const response = await fetch('/api/email-scheduler/campaigns/start-with-attachments', {
+                const response = await fetch('/api/email-automation/send-campaign-with-attachments', {
                     method: 'POST',
                     headers: {
                         'X-Session-Id': sessionId

@@ -19,11 +19,42 @@ const upload = multer({
         fileSize: 10 * 1024 * 1024 // 10MB limit
     },
     fileFilter: (req, file, cb) => {
+        // Accept Excel files for master list uploads
         if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
             file.mimetype === 'application/vnd.ms-excel') {
             cb(null, true);
         } else {
             cb(new Error('Only Excel files (.xlsx, .xls) are allowed'), false);
+        }
+    }
+});
+
+// Configure multer for email attachments (supports various file types)
+const uploadAttachments = multer({
+    limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB limit
+        files: 10 // Max 10 files
+    },
+    fileFilter: (req, file, cb) => {
+        // Accept common file types for email attachments
+        const allowedTypes = [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'image/jpeg',
+            'image/jpg',
+            'image/png',
+            'image/gif',
+            'text/plain',
+            'text/csv'
+        ];
+
+        if (allowedTypes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('File type not allowed. Supported types: PDF, Word, Excel, Images, Text, CSV'), false);
         }
     }
 });
@@ -1071,6 +1102,370 @@ router.post('/send-email/:email', requireDelegatedAuth, async (req, res) => {
     }
 });
 
+// Send bulk email campaign with attachments and duplicate prevention
+router.post('/send-campaign-with-attachments', requireDelegatedAuth, uploadAttachments.array('attachments', 10), async (req, res) => {
+    try {
+        const {
+            leads,
+            templateChoice = 'AI_Generated',
+            emailTemplate = '',
+            subject = '',
+            trackReads = true,
+            oneDriveFileId = null,
+            // Frontend format support
+            campaignName,
+            emailContentType,
+            targetLeads,
+            sendSchedule,
+            followUpDays,
+            customLeadList
+        } = req.body;
+
+        // Handle different data formats from frontend
+        let parsedLeads;
+
+        if (customLeadList) {
+            // Frontend sending email addresses, need to get full lead data
+            try {
+                const emailList = typeof customLeadList === 'string' ? JSON.parse(customLeadList) : customLeadList;
+                const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+                const allLeadsData = await getLeadsViaGraphAPI(graphClient);
+
+                if (!allLeadsData) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Master file not found - cannot retrieve lead data'
+                    });
+                }
+
+                // Filter leads by email addresses
+                parsedLeads = allLeadsData.filter(lead => emailList.includes(lead.Email));
+
+                if (parsedLeads.length === 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'No matching leads found for provided email addresses'
+                    });
+                }
+
+            } catch (parseError) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid custom lead list format'
+                });
+            }
+        } else if (leads) {
+            // Direct leads data (backwards compatibility)
+            try {
+                parsedLeads = typeof leads === 'string' ? JSON.parse(leads) : leads;
+            } catch (parseError) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid leads data format'
+                });
+            }
+        } else {
+            return res.status(400).json({
+                success: false,
+                message: 'No leads data provided'
+            });
+        }
+
+        // Use emailContentType if provided, otherwise templateChoice
+        const finalTemplateChoice = emailContentType || templateChoice;
+
+        const attachments = req.files || [];
+        console.log(`📧 Starting bulk email campaign for ${parsedLeads.length} leads using ${finalTemplateChoice} with ${attachments.length} attachments`);
+
+        if (!parsedLeads || parsedLeads.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No leads provided for campaign'
+            });
+        }
+
+        // 🔒 CAMPAIGN LOCK: Prevent duplicate campaigns
+        const lockAcquired = campaignLockManager.acquireLock(req.sessionId, 'manual-with-attachments');
+        if (!lockAcquired) {
+            return res.status(409).json({
+                success: false,
+                message: 'Another campaign is already running for this session. Please wait for it to complete.',
+                error: 'CAMPAIGN_IN_PROGRESS'
+            });
+        }
+
+        console.log(`🚀 Starting email campaign with Excel-based duplicate prevention and ${attachments.length} attachments`);
+
+        // Get authenticated Graph client
+        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+        const authProvider = getDelegatedAuthProvider();
+
+        // Get templates for processing
+        const templates = await getTemplatesViaGraphAPI(graphClient);
+
+        // Process attachments for Microsoft Graph API
+        const processedAttachments = attachments.map(file => ({
+            '@odata.type': '#microsoft.graph.fileAttachment',
+            name: file.originalname,
+            contentType: file.mimetype,
+            contentBytes: file.buffer.toString('base64'),
+            size: file.size
+        }));
+
+        console.log(`📎 Processed ${processedAttachments.length} attachments for email campaign`);
+
+        const results = {
+            campaignId: `campaign_${Date.now()}`,
+            sent: 0,
+            failed: 0,
+            duplicates: 0,
+            trackingEnabled: trackReads,
+            errors: [],
+            totalEmails: parsedLeads.length,
+            attachmentCount: processedAttachments.length,
+            estimatedTime: emailDelayUtils.estimateBulkSendingTime(parsedLeads.length)
+        };
+
+        console.log(`⏱️ Estimated campaign duration: ${results.estimatedTime.formatted}, completion: ${results.estimatedTime.completionTime}`);
+
+        // Initialize campaign token manager for long campaigns
+        const campaignTokenManager = new CampaignTokenManager();
+        campaignTokenManager.startCampaignTracking(req.sessionId, results.estimatedTime.totalMs);
+
+        try {
+            // Process each lead with duplicate checking
+            for (let i = 0; i < parsedLeads.length; i++) {
+                const lead = parsedLeads[i];
+                try {
+                    if (!lead.Email) {
+                        results.failed++;
+                        results.errors.push(`Lead missing email: ${lead.Name || 'Unknown'}`);
+                        continue;
+                    }
+
+                    // Check if email has already been sent using Excel data (single source of truth)
+                    const duplicateCheck = await excelDuplicateChecker.isEmailAlreadySent(graphClient, lead.Email);
+                    if (duplicateCheck.alreadySent) {
+                        console.log(`⚠️ DUPLICATE PREVENTED: ${lead.Email} - ${duplicateCheck.reason}`);
+                        results.duplicates++;
+                        continue;
+                    }
+
+                    console.log(`🔍 DELAY DEBUG: leadIndex=${i}, totalLeads=${parsedLeads.length}, shouldDelay=${i < parsedLeads.length - 1}`);
+
+                    // Determine email choice - use finalTemplateChoice from frontend or lead's existing choice
+                    let emailChoice = finalTemplateChoice;
+                    if (emailChoice === 'custom' && emailTemplate) {
+                        // For custom templates, create temporary template-like structure
+                        emailChoice = 'AI_Generated'; // Process as custom content
+                        lead.AI_Generated_Email = `Subject: ${subject}\n\n${emailTemplate}`;
+                    }
+
+                    // Check if token refresh is needed during campaign (every 10 emails)
+                    if (campaignTokenManager.shouldCheckToken(i)) {
+                        console.log(`🔍 Checking token validity during campaign (email ${i + 1}/${parsedLeads.length})`);
+                        const tokenValid = await campaignTokenManager.ensureValidToken(req.delegatedAuth, req.sessionId);
+                        if (!tokenValid) {
+                            console.error(`❌ Token refresh failed during campaign at email ${i + 1}`);
+                            results.failed++;
+                            results.errors.push(`Token refresh failed at email ${i + 1} - campaign stopped`);
+                            break; // Stop campaign if token can't be refreshed
+                        }
+                        // Get fresh Graph client if token was refreshed
+                        graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+                    }
+
+                    console.log(`🔄 Processing lead: ${lead.Email} (${lead.Name}) with ${processedAttachments.length} attachments`);
+
+                    // Process email content
+                    const emailContent = await emailContentProcessor.processEmailContent(
+                        lead,
+                        emailChoice,
+                        templates
+                    );
+
+                    console.log(`📧 Processing email content for ${lead.Email} using ${emailChoice}`);
+
+                    // Send email via Microsoft Graph with attachments
+                    const emailMessage = emailContentProcessor.createEmailMessage(
+                        emailContent,
+                        lead.Email,
+                        lead,
+                        trackReads,
+                        processedAttachments // Use processed attachments
+                    );
+
+                    console.log(`📧 Attempting to send email via Microsoft Graph to: ${lead.Email} with ${processedAttachments.length} attachments`);
+
+                    await graphClient
+                        .api('/me/sendMail')
+                        .post({ message: emailMessage });
+
+                    console.log(`📧 Email sent to: ${lead.Email} with attachments`);
+
+                    // Update lead status
+                    const updates = {
+                        Status: 'Sent',
+                        Last_Email_Date: new Date().toISOString().split('T')[0],
+                        Email_Count: (lead.Email_Count || 0) + 1,
+                        Template_Used: emailContent.contentType,
+                        'Email Bounce': 'No', // Initialize bounce status
+                        'Attachments_Sent': processedAttachments.length > 0 ? processedAttachments.map(a => a.name).join(', ') : 'None'
+                    };
+
+                    results.sent++;
+
+                    // IMMEDIATE Excel update right after email is sent (for real-time tracking)
+                    console.log(`📊 Updating Excel for ${lead.Email} immediately...`);
+                    try {
+                        await excelUpdateQueue.queueUpdate(
+                            lead.Email, // Use email as file identifier
+                            () => updateLeadViaGraphAPI(graphClient, lead.Email, updates),
+                            {
+                                type: 'campaign-send-attachments',
+                                email: lead.Email,
+                                source: 'email-automation',
+                                priority: 'high' // High priority for immediate updates
+                            }
+                        );
+                        console.log(`✅ Excel updated for ${lead.Email} - Status: Sent with ${processedAttachments.length} attachments`);
+                    } catch (excelError) {
+                        console.error(`⚠️ Excel update failed for ${lead.Email}: ${excelError.message}`);
+                        // Continue campaign even if Excel update fails
+                    }
+
+                    console.log(`📊 Campaign progress: ${results.sent}/${parsedLeads.length} sent (${Math.round((results.sent / parsedLeads.length) * 100)}% complete)`);
+
+                    // Add random delay between emails AFTER Excel updates (skip delay for last email)
+                    if (i < parsedLeads.length - 1) {
+                        const delayMs = await emailDelayUtils.progressiveDelay(i, parsedLeads.length);
+                        console.log(`⏳ Adding ${Math.round(delayMs / 1000)}s delay before next email...`);
+                        await new Promise(resolve => setTimeout(resolve, delayMs));
+                        console.log(`✅ Delay completed - ready for next email`);
+                    } else {
+                        console.log(`🏁 Last email - campaign complete`);
+                    }
+
+                } catch (emailError) {
+                    console.error(`❌ Failed to send email to ${lead.Email}:`, emailError.message);
+
+                    results.failed++;
+                    results.errors.push(`${lead.Email}: ${emailError.message}`);
+
+                    // IMMEDIATE Excel update for failed emails (track attempt and failure reason)
+                    console.log(`📊 Updating Excel for ${lead.Email} - marking as failed...`);
+                    try {
+                        const failedUpdates = {
+                            Status: 'Failed',
+                            Last_Email_Date: new Date().toISOString().split('T')[0],
+                            Email_Count: (lead.Email_Count || 0) + 1, // Still increment attempt count
+                            'Email Bounce': 'No',
+                            'Failed Date': new Date().toISOString(),
+                            'Failure Reason': emailError.message?.substring(0, 255) || 'Unknown error' // Limit length
+                        };
+
+                        await excelUpdateQueue.queueUpdate(
+                            lead.Email,
+                            () => updateLeadViaGraphAPI(graphClient, lead.Email, failedUpdates),
+                            {
+                                type: 'campaign-failed-attachments',
+                                email: lead.Email,
+                                source: 'email-automation',
+                                priority: 'high'
+                            }
+                        );
+                        console.log(`✅ Excel updated for ${lead.Email} - Status: Failed`);
+                    } catch (excelError) {
+                        console.error(`⚠️ Failed to update Excel for failed email ${lead.Email}: ${excelError.message}`);
+                    }
+
+                    console.log(`📊 Campaign progress: ${results.sent}/${parsedLeads.length} sent, ${results.failed} failed (${Math.round(((results.sent + results.failed) / parsedLeads.length) * 100)}% complete)`);
+
+                    // Add delay even after failures to maintain sending pattern
+                    if (i < parsedLeads.length - 1) {
+                        console.log(`⏳ Adding delay after failure before next email...`);
+                        await emailDelayUtils.randomDelay(15, 45); // Shorter delay after failures
+                        console.log(`✅ Delay completed - Ready for next email`);
+                    }
+                }
+            }
+
+            console.log(`✅ Campaign completed: ${results.sent} sent, ${results.failed} failed, ${results.duplicates} duplicates prevented, ${processedAttachments.length} attachments per email`);
+
+        } catch (campaignError) {
+            console.error('❌ Campaign processing error:', campaignError.message);
+            throw campaignError;
+        }
+
+        // End campaign token tracking and get stats
+        const campaignStats = campaignTokenManager.getCampaignStats(req.sessionId);
+        campaignTokenManager.endCampaignTracking(req.sessionId);
+
+        // Calculate actual completion time
+        const actualEndTime = new Date();
+        const actualDuration = Math.round((actualEndTime - new Date(Date.now() - results.estimatedTime.totalSeconds * 1000)) / 1000);
+
+        // 🔓 RELEASE LOCK: Campaign completed successfully
+        campaignLockManager.releaseLock(req.sessionId);
+
+        res.json({
+            success: true,
+            message: `Campaign completed: ${results.sent} emails sent with ${processedAttachments.length} attachments each, ${results.failed} failed, ${results.duplicates} duplicates prevented`,
+            ...results,
+            attachments: {
+                count: processedAttachments.length,
+                files: processedAttachments.map(a => ({ name: a.name, size: a.size })),
+                totalSize: processedAttachments.reduce((sum, a) => sum + a.size, 0)
+            },
+            duplicatePrevention: {
+                enabled: true,
+                method: "excel-based",
+                duplicatesBlocked: results.duplicates,
+                singleSourceOfTruth: true,
+                crossSessionProtection: true
+            },
+            timing: {
+                estimated: results.estimatedTime,
+                actualDurationSeconds: actualDuration,
+                actualDurationFormatted: emailDelayUtils.formatDelayTime(actualDuration * 1000),
+                completedAt: actualEndTime.toLocaleTimeString()
+            },
+            delayStats: emailDelayUtils.getDelayStats(),
+            tokenManagement: {
+                tokenRefreshesPerformed: campaignStats?.tokenRefreshCount || 0,
+                campaignDurationMinutes: campaignStats?.elapsedMinutes || 0,
+                tokenRefreshPreventedDisruption: (campaignStats?.tokenRefreshCount || 0) > 0
+            },
+            excelUpdates: {
+                realTimeUpdates: true,
+                updateMethod: "immediate_per_email",
+                queueingEnabled: true,
+                priorityProcessing: true,
+                tracksSuccessAndFailure: true,
+                totalProcessed: results.sent + results.failed,
+                description: "Excel updated immediately after each email (sent or failed) with attachment info"
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Campaign error:', error.message);
+
+        // 🔓 RELEASE LOCK: Campaign failed, cleanup
+        campaignLockManager.releaseLock(req.sessionId);
+
+        // Cleanup campaign tracking on error
+        if (typeof campaignTokenManager !== 'undefined') {
+            campaignTokenManager.endCampaignTracking(req.sessionId);
+        }
+
+        res.status(500).json({
+            success: false,
+            message: 'Campaign with attachments failed',
+            error: error.message
+        });
+    }
+});
+
 // Send bulk email campaign with duplicate prevention
 router.post('/send-campaign', requireDelegatedAuth, async (req, res) => {
     try {
@@ -1149,8 +1544,8 @@ router.post('/send-campaign', requireDelegatedAuth, async (req, res) => {
 
                     console.log(`🔍 DELAY DEBUG: leadIndex=${i}, totalLeads=${leads.length}, shouldDelay=${i < leads.length - 1}`);
 
-                    // Determine email choice - use templateChoice from frontend or lead's existing choice
-                    let emailChoice = templateChoice;
+                    // Determine email choice - use finalTemplateChoice from frontend or lead's existing choice
+                    let emailChoice = finalTemplateChoice;
                     if (emailChoice === 'custom' && emailTemplate) {
                         // For custom templates, create temporary template-like structure
                         emailChoice = 'AI_Generated'; // Process as custom content
