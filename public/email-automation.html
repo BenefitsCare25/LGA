@@ -8,6 +8,126 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* Attachment Upload Styles */
+        .attachment-upload-wrapper {
+            margin: 10px 0;
+            padding: 12px;
+            border: 1px solid #e1e5e9;
+            border-radius: 6px;
+            background-color: #f8f9fa;
+        }
+
+        .attachment-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: #495057;
+            margin-bottom: 8px;
+        }
+
+        .attachment-upload-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .attachment-input {
+            padding: 8px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: white;
+        }
+
+        .attachment-input:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+
+        .attachment-preview {
+            min-height: 0;
+            padding: 4px 0;
+        }
+
+        .attachment-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 8px;
+            background-color: white;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+
+        .attachment-item-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .attachment-icon {
+            font-size: 16px;
+        }
+
+        .attachment-name {
+            font-weight: 500;
+            color: #495057;
+        }
+
+        .attachment-size {
+            color: #6c757d;
+            font-size: 12px;
+        }
+
+        .attachment-remove {
+            background: none;
+            border: none;
+            color: #dc3545;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 2px 4px;
+        }
+
+        .attachment-remove:hover {
+            background-color: #f8d7da;
+            border-radius: 2px;
+        }
+
+        .attachment-info small {
+            color: #6c757d;
+            font-size: 12px;
+        }
+
+        /* Make template selector more compact */
+        .template-selector-wrapper {
+            margin-bottom: 10px;
+        }
+
+        .header-email-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: stretch;
+        }
+
+        @media (min-width: 768px) {
+            .header-email-actions {
+                flex-direction: row;
+                align-items: center;
+                gap: 12px;
+            }
+
+            .attachment-upload-wrapper {
+                flex: 1;
+                margin: 0;
+            }
+        }
+    </style>
 </head>
 <body>
     <!-- Navigation -->
@@ -148,6 +268,19 @@
                             <option value="Template_5">Template 5</option>
                         </select>
                     </div>
+
+                    <!-- Attachment Upload Section -->
+                    <div class="attachment-upload-wrapper">
+                        <label class="attachment-label">📎 Email Attachments (Optional)</label>
+                        <div class="attachment-upload-container">
+                            <input type="file" id="emailAttachments" class="attachment-input" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.txt,.csv,.xlsx,.xls" title="Select files to attach to emails">
+                            <div class="attachment-preview" id="attachmentPreview"></div>
+                            <div class="attachment-info">
+                                <small>📋 Max 10MB per file • PDF, Word, Excel, Images supported</small>
+                            </div>
+                        </div>
+                    </div>
+
                     <button class="btn btn-success primary-action-btn" onclick="sendFilteredEmails()" title="Send emails to filtered leads">
                         📤 Send Emails
                     </button>
@@ -581,6 +714,85 @@
             document.getElementById('filterLastEmail').addEventListener('change', function() {
                 filterMasterList();
             });
+
+            // Attachment handling
+            document.getElementById('emailAttachments').addEventListener('change', function(e) {
+                handleAttachmentSelection(e);
+            });
+        }
+
+        // Handle attachment file selection
+        function handleAttachmentSelection(event) {
+            const files = Array.from(event.target.files);
+            const preview = document.getElementById('attachmentPreview');
+            const maxFileSize = 10 * 1024 * 1024; // 10MB
+
+            // Clear previous preview
+            preview.innerHTML = '';
+
+            if (files.length === 0) {
+                return;
+            }
+
+            files.forEach((file, index) => {
+                // Check file size
+                if (file.size > maxFileSize) {
+                    alert(`File "${file.name}" is too large (${formatFileSize(file.size)}). Maximum size is 10MB.`);
+                    return;
+                }
+
+                // Create preview item
+                const item = document.createElement('div');
+                item.className = 'attachment-item';
+                item.innerHTML = `
+                    <div class="attachment-item-info">
+                        <span class="attachment-icon">${getFileIcon(file.type)}</span>
+                        <span class="attachment-name">${file.name}</span>
+                        <span class="attachment-size">(${formatFileSize(file.size)})</span>
+                    </div>
+                    <button type="button" class="attachment-remove" onclick="removeAttachment(${index})" title="Remove attachment">
+                        ✕
+                    </button>
+                `;
+                preview.appendChild(item);
+            });
+
+            console.log(`📎 ${files.length} attachment(s) selected for email sending`);
+        }
+
+        // Remove attachment from selection
+        function removeAttachment(index) {
+            const input = document.getElementById('emailAttachments');
+            const dt = new DataTransfer();
+            const files = Array.from(input.files);
+
+            files.forEach((file, i) => {
+                if (i !== index) {
+                    dt.items.add(file);
+                }
+            });
+
+            input.files = dt.files;
+            handleAttachmentSelection({ target: input });
+        }
+
+        // Get file icon based on file type
+        function getFileIcon(mimeType) {
+            if (mimeType.startsWith('image/')) return '🖼️';
+            if (mimeType.includes('pdf')) return '📄';
+            if (mimeType.includes('word') || mimeType.includes('document')) return '📝';
+            if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return '📊';
+            if (mimeType.includes('text')) return '📄';
+            return '📎';
+        }
+
+        // Format file size for display
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
         // Show authentication status
@@ -2347,22 +2559,33 @@
                     
                 console.log(`🚀 Starting ${emailMode} email campaign to ${targetLeads.length} leads...`);
                 
-                const campaignData = {
-                    campaignName: campaignName,
-                    emailContentType: emailContentType,
-                    targetLeads: 'custom', // We'll use custom since we have our own target list
-                    sendSchedule: 'immediate',
-                    followUpDays: 7,
-                    customLeadList: targetLeads.map(lead => lead.Email) // Send email list for targeted sending
-                };
-                
-                const response = await fetch('/api/email-scheduler/campaigns/start', {
+                // Get selected attachments
+                const attachmentInput = document.getElementById('emailAttachments');
+                const selectedFiles = Array.from(attachmentInput.files);
+
+                // Prepare campaign data with attachments
+                const formData = new FormData();
+                formData.append('campaignName', campaignName);
+                formData.append('emailContentType', emailContentType);
+                formData.append('targetLeads', 'custom');
+                formData.append('sendSchedule', 'immediate');
+                formData.append('followUpDays', '7');
+                formData.append('customLeadList', JSON.stringify(targetLeads.map(lead => lead.Email)));
+
+                // Add attachments to form data
+                selectedFiles.forEach((file, index) => {
+                    formData.append(`attachments`, file);
+                });
+
+                console.log(`📎 Sending campaign with ${selectedFiles.length} attachment(s)`);
+
+                const response = await fetch('/api/email-scheduler/campaigns/start-with-attachments', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
                         'X-Session-Id': sessionId
+                        // Note: Don't set Content-Type for FormData, browser will set it automatically
                     },
-                    body: JSON.stringify(campaignData)
+                    body: formData
                 });
                 
                 const result = await response.json();
