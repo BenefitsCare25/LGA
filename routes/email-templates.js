@@ -1273,3 +1273,4 @@ async function createTemplatesTable(graphClient, fileId, worksheetName, tableNam
 
 
 module.exports = router;
+module.exports.getTemplatesViaGraphAPI = getTemplatesViaGraphAPI;
