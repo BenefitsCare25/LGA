@@ -25,18 +25,30 @@ class EmailContentProcessor {
         try {
             console.log(`📧 Processing email content for ${lead.Email} using ${emailChoice}`);
 
-            switch (emailChoice) {
-                case 'AI_Generated':
-                    return this.getAIGeneratedContent(lead);
-                
-                case 'Email_Template_1':
-                case 'Email_Template_2':
-                    return this.processTemplate(emailChoice, lead, templates);
-                
-                default:
-                    // Default to AI-generated content
-                    return this.getAIGeneratedContent(lead);
+            if (emailChoice === 'AI_Generated') {
+                return this.getAIGeneratedContent(lead);
             }
+
+            // For all non-AI choices, try to find matching template
+            if (templates && templates.length > 0) {
+                const template = templates.find(t =>
+                    t.Template_ID === emailChoice ||
+                    t.Template_Name === emailChoice ||
+                    t.Template_Type === emailChoice
+                );
+
+                if (template) {
+                    console.log(`✅ Found template match for ${emailChoice}: ${template.Template_Name || template.Template_ID}`);
+                    return this.processTemplate(emailChoice, lead, templates);
+                } else {
+                    console.warn(`⚠️ Template ${emailChoice} not found in ${templates.length} available templates`);
+                    console.warn(`Available templates: ${templates.map(t => t.Template_ID || t.Template_Name).join(', ')}`);
+                }
+            }
+
+            // Only fall back to AI-generated if no template found
+            console.warn(`⚠️ Falling back to AI-generated content for ${emailChoice}`);
+            return this.getAIGeneratedContent(lead);
         } catch (error) {
             console.error('❌ Email content processing error:', error);
             throw new Error('Failed to process email content: ' + error.message);
