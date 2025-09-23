@@ -758,90 +758,9 @@ async function getTemplatesViaGraphAPI(graphClient) {
             // Debug: Log template data to understand what's happening
             console.log(`📋 Processing template: ${template.Template_ID || 'NO_ID'}, columns: ${headers.length}, row data: ${row.length}`);
 
-            // Safely parse attachments JSON if present and column exists
+            // Initialize empty attachment arrays (Excel storage no longer used)
             template.attachments = [];
             template.attachmentSummary = [];
-
-            if (template.Attachments !== undefined && template.Attachments && typeof template.Attachments === 'string' && template.Attachments.trim()) {
-                try {
-                    // Check if attachment data is truncated (common with Excel cell limits)
-                    const attachmentStr = template.Attachments.trim();
-                    const isTruncated = !attachmentStr.endsWith(']') && !attachmentStr.endsWith('}');
-
-                    if (isTruncated) {
-                        console.warn(`⚠️ Attachment data appears truncated for template ${template.Template_ID} (Excel cell limit exceeded)`);
-                        console.warn(`⚠️ Data length: ${attachmentStr.length} chars, ends with: "${attachmentStr.slice(-10)}"`);
-
-                        // Try to repair simple truncation cases
-                        let repairedData = attachmentStr;
-                        if (attachmentStr.startsWith('[') && !attachmentStr.endsWith(']')) {
-                            // Try to add missing closing bracket
-                            const lastCommaIndex = attachmentStr.lastIndexOf(',');
-                            const lastBraceIndex = attachmentStr.lastIndexOf('}');
-
-                            if (lastBraceIndex > lastCommaIndex) {
-                                repairedData = attachmentStr.substring(0, lastBraceIndex + 1) + ']';
-                                console.log(`🔧 Attempting to repair truncated JSON by adding closing bracket`);
-                            }
-                        }
-
-                        try {
-                            const attachmentData = JSON.parse(repairedData);
-                            if (Array.isArray(attachmentData)) {
-                                template.attachments = attachmentData;
-                                template.attachmentSummary = attachmentData.map(att => ({
-                                    name: att.name || 'Unknown',
-                                    size: att.size || 0,
-                                    contentType: att.contentType || 'unknown',
-                                    uploadDate: att.uploadDate || new Date().toISOString(),
-                                    status: 'recovered_from_truncation'
-                                }));
-                                console.log(`✅ Successfully recovered ${attachmentData.length} attachments from truncated data`);
-                            }
-                        } catch (repairError) {
-                            console.warn(`❌ Could not repair truncated attachment data: ${repairError.message}`);
-                            // Create summary from what we can extract
-                            const nameMatch = attachmentStr.match(/"name":"([^"]+)"/);
-                            const sizeMatch = attachmentStr.match(/"size":(\d+)/);
-                            const contentTypeMatch = attachmentStr.match(/"contentType":"([^"]+)"/);
-
-                            if (nameMatch) {
-                                template.attachmentSummary = [{
-                                    name: nameMatch[1],
-                                    size: sizeMatch ? parseInt(sizeMatch[1]) : 0,
-                                    contentType: contentTypeMatch ? contentTypeMatch[1] : 'unknown',
-                                    uploadDate: new Date().toISOString(),
-                                    status: 'partial_data_recovered'
-                                }];
-                                console.log(`📋 Partially recovered attachment info: ${nameMatch[1]}`);
-                            }
-                        }
-                    } else {
-                        // Normal parsing for non-truncated data
-                        const attachmentData = JSON.parse(attachmentStr);
-                        if (Array.isArray(attachmentData)) {
-                            template.attachments = attachmentData;
-                            // Don't include full base64 content in list responses for performance
-                            template.attachmentSummary = attachmentData.map(att => ({
-                                name: att.name || 'Unknown',
-                                size: att.size || 0,
-                                contentType: att.contentType || 'unknown',
-                                uploadDate: att.uploadDate || new Date().toISOString(),
-                                status: 'complete'
-                            }));
-                        }
-                    }
-                } catch (parseError) {
-                    console.warn(`⚠️ Failed to parse attachments for template ${template.Template_ID}:`, parseError.message);
-                    console.warn(`⚠️ Attachment data length: ${template.Attachments.length} chars`);
-                    console.warn(`⚠️ Data preview: ${template.Attachments.substring(0, 100)}...`);
-                    console.warn(`⚠️ Data ending: ...${template.Attachments.slice(-50)}`);
-
-                    // Don't fail the entire template, just set empty attachments
-                    template.attachments = [];
-                    template.attachmentSummary = [];
-                }
-            }
 
             // Safely handle attachment count - don't fail if column doesn't exist
             template.Attachment_Count = template.Attachment_Count !== undefined ?
@@ -900,46 +819,11 @@ async function addTemplateViaGraphAPI(graphClient, templateData) {
         // Generate template ID
         const templateId = `template_${Date.now()}`;
         
-        // Prepare attachment data with size validation
+        // Attachments are no longer stored in Excel (handled separately)
         let attachmentInfo = '';
-        let attachmentCount = 0;
-        const EXCEL_CELL_LIMIT = 32767; // Excel cell character limit
+        let attachmentCount = templateData.attachments ? templateData.attachments.length : 0;
 
-        if (templateData.attachments && templateData.attachments.length > 0) {
-            const fullAttachmentJson = JSON.stringify(templateData.attachments);
-            attachmentCount = templateData.attachments.length;
-
-            if (fullAttachmentJson.length > EXCEL_CELL_LIMIT) {
-                console.warn(`⚠️ Attachment data too large (${fullAttachmentJson.length} chars > ${EXCEL_CELL_LIMIT} limit)`);
-                console.warn(`⚠️ This will cause truncation and parsing errors. Consider storing attachments separately.`);
-
-                // Create a summary-only version to fit in Excel
-                const attachmentSummary = templateData.attachments.map(att => ({
-                    name: att.name || 'Unknown',
-                    size: att.size || 0,
-                    contentType: att.contentType || 'unknown',
-                    uploadDate: att.uploadDate || new Date().toISOString(),
-                    note: 'Full content truncated due to Excel size limits'
-                }));
-
-                const summaryJson = JSON.stringify(attachmentSummary);
-                if (summaryJson.length <= EXCEL_CELL_LIMIT) {
-                    attachmentInfo = summaryJson;
-                    console.log(`📋 Using attachment summary instead (${summaryJson.length} chars)`);
-                } else {
-                    console.warn(`❌ Even attachment summary is too large (${summaryJson.length} chars)`);
-                    attachmentInfo = JSON.stringify([{
-                        name: `${attachmentCount} attachments`,
-                        note: `Data too large for Excel storage (${fullAttachmentJson.length} chars)`
-                    }]);
-                }
-            } else {
-                attachmentInfo = fullAttachmentJson;
-                console.log(`✅ Attachment data fits in Excel cell (${fullAttachmentJson.length} chars)`);
-            }
-        }
-
-        console.log(`📋 Template data: ${templateData.Template_Name}, attachments: ${attachmentCount}, data size: ${attachmentInfo.length} chars`);
+        console.log(`📋 Template data: ${templateData.Template_Name}, attachments: ${attachmentCount} (not stored in Excel)`);
 
         // Prepare template row data to match the 8-column structure
         const templateRow = [
