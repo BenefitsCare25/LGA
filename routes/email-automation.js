@@ -8,6 +8,7 @@ const EmailContentProcessor = require('../utils/emailContentProcessor');
 const EmailDelayUtils = require('../utils/emailDelayUtils');
 const excelUpdateQueue = require('../utils/excelUpdateQueue');
 const { updateLeadViaGraphAPI, getLeadsViaGraphAPI } = require('../utils/excelGraphAPI');
+const { getTemplatesViaGraphAPI } = require('./email-templates');
 const CampaignTokenManager = require('../utils/campaignTokenManager');
 const excelDuplicateChecker = require('../utils/excelDuplicateChecker');
 const CampaignLockManager = require('../utils/campaignLockManager');
