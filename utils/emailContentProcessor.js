@@ -518,7 +518,9 @@ ${leadName}`);
 
         // Add attachments if provided
         if (attachments && attachments.length > 0) {
-            emailMessage.attachments = this.processAttachmentsForGraph(attachments);
+            // Check if attachments are already processed for Microsoft Graph
+            const alreadyProcessed = attachments[0] && attachments[0]['@odata.type'] === '#microsoft.graph.fileAttachment';
+            emailMessage.attachments = alreadyProcessed ? attachments : this.processAttachmentsForGraph(attachments);
         }
 
         return emailMessage;
