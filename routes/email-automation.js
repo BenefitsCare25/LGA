@@ -1224,8 +1224,8 @@ router.post('/send-campaign-with-attachments', requireDelegatedAuth, uploadAttac
 
         console.log(`🚀 Starting email campaign with Excel-based duplicate prevention and ${attachments.length} attachments`);
 
-        // Get authenticated Graph client
-        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+        // Get authenticated Graph client (use let for reassignment during campaign)
+        let graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
         const authProvider = getDelegatedAuthProvider();
 
         // Get templates for processing
@@ -1533,8 +1533,8 @@ router.post('/send-campaign', requireDelegatedAuth, async (req, res) => {
 
         console.log(`🚀 Starting email campaign with Excel-based duplicate prevention`);
 
-        // Get authenticated Graph client
-        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+        // Get authenticated Graph client (use let for reassignment during campaign)
+        let graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
         const authProvider = getDelegatedAuthProvider();
         
         // Get templates for processing
