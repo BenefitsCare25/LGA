@@ -13,23 +13,57 @@ class AuthFailureNotifier {
 
         // Initialize email transporter (using environment variables)
         this.initEmailTransporter();
+
+        // Webhook URL for external notifications (optional)
+        this.webhookUrl = process.env.NOTIFICATION_WEBHOOK_URL;
     }
 
     initEmailTransporter() {
         try {
-            // Using Gmail SMTP or configure with your email provider
-            this.transporter = nodemailer.createTransporter({
-                service: 'gmail',
-                auth: {
-                    user: process.env.NOTIFICATION_EMAIL_USER || 'your-email@gmail.com',
-                    pass: process.env.NOTIFICATION_EMAIL_PASS || 'your-app-password'
-                }
-            });
+            // Primary SMTP transporter (independent of Microsoft Graph)
+            this.transporter = null;
 
-            // Fallback: If no email credentials, log instead
-            if (!process.env.NOTIFICATION_EMAIL_USER) {
-                console.log('⚠️ Email notifications not configured. Will log alerts instead.');
-                this.transporter = null;
+            if (process.env.NOTIFICATION_EMAIL_USER && process.env.NOTIFICATION_EMAIL_PASS) {
+                // Configure SMTP based on email provider
+                const emailDomain = process.env.NOTIFICATION_EMAIL_USER.split('@')[1];
+                let smtpConfig;
+
+                if (emailDomain.includes('gmail')) {
+                    smtpConfig = {
+                        service: 'gmail',
+                        auth: {
+                            user: process.env.NOTIFICATION_EMAIL_USER,
+                            pass: process.env.NOTIFICATION_EMAIL_PASS
+                        }
+                    };
+                } else if (emailDomain.includes('outlook') || emailDomain.includes('hotmail')) {
+                    smtpConfig = {
+                        service: 'hotmail',
+                        auth: {
+                            user: process.env.NOTIFICATION_EMAIL_USER,
+                            pass: process.env.NOTIFICATION_EMAIL_PASS
+                        }
+                    };
+                } else {
+                    // Generic SMTP configuration
+                    smtpConfig = {
+                        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+                        port: process.env.SMTP_PORT || 587,
+                        secure: process.env.SMTP_SECURE === 'true' || false,
+                        auth: {
+                            user: process.env.NOTIFICATION_EMAIL_USER,
+                            pass: process.env.NOTIFICATION_EMAIL_PASS
+                        }
+                    };
+                }
+
+                this.transporter = nodemailer.createTransporter(smtpConfig);
+                console.log('✅ Independent SMTP email transporter initialized');
+            } else {
+                console.log('⚠️ Email notifications not configured - missing NOTIFICATION_EMAIL_USER or NOTIFICATION_EMAIL_PASS');
+                console.log('📋 Set these environment variables for email alerts:');
+                console.log('   NOTIFICATION_EMAIL_USER=your-email@domain.com');
+                console.log('   NOTIFICATION_EMAIL_PASS=your-app-password');
             }
         } catch (error) {
             console.error('❌ Failed to initialize email transporter:', error.message);
@@ -62,14 +96,21 @@ class AuthFailureNotifier {
             renderUrl: process.env.RENDER_EXTERNAL_URL || 'localhost:3000'
         };
 
-        // Send email notification
-        await this.sendEmailAlert(alertData);
+        // Send notifications through multiple channels for redundancy
+        const results = await Promise.allSettled([
+            this.sendEmailAlert(alertData),
+            this.sendWebhookAlert(alertData),
+            this.logCriticalAlert(alertData)
+        ]);
 
         // Trigger frontend notification
         this.triggerFrontendAlert(sessionId, alertData);
 
-        console.log(`🚨 Authentication failure alert sent for session: ${sessionId}`);
-        return true;
+        // Check if at least one notification method succeeded
+        const successCount = results.filter(r => r.status === 'fulfilled').length;
+        console.log(`🚨 Authentication failure alert sent through ${successCount}/3 channels for session: ${sessionId}`);
+
+        return successCount > 0;
     }
 
     /**
@@ -161,10 +202,88 @@ class AuthFailureNotifier {
 
         } catch (error) {
             console.error('❌ Failed to send authentication failure email:', error.message);
+            throw error; // Re-throw for Promise.allSettled handling
+        }
+    }
 
-            // Fallback: Always log the critical alert
-            console.log('🚨 CRITICAL AUTH FAILURE (Email failed, logging):');
-            console.log(`User: ${alertData.userEmail}, Session: ${alertData.sessionId}, Time: ${alertData.serverTime}`);
+    /**
+     * Send webhook notification to external service
+     */
+    async sendWebhookAlert(alertData) {
+        try {
+            if (!this.webhookUrl) {
+                console.log('🔗 No webhook URL configured, skipping webhook alert');
+                return;
+            }
+
+            const webhookPayload = {
+                type: 'AUTH_FAILURE',
+                timestamp: alertData.failureTime,
+                severity: 'critical',
+                service: 'LGA Email Automation',
+                user: alertData.userEmail,
+                session: alertData.sessionId,
+                server: alertData.renderUrl,
+                details: alertData.campaignDetails,
+                action_required: 'Re-authentication needed',
+                alert_url: `${alertData.renderUrl}/auth/login`
+            };
+
+            const axios = require('axios');
+            const response = await axios.post(this.webhookUrl, webhookPayload, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'LGA-Auth-Failure-Notifier'
+                },
+                timeout: 10000 // 10 second timeout
+            });
+
+            console.log(`🔗 Webhook alert sent successfully (${response.status})`);
+
+        } catch (error) {
+            console.error('❌ Failed to send webhook alert:', error.message);
+            throw error; // Re-throw for Promise.allSettled handling
+        }
+    }
+
+    /**
+     * Log critical alert with structured format (always works)
+     */
+    async logCriticalAlert(alertData) {
+        try {
+            const logEntry = {
+                timestamp: new Date().toISOString(),
+                level: 'CRITICAL',
+                type: 'AUTH_FAILURE_ALERT',
+                user: alertData.userEmail,
+                session: alertData.sessionId,
+                server: alertData.renderUrl,
+                campaign_details: alertData.campaignDetails,
+                action_required: 'IMMEDIATE_RE_AUTHENTICATION',
+                admin_contact: this.adminEmail
+            };
+
+            // Structured logging (always visible in server logs)
+            console.log('🚨🚨🚨 CRITICAL AUTHENTICATION FAILURE ALERT 🚨🚨🚨');
+            console.log('='.repeat(60));
+            console.log(`🕐 Time: ${alertData.serverTime}`);
+            console.log(`👤 User: ${alertData.userEmail}`);
+            console.log(`🔑 Session: ${alertData.sessionId}`);
+            console.log(`🌐 Server: ${alertData.renderUrl}`);
+            console.log(`📧 Admin: ${this.adminEmail}`);
+            console.log(`📊 Campaign Status: ${JSON.stringify(alertData.campaignDetails, null, 2)}`);
+            console.log(`⚡ ACTION REQUIRED: User must re-authenticate immediately`);
+            console.log(`🔗 Auth URL: ${alertData.renderUrl}/auth/login`);
+            console.log('='.repeat(60));
+
+            // Also write to structured log format for log aggregation services
+            console.log('AUTH_FAILURE_JSON_LOG:', JSON.stringify(logEntry));
+
+        } catch (error) {
+            // This should never fail, but just in case
+            console.error('❌ Even logging failed:', error.message);
+            console.log('EMERGENCY AUTH FAILURE ALERT - ALL SYSTEMS DOWN');
+            throw error;
         }
     }
 
