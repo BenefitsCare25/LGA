@@ -1973,7 +1973,7 @@
 
                 // Company size filter
                 const matchesCompanySize = companySizeFilters.length === 0 ||
-                    (lead['Size'] && companySizeFilters.includes(lead['Size']));
+                    (lead['Size'] && checkCompanySizeInRange(lead['Size'], companySizeFilters));
 
                 return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail && matchesCompanySize;
             });
@@ -2356,7 +2356,7 @@
 
                 // Company size filter
                 const matchesCompanySize = companySizeFilters.length === 0 ||
-                    (lead['Size'] && companySizeFilters.includes(lead['Size']));
+                    (lead['Size'] && checkCompanySizeInRange(lead['Size'], companySizeFilters));
 
                 return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail && matchesCompanySize;
             });
@@ -2508,11 +2508,11 @@
 
                 // Company size filter
                 const matchesCompanySize = companySizeFilters.length === 0 ||
-                    (lead['Size'] && companySizeFilters.includes(lead['Size']));
+                    (lead['Size'] && checkCompanySizeInRange(lead['Size'], companySizeFilters));
 
                 return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail && matchesCompanySize;
             });
-            
+
             // Determine which leads to send emails to: selected leads take priority
             let targetLeads = [];
             let emailMode = '';
@@ -2882,6 +2882,31 @@
         function getSelectedCompanySizes() {
             const checkboxes = document.querySelectorAll('#companySizeOptions input[type="checkbox"]:checked');
             return Array.from(checkboxes).map(checkbox => checkbox.value);
+        }
+
+        // Helper function to check if a numeric company size falls within selected ranges
+        function checkCompanySizeInRange(companySize, selectedRanges) {
+            if (!companySize || selectedRanges.length === 0) return true;
+
+            const size = parseInt(companySize);
+            if (isNaN(size)) return false;
+
+            return selectedRanges.some(range => {
+                switch(range) {
+                    case '1-10': return size >= 1 && size <= 10;
+                    case '11-20': return size >= 11 && size <= 20;
+                    case '21-50': return size >= 21 && size <= 50;
+                    case '51-100': return size >= 51 && size <= 100;
+                    case '101-200': return size >= 101 && size <= 200;
+                    case '201-500': return size >= 201 && size <= 500;
+                    case '501-1K': return size >= 501 && size <= 1000;
+                    case '1K-2K': return size >= 1000 && size <= 2000;
+                    case '2K-5K': return size >= 2000 && size <= 5000;
+                    case '5K-10K': return size >= 5000 && size <= 10000;
+                    case '10K+': return size >= 10000;
+                    default: return false;
+                }
+            });
         }
     </script>
 </body>

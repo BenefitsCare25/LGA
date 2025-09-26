@@ -703,11 +703,30 @@ router.get('/master-list/data', requireDelegatedAuth, async (req, res) => {
             leadsData = leadsData.filter(lead => lead.Campaign_Stage === campaign_stage);
         }
         if (company_size) {
-            // Handle multiple company sizes (comma-separated)
-            const companySizes = company_size.split(',').map(size => size.trim());
+            // Handle multiple company sizes (comma-separated ranges)
+            const companySizeRanges = company_size.split(',').map(size => size.trim());
             leadsData = leadsData.filter(lead => {
                 if (!lead['Size']) return false;
-                return companySizes.includes(lead['Size']);
+
+                const size = parseInt(lead['Size']);
+                if (isNaN(size)) return false;
+
+                return companySizeRanges.some(range => {
+                    switch(range) {
+                        case '1-10': return size >= 1 && size <= 10;
+                        case '11-20': return size >= 11 && size <= 20;
+                        case '21-50': return size >= 21 && size <= 50;
+                        case '51-100': return size >= 51 && size <= 100;
+                        case '101-200': return size >= 101 && size <= 200;
+                        case '201-500': return size >= 201 && size <= 500;
+                        case '501-1K': return size >= 501 && size <= 1000;
+                        case '1K-2K': return size >= 1000 && size <= 2000;
+                        case '2K-5K': return size >= 2000 && size <= 5000;
+                        case '5K-10K': return size >= 5000 && size <= 10000;
+                        case '10K+': return size >= 10000;
+                        default: return false;
+                    }
+                });
             });
         }
 
