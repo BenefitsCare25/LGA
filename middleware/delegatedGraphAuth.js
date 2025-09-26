@@ -2,6 +2,7 @@ const { Client } = require('@microsoft/microsoft-graph-client');
 const { AuthenticationProvider } = require('@microsoft/microsoft-graph-client');
 const msal = require('@azure/msal-node');
 const persistentStorage = require('../utils/persistentStorage');
+const AuthFailureNotifier = require('../utils/authFailureNotifier');
 
 /**
  * Microsoft Graph Delegated Authentication Provider
@@ -41,6 +42,7 @@ class DelegatedGraphAuth {
             this.msalInstance = new msal.ConfidentialClientApplication(this.msalConfig);
             this.userTokens = new Map(); // In-memory cache
             this.errorSuppressionCount = new Map(); // Track repeated auth errors
+            this.authFailureNotifier = new AuthFailureNotifier(); // Initialize notification system
             
             // Load existing sessions on startup
             this.loadPersistedSessions();
@@ -308,9 +310,12 @@ class DelegatedGraphAuth {
                         console.error(`🔄 Multiple token refresh failures for session ${sessionId}. Will suppress further logs after this message.`);
                         console.error(`🚨 CRITICAL: Session ${sessionId} requires re-authentication. Check Azure credentials and refresh token validity.`);
                         this.errorSuppressionCount.set(sessionId, errorCount + 1);
+
+                        // Trigger authentication failure notification
+                        this.triggerAuthFailureAlert(sessionId, tokenError);
                     }
                     // errorCount > 5: suppress logging but continue to function
-                    
+
                     throw tokenError;
                 }
             }
@@ -462,7 +467,7 @@ class DelegatedGraphAuth {
         try {
             const client = await this.getGraphClient(sessionId);
             const userInfo = await client.api('/me').get();
-            
+
             console.log(`✅ Graph connection test successful for: ${userInfo.displayName}`);
             return {
                 success: true,
@@ -475,6 +480,32 @@ class DelegatedGraphAuth {
                 success: false,
                 error: error.message
             };
+        }
+    }
+
+    // Trigger authentication failure alert
+    async triggerAuthFailureAlert(sessionId, error) {
+        try {
+            if (!this.authFailureNotifier) {
+                console.log('⚠️ Auth failure notifier not initialized');
+                return;
+            }
+
+            const userInfo = this.getUserInfo(sessionId);
+            const failureDetails = {
+                status: 'Authentication expired during operation',
+                error: error.message || 'Token refresh failed',
+                errorCode: error.errorCode || error.code,
+                sessionId: sessionId,
+                timestamp: new Date().toISOString(),
+                context: 'Microsoft Graph API operation'
+            };
+
+            console.log(`🚨 Triggering auth failure alert for session: ${sessionId}`);
+            await this.authFailureNotifier.handleAuthFailure(sessionId, userInfo, failureDetails);
+
+        } catch (alertError) {
+            console.error('❌ Failed to trigger auth failure alert:', alertError.message);
         }
     }
 }

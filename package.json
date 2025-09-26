@@ -22,6 +22,7 @@
     "helmet": "^7.1.0",
     "multer": "^1.4.5-lts.1",
     "node-cron": "^4.2.1",
+    "nodemailer": "^7.0.6",
     "openai": "^4.20.1",
     "pdf-parse": "^1.1.1",
     "xlsx": "^0.18.5"
