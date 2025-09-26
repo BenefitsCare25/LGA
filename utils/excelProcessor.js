@@ -40,6 +40,7 @@ class ExcelProcessor {
             'LinkedIn URL': 'text',
             'Industry': 'text',
             'Location': 'text',
+            'Phone': 'text',
             'Last Updated': 'date',
             
             // Email automation columns
@@ -445,6 +446,7 @@ class ExcelProcessor {
         normalized['LinkedIn URL'] = lead['LinkedIn URL'] || lead.linkedin_url || lead.linkedin || '';
         normalized['Industry'] = lead.Industry || lead.industry || '';
         normalized['Location'] = lead.Location || lead.country || lead.location || '';
+        normalized['Phone'] = lead['Phone Number'] || lead.Phone || lead.phone || lead['Contact Number'] || lead.contact_number || '';
         normalized['Last Updated'] = require('./dateFormatter').getCurrentFormattedDate();
 
         // Move AI-generated content from Notes to AI_Generated_Email
@@ -875,6 +877,7 @@ class ExcelProcessor {
             {width: 40}, // LinkedIn URL
             {width: 20}, // Industry
             {width: 15}, // Location
+            {width: 18}, // Phone
             {width: 20}, // Last Updated
             {width: 60}, // AI_Generated_Email
             {width: 15}, // Status

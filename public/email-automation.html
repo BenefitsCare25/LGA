@@ -357,6 +357,7 @@
                             <th>Name</th>
                             <th>Email</th>
                             <th>Company</th>
+                            <th>Phone</th>
                             <th>Status</th>
                             <th>Email Count</th>
                             <th>Last Email</th>
@@ -364,7 +365,7 @@
                     </thead>
                     <tbody id="masterListBody">
                         <tr>
-                            <td colspan="7" class="text-center loading-cell">
+                            <td colspan="8" class="text-center loading-cell">
                                 <div class="flex-center">
                                     <div class="spinner"></div>
                                     <span class="ml-md">Loading master list...</span>
@@ -1175,7 +1176,7 @@
             
             if (data.length === 0) {
                 tbody.innerHTML = `
-                    <tr><td colspan="7" class="text-center loading-cell">
+                    <tr><td colspan="8" class="text-center loading-cell">
                         <div style="padding: var(--space-xl);">
                             <div style="font-size: 48px; margin-bottom: var(--space-md);">📋</div>
                             <p>No leads match the current filters.</p>
@@ -1195,6 +1196,7 @@
                     <td title="${lead.Name || 'No name'}">${lead.Name || '<span class="text-muted">No name</span>'}</td>
                     <td title="${lead.Email}">${lead.Email || ''}</td>
                     <td title="${lead['Company Name'] || 'No company'}">${lead['Company Name'] || '<span class="text-muted">No company</span>'}</td>
+                    <td title="${lead.Phone || 'No phone'}">${lead.Phone || '<span class="text-muted">-</span>'}</td>
                     <td><span class="status-badge status-${(lead.Status || 'new').toLowerCase()}">${lead.Status || 'New'}</span></td>
                     <td title="Number of emails sent to this lead">${lead.Email_Count || 0}</td>
                     <td title="${lead.Last_Email_Date ? parseExcelDateForDisplay(lead.Last_Email_Date).toLocaleString() : 'Never sent'}">${lead.Last_Email_Date ? parseExcelDateForDisplay(lead.Last_Email_Date).toLocaleDateString() : '-'}</td>
@@ -2527,7 +2529,8 @@
             personal: [
                 { name: '{Name}', description: 'Contact name' },
                 { name: '{Title}', description: 'Job title' },
-                { name: '{Email}', description: 'Email address' }
+                { name: '{Email}', description: 'Email address' },
+                { name: '{Phone}', description: 'Phone number' }
             ],
             company: [
                 { name: '{Company}', description: 'Company name' },
