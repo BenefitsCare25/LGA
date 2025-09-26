@@ -1329,7 +1329,7 @@
                     <td title="${lead.Name || 'No name'}">${lead.Name || '<span class="text-muted">No name</span>'}</td>
                     <td title="${lead.Email}">${lead.Email || ''}</td>
                     <td title="${lead['Company Name'] || 'No company'}">${lead['Company Name'] || '<span class="text-muted">No company</span>'}</td>
-                    <td title="${lead['Company Size'] || 'No size specified'}">${lead['Company Size'] || '<span class="text-muted">-</span>'}</td>
+                    <td title="${lead['Size'] || 'No size specified'}">${lead['Size'] || '<span class="text-muted">-</span>'}</td>
                     <td title="${lead.Phone || 'No phone'}">${lead.Phone || '<span class="text-muted">-</span>'}</td>
                     <td><span class="status-badge status-${(lead.Status || 'new').toLowerCase()}">${lead.Status || 'New'}</span></td>
                     <td title="Number of emails sent to this lead">${lead.Email_Count || 0}</td>
@@ -1973,7 +1973,7 @@
 
                 // Company size filter
                 const matchesCompanySize = companySizeFilters.length === 0 ||
-                    (lead['Company Size'] && companySizeFilters.includes(lead['Company Size']));
+                    (lead['Size'] && companySizeFilters.includes(lead['Size']));
 
                 return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail && matchesCompanySize;
             });
@@ -2356,7 +2356,7 @@
 
                 // Company size filter
                 const matchesCompanySize = companySizeFilters.length === 0 ||
-                    (lead['Company Size'] && companySizeFilters.includes(lead['Company Size']));
+                    (lead['Size'] && companySizeFilters.includes(lead['Size']));
 
                 return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail && matchesCompanySize;
             });
@@ -2508,7 +2508,7 @@
 
                 // Company size filter
                 const matchesCompanySize = companySizeFilters.length === 0 ||
-                    (lead['Company Size'] && companySizeFilters.includes(lead['Company Size']));
+                    (lead['Size'] && companySizeFilters.includes(lead['Size']));
 
                 return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail && matchesCompanySize;
             });

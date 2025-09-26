@@ -706,8 +706,8 @@ router.get('/master-list/data', requireDelegatedAuth, async (req, res) => {
             // Handle multiple company sizes (comma-separated)
             const companySizes = company_size.split(',').map(size => size.trim());
             leadsData = leadsData.filter(lead => {
-                if (!lead['Company Size']) return false;
-                return companySizes.includes(lead['Company Size']);
+                if (!lead['Size']) return false;
+                return companySizes.includes(lead['Size']);
             });
         }
 
