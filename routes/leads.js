@@ -655,6 +655,7 @@ router.post('/export-excel', async (req, res) => {
             'Email': lead.email || '',
             'Email Verified': lead.email_verified || 'N',
             'LinkedIn URL': lead.linkedin_url || '',
+            'Phone Number': lead.phone_number || '',
             'Industry': lead.industry || '',
             'Location': lead.country || '',
             'Notes': lead.notes || '',
@@ -675,6 +676,7 @@ router.post('/export-excel', async (req, res) => {
             {width: 30}, // Email
             {width: 15}, // Email Verified
             {width: 40}, // LinkedIn URL
+            {width: 18}, // Phone Number
             {width: 20}, // Industry
             {width: 15}, // Location
             {width: 50}, // Notes
