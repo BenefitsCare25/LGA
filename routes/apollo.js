@@ -257,19 +257,38 @@ router.post('/scrape-leads', async (req, res) => {
         }
 
         // Transform leads to match n8n workflow structure
-        const transformedLeads = uniqueLeads.map(lead => ({
-            name: lead.name || '',
-            title: lead.title || '',
-            organization_name: lead.organization_name || '',
-            organization_website_url: lead.organization_website_url || '',
-            estimated_num_employees: lead.estimated_num_employees || '',
-            email: lead.email || '',
-            email_verified: lead.email ? 'Y' : 'N',
-            linkedin_url: lead.linkedin_url || '',
-            industry: lead.industry || '',
-            country: lead.country || 'Singapore',
-            conversion_status: 'Pending'
-        }));
+        const transformedLeads = uniqueLeads.map(lead => {
+            // Extract phone number with fallback hierarchy
+            let phoneNumber = '';
+
+            // Try personal phones first (if available)
+            if (lead.personal_phones && Array.isArray(lead.personal_phones) && lead.personal_phones.length > 0) {
+                phoneNumber = lead.personal_phones[0] || '';
+            }
+            // Fallback to organization primary phone
+            else if (lead.organization && lead.organization.primary_phone && lead.organization.primary_phone.number) {
+                phoneNumber = lead.organization.primary_phone.number;
+            }
+            // Fallback to direct organization phone
+            else if (lead.organization && lead.organization.phone) {
+                phoneNumber = lead.organization.phone;
+            }
+
+            return {
+                name: lead.name || '',
+                title: lead.title || '',
+                organization_name: lead.organization_name || '',
+                organization_website_url: lead.organization_website_url || '',
+                estimated_num_employees: lead.estimated_num_employees || '',
+                email: lead.email || '',
+                email_verified: lead.email ? 'Y' : 'N',
+                linkedin_url: lead.linkedin_url || '',
+                industry: lead.industry || '',
+                country: lead.country || 'Singapore',
+                phone_number: phoneNumber,
+                conversion_status: 'Pending'
+            };
+        });
 
         // For large datasets, don't return all leads in the response to avoid memory issues
         if (transformedLeads.length > 250) {
@@ -664,19 +683,38 @@ async function processApolloJob(apolloJobId) {
         const duplicatesRemoved = rawData.length - uniqueLeads.length;
 
         // Transform leads
-        const transformedLeads = uniqueLeads.map(lead => ({
-            name: lead.name || '',
-            title: lead.title || '',
-            organization_name: lead.organization_name || '',
-            organization_website_url: lead.organization_website_url || '',
-            estimated_num_employees: lead.estimated_num_employees || '',
-            email: lead.email || '',
-            email_verified: lead.email ? 'Y' : 'N',
-            linkedin_url: lead.linkedin_url || '',
-            industry: lead.industry || '',
-            country: lead.country || 'Singapore',
-            conversion_status: 'Pending'
-        }));
+        const transformedLeads = uniqueLeads.map(lead => {
+            // Extract phone number with fallback hierarchy
+            let phoneNumber = '';
+
+            // Try personal phones first (if available)
+            if (lead.personal_phones && Array.isArray(lead.personal_phones) && lead.personal_phones.length > 0) {
+                phoneNumber = lead.personal_phones[0] || '';
+            }
+            // Fallback to organization primary phone
+            else if (lead.organization && lead.organization.primary_phone && lead.organization.primary_phone.number) {
+                phoneNumber = lead.organization.primary_phone.number;
+            }
+            // Fallback to direct organization phone
+            else if (lead.organization && lead.organization.phone) {
+                phoneNumber = lead.organization.phone;
+            }
+
+            return {
+                name: lead.name || '',
+                title: lead.title || '',
+                organization_name: lead.organization_name || '',
+                organization_website_url: lead.organization_website_url || '',
+                estimated_num_employees: lead.estimated_num_employees || '',
+                email: lead.email || '',
+                email_verified: lead.email ? 'Y' : 'N',
+                linkedin_url: lead.linkedin_url || '',
+                industry: lead.industry || '',
+                country: lead.country || 'Singapore',
+                phone_number: phoneNumber,
+                conversion_status: 'Pending'
+            };
+        });
 
         // Job completed successfully
         job.status = 'completed';
