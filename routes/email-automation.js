@@ -678,7 +678,7 @@ router.get('/master-list/data', requireDelegatedAuth, async (req, res) => {
     try {
         console.log('📋 Retrieving master list data...');
 
-        const { limit = 100, offset = 0, status, campaign_stage } = req.query;
+        const { limit = 100, offset = 0, status, campaign_stage, company_size } = req.query;
 
         // Get authenticated Graph client
         const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
@@ -701,6 +701,14 @@ router.get('/master-list/data', requireDelegatedAuth, async (req, res) => {
         }
         if (campaign_stage) {
             leadsData = leadsData.filter(lead => lead.Campaign_Stage === campaign_stage);
+        }
+        if (company_size) {
+            // Handle multiple company sizes (comma-separated)
+            const companySizes = company_size.split(',').map(size => size.trim());
+            leadsData = leadsData.filter(lead => {
+                if (!lead['Company Size']) return false;
+                return companySizes.includes(lead['Company Size']);
+            });
         }
 
         // Apply pagination

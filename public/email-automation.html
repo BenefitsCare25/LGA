@@ -140,6 +140,95 @@
                 margin: 0;
             }
         }
+
+        /* Company Size Multi-Select Dropdown Styles */
+        .company-size-filter-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+
+        .multi-select-dropdown {
+            position: relative;
+            display: inline-block;
+            min-width: 140px;
+        }
+
+        .multi-select-button {
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 14px;
+            line-height: 1.5;
+            transition: all 0.2s ease;
+        }
+
+        .multi-select-button:hover {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.1);
+        }
+
+        .dropdown-arrow {
+            font-size: 12px;
+            color: #6b7280;
+            transition: transform 0.2s ease;
+        }
+
+        .multi-select-dropdown.active .dropdown-arrow {
+            transform: rotate(180deg);
+        }
+
+        .multi-select-options {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #d1d5db;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+            z-index: 1000;
+        }
+
+        .multi-select-dropdown.active .multi-select-options {
+            display: block;
+        }
+
+        .multi-select-option {
+            display: block;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            border-bottom: 1px solid #f3f4f6;
+            transition: background-color 0.2s ease;
+        }
+
+        .multi-select-option:last-child {
+            border-bottom: none;
+        }
+
+        .multi-select-option:hover {
+            background-color: #f9fafb;
+        }
+
+        .multi-select-option input[type="checkbox"] {
+            margin-right: 8px;
+        }
+
+        .filter-controls {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
@@ -331,6 +420,49 @@
                         <option value="14-20">Last Email Past 14-20 Days</option>
                         <option value="21+">Last Email Past 21+ Days</option>
                     </select>
+                    <div class="company-size-filter-wrapper">
+                        <div class="multi-select-dropdown" id="companySizeDropdown">
+                            <div class="multi-select-button" onclick="toggleCompanySizeDropdown()">
+                                <span id="companySizeLabel">Company Size</span>
+                                <span class="dropdown-arrow">▼</span>
+                            </div>
+                            <div class="multi-select-options" id="companySizeOptions">
+                                <label class="multi-select-option">
+                                    <input type="checkbox" value="1-10" onchange="updateCompanySizeFilter()"> 1-10
+                                </label>
+                                <label class="multi-select-option">
+                                    <input type="checkbox" value="11-20" onchange="updateCompanySizeFilter()"> 11-20
+                                </label>
+                                <label class="multi-select-option">
+                                    <input type="checkbox" value="21-50" onchange="updateCompanySizeFilter()"> 21-50
+                                </label>
+                                <label class="multi-select-option">
+                                    <input type="checkbox" value="51-100" onchange="updateCompanySizeFilter()"> 51-100
+                                </label>
+                                <label class="multi-select-option">
+                                    <input type="checkbox" value="101-200" onchange="updateCompanySizeFilter()"> 101-200
+                                </label>
+                                <label class="multi-select-option">
+                                    <input type="checkbox" value="201-500" onchange="updateCompanySizeFilter()"> 201-500
+                                </label>
+                                <label class="multi-select-option">
+                                    <input type="checkbox" value="501-1K" onchange="updateCompanySizeFilter()"> 501-1K
+                                </label>
+                                <label class="multi-select-option">
+                                    <input type="checkbox" value="1K-2K" onchange="updateCompanySizeFilter()"> 1K-2K
+                                </label>
+                                <label class="multi-select-option">
+                                    <input type="checkbox" value="2K-5K" onchange="updateCompanySizeFilter()"> 2K-5K
+                                </label>
+                                <label class="multi-select-option">
+                                    <input type="checkbox" value="5K-10K" onchange="updateCompanySizeFilter()"> 5K-10K
+                                </label>
+                                <label class="multi-select-option">
+                                    <input type="checkbox" value="10K+" onchange="updateCompanySizeFilter()"> 10K+
+                                </label>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             
@@ -357,6 +489,7 @@
                             <th>Name</th>
                             <th>Email</th>
                             <th>Company</th>
+                            <th>Company Size</th>
                             <th>Phone</th>
                             <th>Status</th>
                             <th>Email Count</th>
@@ -365,7 +498,7 @@
                     </thead>
                     <tbody id="masterListBody">
                         <tr>
-                            <td colspan="8" class="text-center loading-cell">
+                            <td colspan="9" class="text-center loading-cell">
                                 <div class="flex-center">
                                     <div class="spinner"></div>
                                     <span class="ml-md">Loading master list...</span>
@@ -1147,13 +1280,13 @@
                     displayMasterListWithPagination(filteredLeadsData);
                 } else {
                     document.getElementById('masterListBody').innerHTML = `
-                        <tr><td colspan="7" style="text-align: center; padding: 40px;">No leads found.</td></tr>
+                        <tr><td colspan="9" style="text-align: center; padding: 40px;">No leads found.</td></tr>
                     `;
                 }
             } catch (error) {
                 console.error('❌ Master list loading error:', error);
                 document.getElementById('masterListBody').innerHTML = `
-                    <tr><td colspan="7" style="text-align: center; padding: 40px;">Error loading master list.</td></tr>
+                    <tr><td colspan="9" style="text-align: center; padding: 40px;">Error loading master list.</td></tr>
                 `;
             }
         }
@@ -1176,7 +1309,7 @@
             
             if (data.length === 0) {
                 tbody.innerHTML = `
-                    <tr><td colspan="8" class="text-center loading-cell">
+                    <tr><td colspan="9" class="text-center loading-cell">
                         <div style="padding: var(--space-xl);">
                             <div style="font-size: 48px; margin-bottom: var(--space-md);">📋</div>
                             <p>No leads match the current filters.</p>
@@ -1196,6 +1329,7 @@
                     <td title="${lead.Name || 'No name'}">${lead.Name || '<span class="text-muted">No name</span>'}</td>
                     <td title="${lead.Email}">${lead.Email || ''}</td>
                     <td title="${lead['Company Name'] || 'No company'}">${lead['Company Name'] || '<span class="text-muted">No company</span>'}</td>
+                    <td title="${lead['Company Size'] || 'No size specified'}">${lead['Company Size'] || '<span class="text-muted">-</span>'}</td>
                     <td title="${lead.Phone || 'No phone'}">${lead.Phone || '<span class="text-muted">-</span>'}</td>
                     <td><span class="status-badge status-${(lead.Status || 'new').toLowerCase()}">${lead.Status || 'New'}</span></td>
                     <td title="Number of emails sent to this lead">${lead.Email_Count || 0}</td>
@@ -1800,6 +1934,7 @@
             const statusFilter = document.getElementById('filterStatus').value.toLowerCase();
             const templateFilter = document.getElementById('filterTemplate').value;
             const lastEmailFilter = document.getElementById('filterLastEmail').value;
+            const companySizeFilters = getSelectedCompanySizes();
             
             // Get all leads that match current filters
             if (!window.originalMasterListData) {
@@ -1835,10 +1970,14 @@
                 } else if (lastEmailFilter && !lead.Last_Email_Date) {
                     matchesLastEmail = false;
                 }
-                
-                return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail;
+
+                // Company size filter
+                const matchesCompanySize = companySizeFilters.length === 0 ||
+                    (lead['Company Size'] && companySizeFilters.includes(lead['Company Size']));
+
+                return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail && matchesCompanySize;
             });
-            
+
             // Store the selected emails globally so sendFilteredEmails can access them
             window.allSelectedEmails = filteredData.map(lead => lead.Email);
             
@@ -2171,6 +2310,7 @@
             const statusFilter = document.getElementById('filterStatus').value.toLowerCase();
             const templateFilter = document.getElementById('filterTemplate').value;
             const lastEmailFilter = document.getElementById('filterLastEmail').value;
+            const companySizeFilters = getSelectedCompanySizes();
             
             // If no original data stored, store it
             if (!window.originalMasterListData) {
@@ -2213,17 +2353,21 @@
                     // If filter is selected but lead has no email sent to them, exclude it
                     matchesLastEmail = false;
                 }
-                
-                return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail;
+
+                // Company size filter
+                const matchesCompanySize = companySizeFilters.length === 0 ||
+                    (lead['Company Size'] && companySizeFilters.includes(lead['Company Size']));
+
+                return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail && matchesCompanySize;
             });
-            
+
             // Reset to first page when filters change
             currentPage = 1;
             
             // Update display with pagination
             displayMasterListWithPagination(filteredData);
             
-            console.log(`Filtered ${filteredData.length} leads from ${window.originalMasterListData.length} total (Search: "${searchTerm}", Status: "${statusFilter}", Template: "${templateFilter}", Last Email: "${lastEmailFilter || 'none'}")`);
+            console.log(`Filtered ${filteredData.length} leads from ${window.originalMasterListData.length} total (Search: "${searchTerm}", Status: "${statusFilter}", Template: "${templateFilter}", Last Email: "${lastEmailFilter || 'none'}", Company Size: ${companySizeFilters.length > 0 ? companySizeFilters.join(',') : 'none'})`);
         }
 
         // Validate email template content
@@ -2310,14 +2454,15 @@
             const manuallySelectedEmails = Array.from(selectedCheckboxes).map(cb => cb.dataset.email);
             
             // Check if we have a global selection (from "Select All" across all pages)
-            const selectedEmails = window.globalSelectedEmails && window.globalSelectedEmails.length > 0 
-                ? window.globalSelectedEmails 
+            const selectedEmails = window.globalSelectedEmails && window.globalSelectedEmails.length > 0
+                ? window.globalSelectedEmails
                 : manuallySelectedEmails;
-            
+
             const searchTerm = document.getElementById('searchLeads').value.toLowerCase();
             const statusFilter = document.getElementById('filterStatus').value.toLowerCase();
             const templateFilter = document.getElementById('filterTemplate').value;
             const lastEmailFilter = document.getElementById('filterLastEmail').value;
+            const companySizeFilters = getSelectedCompanySizes();
             
             // Get currently filtered data
             if (!window.originalMasterListData) {
@@ -2360,8 +2505,12 @@
                     // If filter is selected but lead has no email sent to them, exclude it
                     matchesLastEmail = false;
                 }
-                
-                return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail;
+
+                // Company size filter
+                const matchesCompanySize = companySizeFilters.length === 0 ||
+                    (lead['Company Size'] && companySizeFilters.includes(lead['Company Size']));
+
+                return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail && matchesCompanySize;
             });
             
             // Determine which leads to send emails to: selected leads take priority
@@ -2691,6 +2840,48 @@
             }
 
             return true;
+        }
+
+        // Company Size Multi-Select Dropdown Functions
+        function toggleCompanySizeDropdown() {
+            const dropdown = document.getElementById('companySizeDropdown');
+            dropdown.classList.toggle('active');
+
+            // Close dropdown when clicking outside
+            if (dropdown.classList.contains('active')) {
+                document.addEventListener('click', closeCompanySizeOnClickOutside);
+            } else {
+                document.removeEventListener('click', closeCompanySizeOnClickOutside);
+            }
+        }
+
+        function closeCompanySizeOnClickOutside(event) {
+            const dropdown = document.getElementById('companySizeDropdown');
+            if (!dropdown.contains(event.target)) {
+                dropdown.classList.remove('active');
+                document.removeEventListener('click', closeCompanySizeOnClickOutside);
+            }
+        }
+
+        function updateCompanySizeFilter() {
+            const selectedSizes = getSelectedCompanySizes();
+            const label = document.getElementById('companySizeLabel');
+
+            if (selectedSizes.length === 0) {
+                label.textContent = 'Company Size';
+            } else if (selectedSizes.length === 1) {
+                label.textContent = selectedSizes[0];
+            } else {
+                label.textContent = `${selectedSizes.length} selected`;
+            }
+
+            // Trigger filter update
+            filterMasterList();
+        }
+
+        function getSelectedCompanySizes() {
+            const checkboxes = document.querySelectorAll('#companySizeOptions input[type="checkbox"]:checked');
+            return Array.from(checkboxes).map(checkbox => checkbox.value);
         }
     </script>
 </body>
