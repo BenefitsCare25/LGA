@@ -143,31 +143,11 @@ class ExcelProcessor {
             const data = XLSX.utils.sheet_to_json(worksheet);
             
             console.log(`📊 Parsed ${data.length} rows from uploaded file`);
-
-            // DEBUG: Show sample of parsed data structure
-            if (data.length > 0) {
-                console.log(`🔍 SAMPLE ROW STRUCTURE:`, Object.keys(data[0]));
-                console.log(`🔍 FIRST ROW DATA:`, data[0]);
-            }
             
             // Normalize and validate data
             const validLeads = data.filter(row => this.isValidLead(row));
             
             console.log(`✅ ${validLeads.length} valid leads found`);
-
-            // DEBUG: Check phone data in valid leads
-            const leadsWithPhone = validLeads.filter(lead =>
-                lead['Phone Number'] || lead.Phone || lead.phone || lead['Contact Number'] || lead.contact_number
-            );
-            console.log(`📞 PHONE DEBUG: ${leadsWithPhone.length} leads have phone data out of ${validLeads.length} total`);
-
-            if (leadsWithPhone.length > 0) {
-                console.log(`📞 SAMPLE PHONE DATA:`, {
-                    name: leadsWithPhone[0].Name || leadsWithPhone[0].name,
-                    phoneNumber: leadsWithPhone[0]['Phone Number'],
-                    phone: leadsWithPhone[0].Phone || leadsWithPhone[0].phone
-                });
-            }
             
             return validLeads;
         } catch (error) {
@@ -466,17 +446,7 @@ class ExcelProcessor {
         normalized['LinkedIn URL'] = lead['LinkedIn URL'] || lead.linkedin_url || lead.linkedin || '';
         normalized['Industry'] = lead.Industry || lead.industry || '';
         normalized['Location'] = lead.Location || lead.country || lead.location || '';
-        // DEBUG: Phone number extraction debugging
-        const phoneValue = lead['Phone Number'] || lead.Phone || lead.phone || lead['Contact Number'] || lead.contact_number || '';
-        console.log(`🔍 PHONE DEBUG for ${normalized['Name'] || 'Unknown'}:`);
-        console.log(`   - Phone Number: "${lead['Phone Number'] || 'N/A'}"`);
-        console.log(`   - Phone: "${lead.Phone || 'N/A'}"`);
-        console.log(`   - phone: "${lead.phone || 'N/A'}"`);
-        console.log(`   - Contact Number: "${lead['Contact Number'] || 'N/A'}"`);
-        console.log(`   - contact_number: "${lead.contact_number || 'N/A'}"`);
-        console.log(`   - Final phone value: "${phoneValue}"`);
-
-        normalized['Phone'] = phoneValue;
+        normalized['Phone'] = lead['Phone Number'] || lead.Phone || lead.phone || lead['Contact Number'] || lead.contact_number || '';
         normalized['Last Updated'] = require('./dateFormatter').getCurrentFormattedDate();
 
         // Move AI-generated content from Notes to AI_Generated_Email
@@ -576,18 +546,12 @@ class ExcelProcessor {
             
             
             // Ensure all rows have the complete structure
-            const normalizedData = combinedData.map((row, index) => {
+            const normalizedData = combinedData.map(row => {
                 const normalized = {};
                 // Start with master file structure defaults
                 Object.keys(this.masterFileStructure).forEach(key => {
                     normalized[key] = row[key] || '';
                 });
-
-                // DEBUG: Log phone data for first few rows
-                if (index < 3 && row.Phone) {
-                    console.log(`📞 EXCEL UPDATE DEBUG - Row ${index}: Phone="${row.Phone}" for ${row.Name || 'Unknown'}`);
-                }
-
                 return normalized;
             });
             

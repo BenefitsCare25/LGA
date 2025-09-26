@@ -1245,13 +1245,7 @@ function normalizeLeadData(lead) {
         'LinkedIn URL': lead['LinkedIn URL'] || lead.linkedin_url || lead.linkedin || '',
         'Industry': lead['Industry'] || lead.industry || '',
         'Location': lead['Location'] || lead.country || lead.location || '',
-        'Phone': (() => {
-            const phoneValue = lead['Phone'] || lead['Phone Number'] || lead.phone || lead['Contact Number'] || lead.contact_number || '';
-            if (phoneValue) {
-                console.log(`📞 GRAPH API NORMALIZE DEBUG: ${lead.Name || 'Unknown'} - Phone: "${phoneValue}"`);
-            }
-            return phoneValue;
-        })(),
+        'Phone': lead['Phone'] || lead['Phone Number'] || lead.phone || lead['Contact Number'] || lead.contact_number || '',
         'Last Updated': lead['Last Updated'] || require('../utils/dateFormatter').getCurrentFormattedDate(),
         
         // Email automation columns

@@ -302,33 +302,8 @@ router.post('/master-list/upload', requireDelegatedAuth, upload.single('excelFil
             currentOneDriveData = existingData;
         }
 
-        // DEBUG: Check phone data before merge
-        const leadsWithPhone = uploadedLeads.filter(lead =>
-            lead['Phone Number'] || lead.Phone || lead.phone || lead['Contact Number'] || lead.contact_number
-        );
-        console.log(`📞 PHONE MERGE DEBUG: ${leadsWithPhone.length} uploaded leads have phone data out of ${uploadedLeads.length} total`);
-
-        if (leadsWithPhone.length > 0) {
-            console.log(`📞 SAMPLE PHONE BEFORE MERGE:`, {
-                name: leadsWithPhone[0].Name || leadsWithPhone[0].name,
-                phoneNumber: leadsWithPhone[0]['Phone Number'],
-                phone: leadsWithPhone[0].Phone
-            });
-        }
-
         // CRITICAL: Merge uploaded leads with current OneDrive data for accurate duplicate detection
         const mergeResults = excelProcessor.mergeLeadsWithMaster(uploadedLeads, currentOneDriveData);
-
-        // DEBUG: Check phone data after merge
-        const newLeadsWithPhone = mergeResults.newLeads.filter(lead => lead.Phone);
-        console.log(`📞 PHONE MERGE RESULT: ${newLeadsWithPhone.length} new leads have phone data after merge`);
-
-        if (newLeadsWithPhone.length > 0) {
-            console.log(`📞 SAMPLE PHONE AFTER MERGE:`, {
-                name: newLeadsWithPhone[0].Name,
-                phone: newLeadsWithPhone[0].Phone
-            });
-        }
         
         // Update initialExistingCount with actual current data
         initialExistingCount = currentOneDriveData.length;
