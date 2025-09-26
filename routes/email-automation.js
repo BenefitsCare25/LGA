@@ -1289,18 +1289,24 @@ router.post('/send-campaign-with-attachments', requireDelegatedAuth, uploadAttac
                         lead.AI_Generated_Email = `Subject: ${subject}\n\n${emailTemplate}`;
                     }
 
-                    // Check if token refresh is needed during campaign (every 10 emails)
-                    if (campaignTokenManager.shouldCheckToken(i)) {
-                        console.log(`🔍 Checking token validity during campaign (email ${i + 1}/${parsedLeads.length})`);
-                        const tokenValid = await campaignTokenManager.ensureValidToken(req.delegatedAuth, req.sessionId);
-                        if (!tokenValid) {
-                            console.error(`❌ Token refresh failed during campaign at email ${i + 1}`);
-                            results.failed++;
-                            results.errors.push(`Token refresh failed at email ${i + 1} - campaign stopped`);
-                            break; // Stop campaign if token can't be refreshed
-                        }
-                        // Get fresh Graph client if token was refreshed
+                    // Check token validity before each email (removed artificial 10-email limit)
+                    console.log(`🔍 Ensuring token validity for email ${i + 1}/${parsedLeads.length}`);
+                    const tokenValid = await campaignTokenManager.ensureValidToken(req.delegatedAuth, req.sessionId);
+                    if (!tokenValid) {
+                        console.error(`❌ Token refresh failed during campaign at email ${i + 1}`);
+                        results.failed++;
+                        results.errors.push(`Token refresh failed at email ${i + 1} - campaign stopped`);
+                        break; // Stop campaign if token can't be refreshed
+                    }
+
+                    // Always create fresh Graph client before each Graph API operation to handle token rotation
+                    try {
                         graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+                    } catch (graphClientError) {
+                        console.error(`❌ Failed to create Graph client for ${lead.Email}:`, graphClientError.message);
+                        results.failed++;
+                        results.errors.push(`${lead.Email}: Failed to create Graph client - ${graphClientError.message}`);
+                        continue; // Skip this email and continue with next
                     }
 
                     console.log(`🔄 Processing lead: ${lead.Email} (${lead.Name}) with ${processedAttachments.length} attachments`);
@@ -1580,18 +1586,24 @@ router.post('/send-campaign', requireDelegatedAuth, async (req, res) => {
                         lead.AI_Generated_Email = `Subject: ${subject}\n\n${emailTemplate}`;
                     }
 
-                    // Check if token refresh is needed during campaign (every 10 emails)
-                    if (campaignTokenManager.shouldCheckToken(i)) {
-                        console.log(`🔍 Checking token validity during campaign (email ${i + 1}/${leads.length})`);
-                        const tokenValid = await campaignTokenManager.ensureValidToken(req.delegatedAuth, req.sessionId);
-                        if (!tokenValid) {
-                            console.error(`❌ Token refresh failed during campaign at email ${i + 1}`);
-                            results.failed++;
-                            results.errors.push(`Token refresh failed at email ${i + 1} - campaign stopped`);
-                            break; // Stop campaign if token can't be refreshed
-                        }
-                        // Get fresh Graph client if token was refreshed
+                    // Check token validity before each email (removed artificial 10-email limit)
+                    console.log(`🔍 Ensuring token validity for email ${i + 1}/${leads.length}`);
+                    const tokenValid = await campaignTokenManager.ensureValidToken(req.delegatedAuth, req.sessionId);
+                    if (!tokenValid) {
+                        console.error(`❌ Token refresh failed during campaign at email ${i + 1}`);
+                        results.failed++;
+                        results.errors.push(`Token refresh failed at email ${i + 1} - campaign stopped`);
+                        break; // Stop campaign if token can't be refreshed
+                    }
+
+                    // Always create fresh Graph client before each Graph API operation to handle token rotation
+                    try {
                         graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+                    } catch (graphClientError) {
+                        console.error(`❌ Failed to create Graph client for ${lead.Email}:`, graphClientError.message);
+                        results.failed++;
+                        results.errors.push(`${lead.Email}: Failed to create Graph client - ${graphClientError.message}`);
+                        continue; // Skip this email and continue with next
                     }
 
                     console.log(`🔄 Processing lead: ${lead.Email} (${lead.Name})`);

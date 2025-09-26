@@ -292,17 +292,24 @@ class DelegatedGraphAuth {
                 try {
                     return await this.getAccessToken(sessionId);
                 } catch (tokenError) {
-                    // Smart error suppression for repeated auth failures
+                    // Enhanced error logging for token refresh failures
                     const errorCount = this.errorSuppressionCount.get(sessionId) || 0;
-                    
-                    if (errorCount < 3) {
-                        console.error(`🔄 Token refresh failed during Graph API call:`, tokenError.message);
+
+                    if (errorCount < 5) { // Increased from 3 to 5 for better debugging
+                        console.error(`🔄 Token refresh failed during Graph API call (attempt ${errorCount + 1}):`, tokenError.message);
+                        console.error(`🔍 Error details:`, {
+                            errorCode: tokenError.errorCode || tokenError.code,
+                            statusCode: tokenError.statusCode,
+                            sessionId: sessionId,
+                            timestamp: new Date().toISOString()
+                        });
                         this.errorSuppressionCount.set(sessionId, errorCount + 1);
-                    } else if (errorCount === 3) {
-                        console.error(`🔄 Multiple token refresh failures for session ${sessionId}. Suppressing further auth error logs to prevent spam.`);
+                    } else if (errorCount === 5) {
+                        console.error(`🔄 Multiple token refresh failures for session ${sessionId}. Will suppress further logs after this message.`);
+                        console.error(`🚨 CRITICAL: Session ${sessionId} requires re-authentication. Check Azure credentials and refresh token validity.`);
                         this.errorSuppressionCount.set(sessionId, errorCount + 1);
                     }
-                    // errorCount > 3: suppress logging
+                    // errorCount > 5: suppress logging but continue to function
                     
                     throw tokenError;
                 }
