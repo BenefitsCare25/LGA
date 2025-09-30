@@ -275,7 +275,7 @@ router.post('/scrape-leads', async (req, res) => {
 
         // AI-powered phone lookup for leads without phone numbers
         console.log(`📞 Checking for missing phone numbers in ${transformedLeads.length} leads...`);
-        const leadsWithoutPhone = transformedLeads.filter(lead => !lead.phone_number || lead.phone_number.trim() === '');
+        const leadsWithoutPhone = transformedLeads.filter(lead => !lead.phone_number || (typeof lead.phone_number === 'string' && lead.phone_number.trim() === ''));
 
         if (leadsWithoutPhone.length > 0) {
             console.log(`🔍 Found ${leadsWithoutPhone.length} leads without phone numbers - starting AI lookup...`);
@@ -719,7 +719,7 @@ async function processApolloJob(apolloJobId) {
 
         // AI-powered phone lookup for leads without phone numbers
         console.log(`📞 Apollo job ${apolloJobId}: Checking for missing phone numbers in ${transformedLeads.length} leads...`);
-        const leadsWithoutPhone = transformedLeads.filter(lead => !lead.phone_number || lead.phone_number.trim() === '');
+        const leadsWithoutPhone = transformedLeads.filter(lead => !lead.phone_number || (typeof lead.phone_number === 'string' && lead.phone_number.trim() === ''));
 
         if (leadsWithoutPhone.length > 0) {
             console.log(`🔍 Apollo job ${apolloJobId}: Found ${leadsWithoutPhone.length} leads without phone numbers - starting AI lookup...`);

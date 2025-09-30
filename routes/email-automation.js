@@ -1834,7 +1834,7 @@ router.post('/find-missing-phones', requireDelegatedAuth, async (req, res) => {
         // Filter leads with missing phone numbers
         const leadsWithoutPhone = allLeads.filter(lead => {
             const phone = lead.Phone || lead.phone || lead['Phone Number'] || lead['Contact Number'];
-            return !phone || phone.trim() === '';
+            return !phone || (typeof phone === 'string' && phone.trim() === '');
         });
 
         console.log(`📊 Found ${leadsWithoutPhone.length} leads without phone numbers out of ${allLeads.length} total leads`);
