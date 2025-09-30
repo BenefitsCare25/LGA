@@ -12,6 +12,7 @@ const { getTemplatesViaGraphAPI } = require('./email-templates');
 const CampaignTokenManager = require('../utils/campaignTokenManager');
 const excelDuplicateChecker = require('../utils/excelDuplicateChecker');
 const CampaignLockManager = require('../utils/campaignLockManager');
+const EmailSender = require('../utils/EmailSender');
 const router = express.Router();
 
 // Configure multer for file uploads
@@ -1261,168 +1262,80 @@ router.post('/send-campaign-with-attachments', requireDelegatedAuth, uploadAttac
         campaignTokenManager.startCampaignTracking(req.sessionId, results.estimatedTime.totalMs);
 
         try {
-            // Process each lead with duplicate checking
-            for (let i = 0; i < parsedLeads.length; i++) {
-                const lead = parsedLeads[i];
-                try {
-                    if (!lead.Email) {
-                        results.failed++;
-                        results.errors.push(`Lead missing email: ${lead.Name || 'Unknown'}`);
-                        continue;
-                    }
-
-                    // Check if email has already been sent using Excel data (single source of truth)
-                    const duplicateCheck = await excelDuplicateChecker.isEmailAlreadySent(graphClient, lead.Email);
-                    if (duplicateCheck.alreadySent) {
-                        console.log(`⚠️ DUPLICATE PREVENTED: ${lead.Email} - ${duplicateCheck.reason}`);
-                        results.duplicates++;
-                        continue;
-                    }
-
-                    console.log(`🔍 DELAY DEBUG: leadIndex=${i}, totalLeads=${parsedLeads.length}, shouldDelay=${i < parsedLeads.length - 1}`);
-
-                    // Determine email choice - use finalTemplateChoice from frontend or lead's existing choice
-                    let emailChoice = finalTemplateChoice;
-                    if (emailChoice === 'custom' && emailTemplate) {
-                        // For custom templates, create temporary template-like structure
-                        emailChoice = 'AI_Generated'; // Process as custom content
-                        lead.AI_Generated_Email = `Subject: ${subject}\n\n${emailTemplate}`;
-                    }
-
-                    // Check token validity before each email (removed artificial 10-email limit)
-                    console.log(`🔍 Ensuring token validity for email ${i + 1}/${parsedLeads.length}`);
-                    const tokenValid = await campaignTokenManager.ensureValidToken(req.delegatedAuth, req.sessionId);
-                    if (!tokenValid) {
-                        console.error(`❌ Token refresh failed during campaign at email ${i + 1}`);
-                        results.failed++;
-                        results.errors.push(`Token refresh failed at email ${i + 1} - campaign stopped`);
-                        break; // Stop campaign if token can't be refreshed
-                    }
-
-                    // Always create fresh Graph client before each Graph API operation to handle token rotation
-                    try {
-                        graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
-                    } catch (graphClientError) {
-                        console.error(`❌ Failed to create Graph client for ${lead.Email}:`, graphClientError.message);
-                        results.failed++;
-                        results.errors.push(`${lead.Email}: Failed to create Graph client - ${graphClientError.message}`);
-                        continue; // Skip this email and continue with next
-                    }
-
-                    console.log(`🔄 Processing lead: ${lead.Email} (${lead.Name}) with ${processedAttachments.length} attachments`);
-
-                    // Process email content
-                    const emailContent = await emailContentProcessor.processEmailContent(
-                        lead,
-                        emailChoice,
-                        templates
-                    );
-
-                    console.log(`📧 Processing email content for ${lead.Email} using ${emailChoice}`);
-
-                    // Send email via Microsoft Graph with attachments
-                    const emailMessage = emailContentProcessor.createEmailMessage(
-                        emailContent,
-                        lead.Email,
-                        lead,
-                        trackReads,
-                        processedAttachments // Use processed attachments
-                    );
-
-                    console.log(`📧 Attempting to send email via Microsoft Graph to: ${lead.Email} with ${processedAttachments.length} attachments`);
-
-                    await graphClient
-                        .api('/me/sendMail')
-                        .post({ message: emailMessage });
-
-                    console.log(`📧 Email sent to: ${lead.Email} with attachments`);
-
-                    // Update lead status
-                    const updates = {
-                        Status: 'Sent',
-                        Last_Email_Date: new Date().toISOString().split('T')[0],
-                        Email_Count: (lead.Email_Count || 0) + 1,
-                        Template_Used: emailContent.contentType,
-                        'Email Bounce': 'No', // Initialize bounce status
-                        'Attachments_Sent': processedAttachments.length > 0 ? processedAttachments.map(a => a.name).join(', ') : 'None'
-                    };
-
-                    results.sent++;
-
-                    // IMMEDIATE Excel update right after email is sent (for real-time tracking)
-                    console.log(`📊 Updating Excel for ${lead.Email} immediately...`);
-                    try {
-                        await excelUpdateQueue.queueUpdate(
-                            lead.Email, // Use email as file identifier
-                            () => updateLeadViaGraphAPI(graphClient, lead.Email, updates),
-                            {
-                                type: 'campaign-send-attachments',
-                                email: lead.Email,
-                                source: 'email-automation',
-                                priority: 'high' // High priority for immediate updates
-                            }
-                        );
-                        console.log(`✅ Excel updated for ${lead.Email} - Status: Sent with ${processedAttachments.length} attachments`);
-                    } catch (excelError) {
-                        console.error(`⚠️ Excel update failed for ${lead.Email}: ${excelError.message}`);
-                        // Continue campaign even if Excel update fails
-                    }
-
-                    console.log(`📊 Campaign progress: ${results.sent}/${parsedLeads.length} sent (${Math.round((results.sent / parsedLeads.length) * 100)}% complete)`);
-
-                    // Add random delay between emails AFTER Excel updates (skip delay for last email)
-                    if (i < parsedLeads.length - 1) {
-                        const delayMs = await emailDelayUtils.progressiveDelay(i, parsedLeads.length);
-                        console.log(`⏳ Adding ${Math.round(delayMs / 1000)}s delay before next email...`);
-                        await new Promise(resolve => setTimeout(resolve, delayMs));
-                        console.log(`✅ Delay completed - ready for next email`);
-                    } else {
-                        console.log(`🏁 Last email - campaign complete`);
-                    }
-
-                } catch (emailError) {
-                    console.error(`❌ Failed to send email to ${lead.Email}:`, emailError.message);
-
-                    results.failed++;
-                    results.errors.push(`${lead.Email}: ${emailError.message}`);
-
-                    // IMMEDIATE Excel update for failed emails (track attempt and failure reason)
-                    console.log(`📊 Updating Excel for ${lead.Email} - marking as failed...`);
-                    try {
-                        const failedUpdates = {
-                            Status: 'Failed',
-                            Last_Email_Date: new Date().toISOString().split('T')[0],
-                            Email_Count: (lead.Email_Count || 0) + 1, // Still increment attempt count
-                            'Email Bounce': 'No',
-                            'Failed Date': new Date().toISOString(),
-                            'Failure Reason': emailError.message?.substring(0, 255) || 'Unknown error' // Limit length
-                        };
-
-                        await excelUpdateQueue.queueUpdate(
-                            lead.Email,
-                            () => updateLeadViaGraphAPI(graphClient, lead.Email, failedUpdates),
-                            {
-                                type: 'campaign-failed-attachments',
-                                email: lead.Email,
-                                source: 'email-automation',
-                                priority: 'high'
-                            }
-                        );
-                        console.log(`✅ Excel updated for ${lead.Email} - Status: Failed`);
-                    } catch (excelError) {
-                        console.error(`⚠️ Failed to update Excel for failed email ${lead.Email}: ${excelError.message}`);
-                    }
-
-                    console.log(`📊 Campaign progress: ${results.sent}/${parsedLeads.length} sent, ${results.failed} failed (${Math.round(((results.sent + results.failed) / parsedLeads.length) * 100)}% complete)`);
-
-                    // Add delay even after failures to maintain sending pattern
-                    if (i < parsedLeads.length - 1) {
-                        console.log(`⏳ Adding delay after failure before next email...`);
-                        await emailDelayUtils.randomDelay(15, 45); // Shorter delay after failures
-                        console.log(`✅ Delay completed - Ready for next email`);
-                    }
+            // Create buildEmailContent function for EmailSender
+            const buildEmailContent = async (lead, templates, emailConfig) => {
+                // Determine email choice - use finalTemplateChoice from frontend or lead's existing choice
+                let emailChoice = finalTemplateChoice;
+                if (emailChoice === 'custom' && emailTemplate) {
+                    // For custom templates, create temporary template-like structure
+                    emailChoice = 'AI_Generated'; // Process as custom content
+                    lead.AI_Generated_Email = `Subject: ${subject}\n\n${emailTemplate}`;
                 }
-            }
+
+                // Process email content
+                const emailContent = await emailContentProcessor.processEmailContent(
+                    lead,
+                    emailChoice,
+                    templates
+                );
+
+                // Create email message with attachments
+                const emailMessage = emailContentProcessor.createEmailMessage(
+                    emailContent,
+                    lead.Email,
+                    lead,
+                    trackReads,
+                    processedAttachments
+                );
+
+                // Excel updates with attachment info
+                const excelUpdates = {
+                    Status: 'Sent',
+                    Last_Email_Date: new Date().toISOString().split('T')[0],
+                    Email_Count: (lead.Email_Count || 0) + 1,
+                    Template_Used: emailContent.contentType,
+                    'Email Bounce': 'No',
+                    'Attachments_Sent': processedAttachments.length > 0 ? processedAttachments.map(a => a.name).join(', ') : 'None'
+                };
+
+                return { message: emailMessage, excelUpdates };
+            };
+
+            // Create filterLead function for duplicate checking
+            const filterLead = async (lead, graphClient) => {
+                const duplicateCheck = await excelDuplicateChecker.isEmailAlreadySent(graphClient, lead.Email);
+                if (duplicateCheck.alreadySent) {
+                    console.log(`⚠️ DUPLICATE PREVENTED: ${lead.Email} - ${duplicateCheck.reason}`);
+                }
+                return { skip: duplicateCheck.alreadySent, reason: duplicateCheck.reason };
+            };
+
+            // Send campaign using EmailSender utility
+            const campaignResults = await EmailSender.sendCampaign({
+                graphClient,
+                leads: parsedLeads,
+                templates,
+                campaignId: results.campaignId,
+                attachments: processedAttachments,
+                delegatedAuth: req.delegatedAuth,
+                sessionId: req.sessionId,
+                emailConfig: { finalTemplateChoice, emailTemplate, subject },
+                buildEmailContent,
+                filterLead,
+                onProgress: async (index, total, lead) => {
+                    console.log(`🔄 Processing lead: ${lead.Email} (${lead.Name}) with ${processedAttachments.length} attachments`);
+                },
+                getDelay: async (index, total) => {
+                    return await emailDelayUtils.progressiveDelay(index, total);
+                },
+                trackReads
+            });
+
+            // Merge results from EmailSender
+            results.sent = campaignResults.sent;
+            results.failed = campaignResults.failed;
+            results.duplicates = campaignResults.duplicates;
+            results.errors = campaignResults.errors;
 
             console.log(`✅ Campaign completed: ${results.sent} sent, ${results.failed} failed, ${results.duplicates} duplicates prevented, ${processedAttachments.length} attachments per email`);
 
@@ -1558,182 +1471,94 @@ router.post('/send-campaign', requireDelegatedAuth, async (req, res) => {
         campaignTokenManager.startCampaignTracking(req.sessionId, results.estimatedTime.totalMs);
 
         try {
-            // Process each lead with duplicate checking
-            for (let i = 0; i < leads.length; i++) {
-                const lead = leads[i];
-                try {
-                    if (!lead.Email) {
-                        results.failed++;
-                        results.errors.push(`Lead missing email: ${lead.Name || 'Unknown'}`);
-                        continue;
-                    }
+            // Create buildEmailContent function for EmailSender
+            const buildEmailContent = async (lead, templates, emailConfig) => {
+                // Determine email choice - use templateChoice from frontend or lead's existing choice
+                let emailChoice = templateChoice;
+                if (emailChoice === 'custom' && emailTemplate) {
+                    // For custom templates, create temporary template-like structure
+                    emailChoice = 'AI_Generated'; // Process as custom content
+                    lead.AI_Generated_Email = `Subject: ${subject}\n\n${emailTemplate}`;
+                }
 
-                    // Check if email has already been sent using Excel data (single source of truth)
-                    const duplicateCheck = await excelDuplicateChecker.isEmailAlreadySent(graphClient, lead.Email);
-                    if (duplicateCheck.alreadySent) {
-                        console.log(`⚠️ DUPLICATE PREVENTED: ${lead.Email} - ${duplicateCheck.reason}`);
-                        results.duplicates++;
-                        continue;
-                    }
+                // Process email content
+                const emailContent = await emailContentProcessor.processEmailContent(
+                    lead,
+                    emailChoice,
+                    templates
+                );
 
-                    console.log(`🔍 DELAY DEBUG: leadIndex=${i}, totalLeads=${leads.length}, shouldDelay=${i < leads.length - 1}`);
-
-                    // Determine email choice - use finalTemplateChoice from frontend or lead's existing choice
-                    let emailChoice = finalTemplateChoice;
-                    if (emailChoice === 'custom' && emailTemplate) {
-                        // For custom templates, create temporary template-like structure
-                        emailChoice = 'AI_Generated'; // Process as custom content
-                        lead.AI_Generated_Email = `Subject: ${subject}\n\n${emailTemplate}`;
-                    }
-
-                    // Check token validity before each email (removed artificial 10-email limit)
-                    console.log(`🔍 Ensuring token validity for email ${i + 1}/${leads.length}`);
-                    const tokenValid = await campaignTokenManager.ensureValidToken(req.delegatedAuth, req.sessionId);
-                    if (!tokenValid) {
-                        console.error(`❌ Token refresh failed during campaign at email ${i + 1}`);
-                        results.failed++;
-                        results.errors.push(`Token refresh failed at email ${i + 1} - campaign stopped`);
-                        break; // Stop campaign if token can't be refreshed
-                    }
-
-                    // Always create fresh Graph client before each Graph API operation to handle token rotation
-                    try {
-                        graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
-                    } catch (graphClientError) {
-                        console.error(`❌ Failed to create Graph client for ${lead.Email}:`, graphClientError.message);
-                        results.failed++;
-                        results.errors.push(`${lead.Email}: Failed to create Graph client - ${graphClientError.message}`);
-                        continue; // Skip this email and continue with next
-                    }
-
-                    console.log(`🔄 Processing lead: ${lead.Email} (${lead.Name})`);
-
-                    // Process email content
-                    const emailContent = await emailContentProcessor.processEmailContent(
-                        lead, 
-                        emailChoice, 
-                        templates
+                // Extract attachments from template if using a template
+                let attachments = [];
+                if (emailChoice !== 'AI_Generated' && templates) {
+                    const template = templates.find(t =>
+                        t.Template_ID === emailChoice ||
+                        t.Template_Name === emailChoice ||
+                        t.Template_Type === emailChoice
                     );
 
-                    console.log(`📧 Processing email content for ${lead.Email} using ${emailChoice}`);
-
-                    // Extract attachments from template if using a template
-                    let attachments = [];
-                    if (emailChoice !== 'AI_Generated' && templates) {
-                        const template = templates.find(t =>
-                            t.Template_ID === emailChoice ||
-                            t.Template_Name === emailChoice ||
-                            t.Template_Type === emailChoice
-                        );
-
-                        if (template && template.attachments && template.attachments.length > 0) {
-                            attachments = template.attachments;
-                            console.log(`📎 Found ${attachments.length} attachments in template ${emailChoice}`);
-                        }
-                    }
-
-                    // Send email via Microsoft Graph
-                    const emailMessage = emailContentProcessor.createEmailMessage(
-                        emailContent,
-                        lead.Email,
-                        lead,
-                        trackReads,
-                        attachments
-                    );
-
-                    console.log(`📧 Attempting to send email via Microsoft Graph to: ${lead.Email}`);
-
-                    await graphClient
-                        .api('/me/sendMail')
-                        .post({ message: emailMessage });
-
-                    console.log(`📧 Email sent to: ${lead.Email}`);
-
-                    // Update lead status
-                    const updates = {
-                        Status: 'Sent',
-                        Last_Email_Date: new Date().toISOString().split('T')[0],
-                        Email_Count: (lead.Email_Count || 0) + 1,
-                        Template_Used: emailContent.contentType,
-                        'Email Bounce': 'No' // Initialize bounce status
-                    };
-
-                    results.sent++;
-
-                    // IMMEDIATE Excel update right after email is sent (for real-time tracking)
-                    console.log(`📊 Updating Excel for ${lead.Email} immediately...`);
-                    try {
-                        await excelUpdateQueue.queueUpdate(
-                            lead.Email, // Use email as file identifier
-                            () => updateLeadViaGraphAPI(graphClient, lead.Email, updates),
-                            { 
-                                type: 'campaign-send', 
-                                email: lead.Email, 
-                                source: 'email-automation',
-                                priority: 'high' // High priority for immediate updates
-                            }
-                        );
-                        console.log(`✅ Excel updated for ${lead.Email} - Status: Sent`);
-                    } catch (excelError) {
-                        console.error(`⚠️ Excel update failed for ${lead.Email}: ${excelError.message}`);
-                        // Continue campaign even if Excel update fails
-                    }
-
-                    console.log(`📊 Campaign progress: ${results.sent}/${leads.length} sent (${Math.round((results.sent / leads.length) * 100)}% complete)`);
-
-                    // Add random delay between emails AFTER Excel updates (skip delay for last email)
-                    if (i < leads.length - 1) {
-                        const delayMs = await emailDelayUtils.progressiveDelay(i, leads.length);
-                        console.log(`⏳ Adding ${Math.round(delayMs / 1000)}s delay before next email...`);
-                        await new Promise(resolve => setTimeout(resolve, delayMs));
-                        console.log(`✅ Delay completed - ready for next email`);
-                    } else {
-                        console.log(`🏁 Last email - campaign complete`);
-                    }
-
-                } catch (emailError) {
-                    console.error(`❌ Failed to send email to ${lead.Email}:`, emailError.message);
-                    
-                    results.failed++;
-                    results.errors.push(`${lead.Email}: ${emailError.message}`);
-
-                    // IMMEDIATE Excel update for failed emails (track attempt and failure reason)
-                    console.log(`📊 Updating Excel for ${lead.Email} - marking as failed...`);
-                    try {
-                        const failedUpdates = {
-                            Status: 'Failed',
-                            Last_Email_Date: new Date().toISOString().split('T')[0],
-                            Email_Count: (lead.Email_Count || 0) + 1, // Still increment attempt count
-                            'Email Bounce': 'No',
-                            'Failed Date': new Date().toISOString(),
-                            'Failure Reason': emailError.message?.substring(0, 255) || 'Unknown error' // Limit length
-                        };
-
-                        await excelUpdateQueue.queueUpdate(
-                            lead.Email,
-                            () => updateLeadViaGraphAPI(graphClient, lead.Email, failedUpdates),
-                            { 
-                                type: 'campaign-failed', 
-                                email: lead.Email, 
-                                source: 'email-automation',
-                                priority: 'high'
-                            }
-                        );
-                        console.log(`✅ Excel updated for ${lead.Email} - Status: Failed`);
-                    } catch (excelError) {
-                        console.error(`⚠️ Failed to update Excel for failed email ${lead.Email}: ${excelError.message}`);
-                    }
-
-                    console.log(`📊 Campaign progress: ${results.sent}/${leads.length} sent, ${results.failed} failed (${Math.round(((results.sent + results.failed) / leads.length) * 100)}% complete)`);
-                    
-                    // Add delay even after failures to maintain sending pattern
-                    if (i < leads.length - 1) {
-                        console.log(`⏳ Adding delay after failure before next email...`);
-                        await emailDelayUtils.randomDelay(15, 45); // Shorter delay after failures
-                        console.log(`✅ Delay completed - Ready for next email`);
+                    if (template && template.attachments && template.attachments.length > 0) {
+                        attachments = template.attachments;
+                        console.log(`📎 Found ${attachments.length} attachments in template ${emailChoice}`);
                     }
                 }
-            }
+
+                // Create email message with template attachments
+                const emailMessage = emailContentProcessor.createEmailMessage(
+                    emailContent,
+                    lead.Email,
+                    lead,
+                    trackReads,
+                    attachments
+                );
+
+                // Excel updates
+                const excelUpdates = {
+                    Status: 'Sent',
+                    Last_Email_Date: new Date().toISOString().split('T')[0],
+                    Email_Count: (lead.Email_Count || 0) + 1,
+                    Template_Used: emailContent.contentType,
+                    'Email Bounce': 'No'
+                };
+
+                return { message: emailMessage, excelUpdates };
+            };
+
+            // Create filterLead function for duplicate checking
+            const filterLead = async (lead, graphClient) => {
+                const duplicateCheck = await excelDuplicateChecker.isEmailAlreadySent(graphClient, lead.Email);
+                if (duplicateCheck.alreadySent) {
+                    console.log(`⚠️ DUPLICATE PREVENTED: ${lead.Email} - ${duplicateCheck.reason}`);
+                }
+                return { skip: duplicateCheck.alreadySent, reason: duplicateCheck.reason };
+            };
+
+            // Send campaign using EmailSender utility
+            const campaignResults = await EmailSender.sendCampaign({
+                graphClient,
+                leads: leads,
+                templates,
+                campaignId: results.campaignId,
+                attachments: [],
+                delegatedAuth: req.delegatedAuth,
+                sessionId: req.sessionId,
+                emailConfig: { templateChoice, emailTemplate, subject },
+                buildEmailContent,
+                filterLead,
+                onProgress: async (index, total, lead) => {
+                    console.log(`🔄 Processing lead: ${lead.Email} (${lead.Name})`);
+                },
+                getDelay: async (index, total) => {
+                    return await emailDelayUtils.progressiveDelay(index, total);
+                },
+                trackReads
+            });
+
+            // Merge results from EmailSender
+            results.sent = campaignResults.sent;
+            results.failed = campaignResults.failed;
+            results.duplicates = campaignResults.duplicates;
+            results.errors = campaignResults.errors;
 
             console.log(`✅ Campaign completed: ${results.sent} sent, ${results.failed} failed, ${results.duplicates} duplicates prevented`);
 

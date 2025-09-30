@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const { requireDelegatedAuth } = require('../middleware/delegatedGraphAuth');
 const EmailContentProcessor = require('../utils/emailContentProcessor');
+const EmailSender = require('../utils/EmailSender');
 const excelUpdateQueue = require('../utils/excelUpdateQueue');
 const { getExcelColumnLetter, getLeadsViaGraphAPI, updateLeadViaGraphAPI } = require('../utils/excelGraphAPI');
 const CampaignTokenManager = require('../utils/campaignTokenManager');
@@ -334,7 +335,9 @@ router.post('/campaigns/start-with-attachments', upload.array('attachments', 10)
                 templates,
                 campaignId,
                 followUpDays || 7,
-                processedAttachments
+                processedAttachments,
+                req.delegatedAuth,  // Pass auth provider for token refresh
+                req.sessionId       // Pass session ID for token refresh
             );
 
             emailsSent = sendResults.sent;
@@ -1492,11 +1495,7 @@ async function getScheduledCampaignsDueViaGraphAPI(graphClient) {
 }
 
 // Helper function to send emails to leads with direct attachments
-async function sendEmailsToLeadsWithAttachments(graphClient, leads, emailContentType, templates, campaignId, followUpDays = 7, attachments = []) {
-    const results = [];
-    const errors = [];
-    let sent = 0;
-
+async function sendEmailsToLeadsWithAttachments(graphClient, leads, emailContentType, templates, campaignId, followUpDays = 7, attachments = [], delegatedAuth = null, sessionId = null) {
     console.log(`📧 STARTING EMAIL SEND PROCESS WITH ATTACHMENTS:`);
     console.log(`   - Leads to process: ${leads.length}`);
     console.log(`   - Email content type: ${emailContentType}`);
@@ -1504,194 +1503,99 @@ async function sendEmailsToLeadsWithAttachments(graphClient, leads, emailContent
     console.log(`   - Templates available: ${templates.length}`);
     console.log(`   - Attachments: ${attachments.length}`);
 
-    // Initialize campaign token manager for long campaigns
-    const campaignTokenManager = new CampaignTokenManager();
-    const estimatedDurationMs = leads.length * 60000; // Rough estimate: 1 minute per email
-    console.log(`⏱️ Estimated campaign duration: ${Math.round(estimatedDurationMs / 60000)} minutes`);
+    // Create buildEmailContent function for EmailSender
+    const buildEmailContent = async (lead, templates, emailConfig) => {
+        // Process email content
+        const emailContent = await emailContentProcessor.processEmailContent(
+            lead,
+            emailContentType,
+            templates
+        );
 
-    for (let i = 0; i < leads.length; i++) {
-        const lead = leads[i];
-        try {
-            // Only log processing every 10 leads or on first/last
-            if (i === 0 || i === leads.length - 1 || (i + 1) % 10 === 0) {
-                console.log(`🔄 Processing lead ${i + 1}/${leads.length}: ${lead.Email} (${lead.Name})`);
-            }
-
-            // Process email content
-            const emailContent = await emailContentProcessor.processEmailContent(
-                lead,
-                emailContentType,
-                templates
-            );
-
-            // Validate email content
-            const validation = emailContentProcessor.validateEmailContent(emailContent);
-            if (!validation.isValid) {
-                console.error(`❌ Email validation failed for ${lead.Email}:`, validation.errors);
-                errors.push({
-                    email: lead.Email,
-                    name: lead.Name,
-                    error: 'Invalid email content: ' + validation.errors.join(', ')
-                });
-                continue;
-            }
-
-            // Send email using Microsoft Graph with attachments
-            const emailMessage = {
-                subject: emailContent.subject,
-                body: {
-                    contentType: 'HTML',
-                    content: emailContentProcessor.convertToHTML(emailContent, lead.Email, lead)
-                },
-                toRecipients: [
-                    {
-                        emailAddress: {
-                            address: lead.Email,
-                            name: lead.Name
-                        }
-                    }
-                ],
-                attachments: attachments // Add direct attachments here
-            };
-
-            // Handle token refresh for long campaigns
-            let sendResult;
-            try {
-                sendResult = await graphClient.api('/me/sendMail').post({
-                    message: emailMessage,
-                    saveToSentItems: true
-                });
-            } catch (tokenError) {
-                if (tokenError.message.includes('401') || tokenError.message.includes('unauthorized') ||
-                    tokenError.message.includes('Authentication expired')) {
-                    console.log('🔄 Token expired during campaign, attempting to refresh graph client...');
-                    throw new Error('Token refresh required - campaign should be restarted');
-                }
-                throw tokenError;
-            }
-
-            results.push({
-                ...lead,
-                emailSent: true,
-                campaignId: campaignId,
-                templateUsed: emailContent.contentType,
-                attachmentsCount: attachments.length,
-                sentAt: new Date().toISOString()
-            });
-
-            sent++;
-
-            // IMMEDIATE Excel update right after email is sent (for real-time tracking)
-            try {
-                const updates = {
-                    Status: 'Sent',
-                    Campaign_Stage: 'Email_Sent',
-                    Last_Email_Date: new Date().toISOString().split('T')[0],
-                    Next_Email_Date: calculateNextEmailDate(new Date(), followUpDays || 7),
-                    Email_Count: (lead.Email_Count || 0) + 1,
-                    Template_Used: emailContent.contentType,
-                    'Email Bounce': 'No',
-                    Campaign_ID: campaignId,
-                    Attachments_Sent: attachments.length
-                };
-
-                await excelUpdateQueue.queueUpdate(
-                    lead.Email,
-                    () => updateLeadViaGraphAPI(graphClient, lead.Email, updates),
-                    {
-                        type: 'campaign-send',
-                        email: lead.Email,
-                        source: 'email-scheduler-attachments',
-                        priority: 'high',
-                        quiet: errors.length > 10 // Enable quiet mode if many failures
-                    }
-                );
-            } catch (excelError) {
-                console.error(`⚠️ Excel update failed for ${lead.Email}: ${excelError.message}`);
-                // Continue campaign even if Excel update fails
-            }
-
-            // Show progress every 25 emails or on completion
-            if (i === leads.length - 1 || (sent + errors.length) % 25 === 0) {
-                console.log(`📊 Campaign progress: ${sent}/${leads.length} sent, ${errors.length} failed (${Math.round(((sent + errors.length) / leads.length) * 100)}% complete)`);
-            }
-
-            // Add progressive delay between emails (skip delay for last email)
-            if (i < leads.length - 1) {
-                const delaySeconds = Math.floor(Math.random() * (120 - 30 + 1)) + 30; // 30-120 seconds
-                await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
-            }
-
-        } catch (error) {
-            // Simplified error logging - only show first few detailed errors to prevent spam
-            if (errors.length < 3) {
-                console.error(`❌ Failed to send email to ${lead.Email}: ${error.message}`);
-            } else if (errors.length === 3) {
-                console.error(`❌ Multiple email failures detected. Suppressing detailed error logs to prevent spam.`);
-            }
-
-            // IMMEDIATE Excel update for failed emails (track attempt and failure reason)
-            try {
-                const failedUpdates = {
-                    Status: 'Failed',
-                    Last_Email_Date: new Date().toISOString().split('T')[0],
-                    Email_Count: (lead.Email_Count || 0) + 1,
-                    'Email Bounce': 'No',
-                    'Failed Date': new Date().toISOString(),
-                    'Failure Reason': error.message?.substring(0, 255) || 'Unknown error',
-                    Campaign_ID: campaignId
-                };
-
-                await excelUpdateQueue.queueUpdate(
-                    lead.Email,
-                    () => updateLeadViaGraphAPI(graphClient, lead.Email, failedUpdates),
-                    {
-                        type: 'campaign-failed',
-                        email: lead.Email,
-                        source: 'email-scheduler-attachments',
-                        priority: 'high',
-                        quiet: errors.length > 10 // Enable quiet mode if many failures
-                    }
-                );
-            } catch (excelError) {
-                if (errors.length < 3) {
-                    console.error(`⚠️ Failed to update Excel for failed email ${lead.Email}: ${excelError.message}`);
-                }
-            }
-
-            errors.push({
-                email: lead.Email,
-                name: lead.Name,
-                error: error.message,
-                errorCode: error.code,
-                statusCode: error.statusCode
-            });
-
-            // Show progress every 25 emails or on completion
-            if (i === leads.length - 1 || (sent + errors.length) % 25 === 0) {
-                console.log(`📊 Campaign progress: ${sent}/${leads.length} sent, ${errors.length} failed (${Math.round(((sent + errors.length) / leads.length) * 100)}% complete)`);
-            }
+        // Validate email content
+        const validation = emailContentProcessor.validateEmailContent(emailContent);
+        if (!validation.isValid) {
+            throw new Error('Invalid email content: ' + validation.errors.join(', '));
         }
-    }
+
+        // Create email message with attachments
+        const emailMessage = {
+            subject: emailContent.subject,
+            body: {
+                contentType: 'HTML',
+                content: emailContentProcessor.convertToHTML(emailContent, lead.Email, lead)
+            },
+            toRecipients: [
+                {
+                    emailAddress: {
+                        address: lead.Email,
+                        name: lead.Name
+                    }
+                }
+            ],
+            attachments: attachments
+        };
+
+        // Excel updates with attachment info
+        const excelUpdates = {
+            Status: 'Sent',
+            Campaign_Stage: 'Email_Sent',
+            Last_Email_Date: new Date().toISOString().split('T')[0],
+            Next_Email_Date: calculateNextEmailDate(new Date(), followUpDays || 7),
+            Email_Count: (lead.Email_Count || 0) + 1,
+            Template_Used: emailContent.contentType,
+            'Email Bounce': 'No',
+            Campaign_ID: campaignId,
+            Attachments_Sent: attachments.length
+        };
+
+        return { message: emailMessage, excelUpdates };
+    };
+
+    // Send campaign using EmailSender utility
+    const campaignResults = await EmailSender.sendCampaign({
+        graphClient,
+        leads,
+        templates,
+        campaignId,
+        attachments,
+        delegatedAuth,
+        sessionId,
+        emailConfig: { emailContentType },
+        buildEmailContent,
+        filterLead: null, // No duplicate checking in scheduler
+        onProgress: async (index, total, lead) => {
+            // Only log processing every 10 leads or on first/last
+            if (index === 0 || index === total - 1 || (index + 1) % 10 === 0) {
+                console.log(`🔄 Processing lead ${index + 1}/${total}: ${lead.Email} (${lead.Name})`);
+            }
+        },
+        getDelay: async (index, total) => {
+            // Progressive delay: 30-120 seconds
+            const delaySeconds = Math.floor(Math.random() * (120 - 30 + 1)) + 30;
+            return delaySeconds * 1000;
+        },
+        trackReads: false
+    });
 
     console.log(`📊 EMAIL SEND SUMMARY WITH ATTACHMENTS:`);
-    console.log(`   - Emails sent successfully: ${sent}`);
-    console.log(`   - Errors encountered: ${errors.length}`);
+    console.log(`   - Emails sent successfully: ${campaignResults.sent}`);
+    console.log(`   - Errors encountered: ${campaignResults.errors.length}`);
     console.log(`   - Attachments per email: ${attachments.length}`);
     console.log(`   - Excel updates: Immediate per-email (real-time tracking enabled)`);
-    if (errors.length > 0) {
-        console.log(`   - Error details:`, errors.map(e => `${e.email}: ${e.error}`));
+    if (campaignResults.errors.length > 0) {
+        console.log(`   - Error details:`, campaignResults.errors.map(e => `${e.email}: ${e.error}`));
     }
 
     return {
-        sent,
-        results,
-        errors,
+        sent: campaignResults.sent,
+        results: [], // EmailSender doesn't return detailed results array
+        errors: campaignResults.errors,
         excelUpdates: {
             realTimeUpdates: true,
             updateMethod: "immediate_per_email",
             queueingEnabled: true,
-            totalProcessed: sent + errors.length,
+            totalProcessed: campaignResults.sent + campaignResults.failed,
             source: "email-scheduler-attachments"
         }
     };
