@@ -5,7 +5,7 @@
 
 const { updateLeadViaGraphAPI } = require('./excelGraphAPI');
 const excelUpdateQueue = require('./excelUpdateQueue');
-const campaignTokenManager = require('./campaignTokenManager');
+const CampaignTokenManager = require('./campaignTokenManager');
 
 class EmailSender {
     /**
@@ -79,6 +79,7 @@ class EmailSender {
 
                 // Validate token before each email
                 if (canRefreshToken) {
+                    const campaignTokenManager = new CampaignTokenManager();
                     const tokenValid = await campaignTokenManager.ensureValidToken(delegatedAuth, sessionId);
                     if (!tokenValid) {
                         console.error(`🔐 Authentication session expired after ${results.sent} emails sent`);
