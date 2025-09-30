@@ -43,10 +43,11 @@ This is a lead generation automation tool that combines Apollo.io scraping with 
 **Utility Modules (utils/)**
 - `excelProcessor.js` - Excel file manipulation and processing
 - `excelGraphAPI.js` - Direct Excel updates via Microsoft Graph API
-- `emailContentProcessor.js` - Email content generation and processing  
+- `emailContentProcessor.js` - Email content generation and processing
 - `campaignLockManager.js` - Prevents concurrent campaign conflicts
 - `campaignTokenManager.js` - Manages campaign authentication tokens
 - `excelDuplicateChecker.js` - Prevents duplicate lead processing
+- `EmailSender.js` - Centralized email campaign sending with token refresh and error handling
 - `processSingleton.js` - Ensures single server instance
 
 ### Data Flow Architecture
@@ -108,9 +109,13 @@ Required environment variables (see `.env.example`):
 - Batch processing with error recovery for large datasets
 
 ### Email Campaign Architecture
+- Centralized campaign sending via EmailSender utility class
 - Template-based email generation with AI personalization
+- Automatic token refresh during long campaigns (>1 hour)
+- Graceful authentication expiration handling with campaign stops
 - Tracking via pixel images and Microsoft Graph inbox monitoring
 - Rate limiting and bounce detection for deliverability
+- Excel update queueing with proper closure handling
 
 ### Error Handling
 - Graceful degradation when optional services are unavailable
