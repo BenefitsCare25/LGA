@@ -1,5 +1,6 @@
 const express = require('express');
 const axios = require('axios');
+const PhoneNumberLookup = require('../utils/phoneNumberLookup');
 const router = express.Router();
 
 // Initialize Apollo job storage (in production, use Redis or database)
@@ -271,6 +272,42 @@ router.post('/scrape-leads', async (req, res) => {
             country: lead.country || 'Singapore',
             conversion_status: 'Pending'
         }));
+
+        // AI-powered phone lookup for leads without phone numbers
+        console.log(`📞 Checking for missing phone numbers in ${transformedLeads.length} leads...`);
+        const leadsWithoutPhone = transformedLeads.filter(lead => !lead.phone_number || lead.phone_number.trim() === '');
+
+        if (leadsWithoutPhone.length > 0) {
+            console.log(`🔍 Found ${leadsWithoutPhone.length} leads without phone numbers - starting AI lookup...`);
+
+            const phoneLookup = new PhoneNumberLookup();
+            let phonesFound = 0;
+
+            for (const lead of leadsWithoutPhone) {
+                try {
+                    const lookupResult = await phoneLookup.findPhoneNumber({
+                        Name: lead.name,
+                        'Company Name': lead.organization_name,
+                        'LinkedIn URL': lead.linkedin_url,
+                        Email: lead.email
+                    });
+
+                    if (lookupResult.found) {
+                        lead.phone_number = lookupResult.phoneNumber;
+                        phonesFound++;
+                        console.log(`✅ Found phone for ${lead.name}: ${lookupResult.phoneNumber}`);
+                    } else {
+                        console.log(`❌ No phone found for ${lead.name}: ${lookupResult.reason}`);
+                    }
+                } catch (error) {
+                    console.error(`❌ Phone lookup error for ${lead.name}:`, error.message);
+                }
+            }
+
+            console.log(`📞 AI phone lookup completed: ${phonesFound}/${leadsWithoutPhone.length} found`);
+        } else {
+            console.log(`✅ All leads already have phone numbers`);
+        }
 
         // For large datasets, don't return all leads in the response to avoid memory issues
         if (transformedLeads.length > 250) {
@@ -679,6 +716,42 @@ async function processApolloJob(apolloJobId) {
             country: lead.country || 'Singapore',
             conversion_status: 'Pending'
         }));
+
+        // AI-powered phone lookup for leads without phone numbers
+        console.log(`📞 Apollo job ${apolloJobId}: Checking for missing phone numbers in ${transformedLeads.length} leads...`);
+        const leadsWithoutPhone = transformedLeads.filter(lead => !lead.phone_number || lead.phone_number.trim() === '');
+
+        if (leadsWithoutPhone.length > 0) {
+            console.log(`🔍 Apollo job ${apolloJobId}: Found ${leadsWithoutPhone.length} leads without phone numbers - starting AI lookup...`);
+
+            const phoneLookup = new PhoneNumberLookup();
+            let phonesFound = 0;
+
+            for (const lead of leadsWithoutPhone) {
+                try {
+                    const lookupResult = await phoneLookup.findPhoneNumber({
+                        Name: lead.name,
+                        'Company Name': lead.organization_name,
+                        'LinkedIn URL': lead.linkedin_url,
+                        Email: lead.email
+                    });
+
+                    if (lookupResult.found) {
+                        lead.phone_number = lookupResult.phoneNumber;
+                        phonesFound++;
+                        console.log(`✅ Apollo job ${apolloJobId}: Found phone for ${lead.name}: ${lookupResult.phoneNumber}`);
+                    } else {
+                        console.log(`❌ Apollo job ${apolloJobId}: No phone found for ${lead.name}: ${lookupResult.reason}`);
+                    }
+                } catch (error) {
+                    console.error(`❌ Apollo job ${apolloJobId}: Phone lookup error for ${lead.name}:`, error.message);
+                }
+            }
+
+            console.log(`📞 Apollo job ${apolloJobId}: AI phone lookup completed: ${phonesFound}/${leadsWithoutPhone.length} found`);
+        } else {
+            console.log(`✅ Apollo job ${apolloJobId}: All leads already have phone numbers`);
+        }
 
         // Job completed successfully
         job.status = 'completed';

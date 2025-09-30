@@ -384,6 +384,9 @@
                     <button class="btn btn-success primary-action-btn" onclick="sendFilteredEmails()" title="Send emails to filtered leads">
                         📤 Send Emails
                     </button>
+                    <button class="btn btn-primary" onclick="findMissingPhoneNumbers()" title="Use AI to find missing phone numbers" style="margin-left: 10px;">
+                        📞 Find Missing Phones
+                    </button>
                 </div>
             </div>
             
@@ -2431,6 +2434,69 @@
                     isValid: false, 
                     message: 'Unable to validate email template. Please check your connection and try again.' 
                 };
+            }
+        }
+
+        // Find missing phone numbers using AI
+        async function findMissingPhoneNumbers() {
+            console.log('📞 Find Missing Phone Numbers button clicked');
+
+            // Confirm action
+            if (!confirm('This will use AI to find phone numbers for all leads that are missing contact information. This may take some time. Continue?')) {
+                return;
+            }
+
+            try {
+                // Show loading state
+                const btn = event.target;
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '⏳ Finding phone numbers...';
+
+                const response = await fetch('/api/email-automation/find-missing-phones', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Show detailed results
+                    const summary = result.summary;
+                    const message = `✅ Phone Number Lookup Complete!\n\n` +
+                        `📊 Results:\n` +
+                        `• Total Leads: ${summary.totalLeads}\n` +
+                        `• Missing Phones: ${summary.missingPhones}\n` +
+                        `• Phones Found: ${summary.phonesFound} ✅\n` +
+                        `• Not Found: ${summary.phonesNotFound} ❌\n` +
+                        `• Excel Updated: ${summary.excelUpdated}\n\n` +
+                        `The Excel file has been updated with the found phone numbers.`;
+
+                    alert(message);
+
+                    // Refresh the master list to show updated phone numbers
+                    await loadMasterList();
+
+                    console.log('📞 Phone lookup results:', result);
+                } else {
+                    alert(`❌ Phone Lookup Failed\n\n${result.message || 'Unknown error'}`);
+                }
+
+                // Restore button
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+
+            } catch (error) {
+                console.error('❌ Phone lookup error:', error);
+                alert(`❌ Error: ${error.message || 'Failed to find phone numbers'}`);
+
+                // Restore button
+                const btn = event.target;
+                btn.disabled = false;
+                btn.innerHTML = '📞 Find Missing Phones';
             }
         }
 

@@ -118,13 +118,16 @@ Required environment variables (see `.env.example`):
 - Excel update queueing with proper closure handling
 
 ### Phone Number Lookup (AI-Powered Feature)
-- AI-powered phone number discovery via OpenAI (utils/phoneNumberLookup.js)
-- Automatic lookup for leads with missing phone numbers during Excel import
-- Manual batch lookup via `/api/email-automation/find-missing-phones` endpoint
-- Targeted lookup for specific leads via `/api/email-automation/find-phones-for-leads` endpoint
-- Caching system to avoid duplicate API calls (24-hour cache)
-- Updates Excel file in OneDrive via Microsoft Graph API
-- Rate limiting and error handling for batch operations
+- **Automatic Integration**: Phone lookup runs automatically during Apollo scraping for leads without phone numbers
+- **AI-powered discovery**: Uses OpenAI GPT-4o-mini to search for contact phone numbers online
+- **Manual lookup options**:
+  - Frontend: "Find Missing Phones" button in email-automation.html
+  - API: `/api/email-automation/find-missing-phones` (batch lookup for all missing)
+  - API: `/api/email-automation/find-phones-for-leads` (targeted lookup by email list)
+- **Smart caching**: 24-hour cache prevents duplicate API calls for same leads
+- **Automatic Excel updates**: Found phone numbers automatically saved to OneDrive Excel file via Graph API
+- **No rate limiting**: Processes all leads as fast as possible
+- **Comprehensive logging**: Detailed progress tracking and error reporting
 
 ### Error Handling
 - Graceful degradation when optional services are unavailable
