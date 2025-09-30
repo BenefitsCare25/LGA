@@ -117,9 +117,11 @@ Required environment variables (see `.env.example`):
 - Rate limiting and bounce detection for deliverability
 - Excel update queueing with proper closure handling
 
-### Phone Number Lookup (AI-Powered Feature)
+### Phone Number Lookup (AI-Powered Web Search Feature)
+- **Real-time web search**: Uses OpenAI **gpt-4o-mini-search-preview** model with native web search capabilities
 - **Automatic Integration**: Phone lookup runs automatically during Apollo scraping for leads without phone numbers
-- **AI-powered discovery**: Uses OpenAI GPT-4o-mini to search for contact phone numbers online
+- **Search sources**: Company websites, LinkedIn profiles, business directories, and professional networks
+- **Singapore-optimized**: Geolocation set to Singapore for relevant local results
 - **Manual lookup options**:
   - Frontend: "Find Missing Phones" button in email-automation.html
   - API: `/api/email-automation/find-missing-phones` (batch lookup for all missing)
@@ -127,7 +129,7 @@ Required environment variables (see `.env.example`):
 - **Smart caching**: 24-hour cache prevents duplicate API calls for same leads
 - **Automatic Excel updates**: Found phone numbers automatically saved to OneDrive Excel file via Graph API
 - **No rate limiting**: Processes all leads as fast as possible
-- **Comprehensive logging**: Detailed progress tracking and error reporting
+- **Comprehensive logging**: Detailed progress tracking and error reporting with source attribution
 
 ### Error Handling
 - Graceful degradation when optional services are unavailable

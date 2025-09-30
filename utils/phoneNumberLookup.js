@@ -2,7 +2,8 @@ const OpenAI = require('openai');
 
 /**
  * Phone Number Lookup Utility
- * Uses OpenAI to find missing contact phone numbers online
+ * Uses OpenAI gpt-4o-mini-search-preview with web search to find missing contact phone numbers
+ * Searches company websites, LinkedIn, business directories, and professional profiles
  */
 
 class PhoneNumberLookup {
@@ -48,30 +49,40 @@ class PhoneNumberLookup {
                 };
             }
 
-            // Use OpenAI to search for phone number
-            const prompt = `Find the business phone number for this person. Return ONLY the phone number in international format (e.g., +1-555-123-4567) or "NOT_FOUND" if you cannot find it.
+            // Use OpenAI with web search to find phone number
+            const prompt = `Search the web to find the business phone number for this person:
 
 Person: ${Name}
 Company: ${companyName}
 ${linkedinUrl ? `LinkedIn: ${linkedinUrl}` : ''}
 ${Email ? `Email: ${Email}` : ''}
 
-Search for their direct business line or company phone number. Respond with just the phone number or "NOT_FOUND".`;
+Find their direct business phone number or company phone number from:
+- Company website contact pages
+- LinkedIn profile
+- Business directories
+- Professional profiles
+
+Return ONLY the phone number in international format (e.g., +65-1234-5678 or +1-555-123-4567) or "NOT_FOUND" if you cannot find it.`;
 
             const completion = await this.openai.chat.completions.create({
-                model: 'gpt-4o-mini',
+                model: 'gpt-4o-mini-search-preview',
+                web_search_options: {
+                    user_location: 'Singapore',
+                    search_context_size: 'medium'
+                },
                 messages: [
                     {
                         role: 'system',
-                        content: 'You are a professional contact information researcher. Find business phone numbers from publicly available sources. Return only the phone number in international format or "NOT_FOUND".'
+                        content: 'You are a professional contact information researcher with web search capabilities. Search the web to find business phone numbers from publicly available sources like company websites, LinkedIn, and business directories. Return only the phone number in international format or "NOT_FOUND".'
                     },
                     {
                         role: 'user',
                         content: prompt
                     }
                 ],
-                temperature: 0.3,
-                max_tokens: 100
+                temperature: 0.2,
+                max_tokens: 150
             });
 
             const response = completion.choices[0].message.content.trim();
@@ -128,7 +139,7 @@ Search for their direct business line or company phone number. Respond with just
                     found: true,
                     phoneNumber: phoneNumber,
                     confidence: 'high',
-                    source: 'OpenAI search'
+                    source: 'OpenAI Web Search (gpt-4o-mini-search-preview)'
                 };
             }
         }
