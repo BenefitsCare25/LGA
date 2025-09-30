@@ -138,6 +138,8 @@ Return ONLY the phone number in international format (e.g., +65-1234-5678 or +1-
      * Parse OpenAI response for phone number
      */
     parsePhoneResponse(response, lead) {
+        console.log(`🔍 AI Response for ${lead.Name}: "${response}"`);
+
         // Check if not found
         if (response.toUpperCase().includes('NOT_FOUND') ||
             response.toUpperCase().includes('NOT FOUND') ||
@@ -150,27 +152,34 @@ Return ONLY the phone number in international format (e.g., +65-1234-5678 or +1-
             };
         }
 
-        // Extract phone number using regex
-        const phoneRegex = /(\+?[\d\s\-\(\)\.]+)/g;
+        // Extract phone number using improved regex
+        // Matches: +65 1234 5678, +65-1234-5678, (65) 1234-5678, 6512345678, etc.
+        const phoneRegex = /(\+?\d{1,3}[\s\-\.\(\)]?\d{3,4}[\s\-\.\)]?\d{3,4}[\s\-]?\d{0,4})/g;
         const matches = response.match(phoneRegex);
 
-        if (matches && matches.length > 0) {
-            // Clean up phone number
-            const phoneNumber = matches[0].trim();
+        console.log(`📱 Extracted matches for ${lead.Name}:`, matches);
 
-            // Validate it looks like a real phone number
-            if (this.isValidPhoneNumber(phoneNumber)) {
-                console.log(`✅ Found phone number for ${lead.Name}: ${phoneNumber}`);
-                return {
-                    found: true,
-                    phoneNumber: phoneNumber,
-                    confidence: 'high',
-                    source: 'OpenAI Web Search (gpt-4o-mini-search-preview)'
-                };
+        if (matches && matches.length > 0) {
+            // Try each match until we find a valid one
+            for (const match of matches) {
+                const phoneNumber = match.trim();
+
+                // Validate it looks like a real phone number
+                if (this.isValidPhoneNumber(phoneNumber)) {
+                    console.log(`✅ Found valid phone number for ${lead.Name}: ${phoneNumber}`);
+                    return {
+                        found: true,
+                        phoneNumber: phoneNumber,
+                        confidence: 'high',
+                        source: 'OpenAI Web Search (gpt-4o-mini-search-preview)'
+                    };
+                } else {
+                    console.log(`❌ Invalid phone format: ${phoneNumber} (digits: ${phoneNumber.replace(/\D/g, '').length})`);
+                }
             }
         }
 
-        console.log(`⚠️ Invalid phone number format for ${lead.Name}`);
+        console.log(`⚠️ No valid phone number format found for ${lead.Name}`);
         return {
             found: false,
             reason: 'Invalid phone number format in response',
