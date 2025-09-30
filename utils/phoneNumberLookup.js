@@ -68,7 +68,14 @@ Return ONLY the phone number in international format (e.g., +65-1234-5678 or +1-
             const completion = await this.openai.chat.completions.create({
                 model: 'gpt-4o-mini-search-preview',
                 web_search_options: {
-                    user_location: 'Singapore',
+                    user_location: {
+                        type: 'approximate',
+                        approximate: {
+                            country: 'SG',
+                            city: 'Singapore',
+                            region: 'Singapore'
+                        }
+                    },
                     search_context_size: 'medium'
                 },
                 messages: [
