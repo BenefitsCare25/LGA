@@ -117,6 +117,15 @@ Required environment variables (see `.env.example`):
 - Rate limiting and bounce detection for deliverability
 - Excel update queueing with proper closure handling
 
+### Phone Number Lookup (AI-Powered Feature)
+- AI-powered phone number discovery via OpenAI (utils/phoneNumberLookup.js)
+- Automatic lookup for leads with missing phone numbers during Excel import
+- Manual batch lookup via `/api/email-automation/find-missing-phones` endpoint
+- Targeted lookup for specific leads via `/api/email-automation/find-phones-for-leads` endpoint
+- Caching system to avoid duplicate API calls (24-hour cache)
+- Updates Excel file in OneDrive via Microsoft Graph API
+- Rate limiting and error handling for batch operations
+
 ### Error Handling
 - Graceful degradation when optional services are unavailable
 - Comprehensive API testing endpoints for troubleshooting

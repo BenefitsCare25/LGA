@@ -431,9 +431,9 @@ class ExcelProcessor {
     /**
      * Normalize lead data to match master file structure
      */
-    normalizeLeadData(lead, templateChoice = 'AI_Generated') {
+    async normalizeLeadData(lead, templateChoice = 'AI_Generated', enablePhoneLookup = false) {
         const normalized = {};
-        
+
         // Map various input formats to standard columns
         normalized['Name'] = lead.Name || lead.name || lead['Full Name'] || '';
         normalized['Title'] = lead.Title || lead.title || lead['Job Title'] || '';
@@ -446,12 +446,41 @@ class ExcelProcessor {
         normalized['LinkedIn URL'] = lead['LinkedIn URL'] || lead.linkedin_url || lead.linkedin || '';
         normalized['Industry'] = lead.Industry || lead.industry || '';
         normalized['Location'] = lead.Location || lead.country || lead.location || '';
-        normalized['Phone'] = lead['Phone Number'] || lead.Phone || lead.phone || lead['Contact Number'] || lead.contact_number || '';
+
+        // Phone number handling with optional AI lookup
+        let phoneNumber = lead['Phone Number'] || lead.Phone || lead.phone || lead['Contact Number'] || lead.contact_number || '';
+
+        // If phone number is missing and AI lookup is enabled, try to find it
+        if (!phoneNumber && enablePhoneLookup && normalized['Name'] && normalized['Company Name']) {
+            try {
+                const PhoneNumberLookup = require('./phoneNumberLookup');
+                const phoneLookup = new PhoneNumberLookup();
+
+                console.log(`📞 Phone number missing for ${normalized['Name']} - attempting AI lookup...`);
+                const lookupResult = await phoneLookup.findPhoneNumber({
+                    Name: normalized['Name'],
+                    'Company Name': normalized['Company Name'],
+                    'LinkedIn URL': normalized['LinkedIn URL'],
+                    Email: normalized['Email']
+                });
+
+                if (lookupResult.found) {
+                    phoneNumber = lookupResult.phoneNumber;
+                    console.log(`✅ Found phone number via AI: ${phoneNumber}`);
+                } else {
+                    console.log(`❌ Could not find phone number: ${lookupResult.reason}`);
+                }
+            } catch (error) {
+                console.error(`❌ Phone lookup error for ${normalized['Name']}:`, error.message);
+            }
+        }
+
+        normalized['Phone'] = phoneNumber;
         normalized['Last Updated'] = require('./dateFormatter').getCurrentFormattedDate();
 
         // Move AI-generated content from Notes to AI_Generated_Email
         normalized['AI_Generated_Email'] = lead.Notes || lead.notes || lead.AI_Generated_Email || '';
-        
+
         // Set default automation settings
         normalized['Status'] = 'New';
         normalized['Campaign_Stage'] = 'First_Contact';
@@ -463,7 +492,7 @@ class ExcelProcessor {
         normalized['Read_Date'] = '';
         normalized['Reply_Date'] = '';
         normalized['Email Bounce'] = 'No'; // Initialize bounce status
-        
+
         // Legacy fields removed for cleaner structure
 
         return normalized;
@@ -472,8 +501,13 @@ class ExcelProcessor {
     /**
      * Normalize multiple leads data
      */
-    normalizeLeadsData(leads, templateChoice = 'AI_Generated') {
-        return leads.map(lead => this.normalizeLeadData(lead, templateChoice));
+    async normalizeLeadsData(leads, templateChoice = 'AI_Generated', enablePhoneLookup = false) {
+        const normalizedLeads = [];
+        for (const lead of leads) {
+            const normalized = await this.normalizeLeadData(lead, templateChoice, enablePhoneLookup);
+            normalizedLeads.push(normalized);
+        }
+        return normalizedLeads;
     }
 
     /**

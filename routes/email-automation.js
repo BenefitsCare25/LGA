@@ -13,6 +13,7 @@ const CampaignTokenManager = require('../utils/campaignTokenManager');
 const excelDuplicateChecker = require('../utils/excelDuplicateChecker');
 const CampaignLockManager = require('../utils/campaignLockManager');
 const EmailSender = require('../utils/EmailSender');
+const PhoneNumberLookup = require('../utils/phoneNumberLookup');
 const router = express.Router();
 
 // Configure multer for file uploads
@@ -1796,7 +1797,7 @@ router.post('/test-duplicates', requireDelegatedAuth, async (req, res) => {
 router.post('/clear-duplicate-cache', requireDelegatedAuth, async (req, res) => {
     try {
         excelDuplicateChecker.clearCache();
-        
+
         res.json({
             success: true,
             message: 'Duplicate checker cache cleared - next check will fetch fresh Excel data'
@@ -1807,6 +1808,218 @@ router.post('/clear-duplicate-cache', requireDelegatedAuth, async (req, res) => 
         res.status(500).json({
             success: false,
             message: 'Failed to clear cache',
+            error: error.message
+        });
+    }
+});
+
+// Find missing phone numbers using AI
+router.post('/find-missing-phones', requireDelegatedAuth, async (req, res) => {
+    try {
+        console.log('📞 Starting batch phone number lookup for leads with missing numbers...');
+
+        // Get authenticated Graph client
+        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+
+        // Get all leads from master file
+        const allLeads = await getLeadsViaGraphAPI(graphClient);
+
+        if (!allLeads || allLeads.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'No leads found in master file'
+            });
+        }
+
+        // Filter leads with missing phone numbers
+        const leadsWithoutPhone = allLeads.filter(lead => {
+            const phone = lead.Phone || lead.phone || lead['Phone Number'] || lead['Contact Number'];
+            return !phone || phone.trim() === '';
+        });
+
+        console.log(`📊 Found ${leadsWithoutPhone.length} leads without phone numbers out of ${allLeads.length} total leads`);
+
+        if (leadsWithoutPhone.length === 0) {
+            return res.json({
+                success: true,
+                message: 'All leads already have phone numbers',
+                totalLeads: allLeads.length,
+                missingPhones: 0
+            });
+        }
+
+        // Initialize phone lookup utility
+        const phoneLookup = new PhoneNumberLookup();
+
+        // Perform batch lookup
+        const lookupResults = await phoneLookup.batchLookup(leadsWithoutPhone, (index, total, lead, result) => {
+            console.log(`🔄 Progress: ${index}/${total} - ${lead.Name}: ${result.found ? '✅ Found' : '❌ Not found'}`);
+        });
+
+        // Update Excel file with found phone numbers
+        let updatedCount = 0;
+        const updateErrors = [];
+
+        for (const detail of lookupResults.details) {
+            if (detail.found && detail.phoneNumber) {
+                try {
+                    const updateSuccess = await updateLeadViaGraphAPI(graphClient, detail.email, {
+                        Phone: detail.phoneNumber
+                    });
+
+                    if (updateSuccess) {
+                        updatedCount++;
+                        console.log(`✅ Updated ${detail.name} with phone: ${detail.phoneNumber}`);
+                    } else {
+                        updateErrors.push({
+                            email: detail.email,
+                            name: detail.name,
+                            reason: 'Graph API update failed'
+                        });
+                    }
+                } catch (updateError) {
+                    console.error(`❌ Failed to update ${detail.name}:`, updateError.message);
+                    updateErrors.push({
+                        email: detail.email,
+                        name: detail.name,
+                        reason: updateError.message
+                    });
+                }
+            }
+        }
+
+        console.log(`✅ Phone lookup completed: ${lookupResults.found} found, ${updatedCount} updated in Excel`);
+
+        res.json({
+            success: true,
+            message: `Phone lookup completed: ${lookupResults.found} numbers found, ${updatedCount} updated in Excel`,
+            summary: {
+                totalLeads: allLeads.length,
+                missingPhones: leadsWithoutPhone.length,
+                phonesFound: lookupResults.found,
+                phonesNotFound: lookupResults.notFound,
+                lookupErrors: lookupResults.errors,
+                excelUpdated: updatedCount,
+                updateErrors: updateErrors.length
+            },
+            details: lookupResults.details,
+            updateErrors: updateErrors
+        });
+
+    } catch (error) {
+        console.error('❌ Phone lookup error:', error.message);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to perform phone number lookup',
+            error: error.message
+        });
+    }
+});
+
+// Find phone numbers for specific leads
+router.post('/find-phones-for-leads', requireDelegatedAuth, async (req, res) => {
+    try {
+        const { emails } = req.body;
+
+        if (!emails || !Array.isArray(emails) || emails.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide an array of email addresses'
+            });
+        }
+
+        console.log(`📞 Looking up phone numbers for ${emails.length} specific leads...`);
+
+        // Get authenticated Graph client
+        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+
+        // Get lead data for specified emails
+        const allLeads = await getLeadsViaGraphAPI(graphClient);
+
+        if (!allLeads || allLeads.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'No leads found in master file'
+            });
+        }
+
+        // Filter to requested emails
+        const targetLeads = allLeads.filter(lead =>
+            emails.includes(lead.Email) || emails.includes(lead.email)
+        );
+
+        if (targetLeads.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'None of the specified email addresses were found in the master file'
+            });
+        }
+
+        console.log(`📊 Found ${targetLeads.length} matching leads`);
+
+        // Initialize phone lookup utility
+        const phoneLookup = new PhoneNumberLookup();
+
+        // Perform batch lookup
+        const lookupResults = await phoneLookup.batchLookup(targetLeads, (index, total, lead, result) => {
+            console.log(`🔄 Progress: ${index}/${total} - ${lead.Name}: ${result.found ? '✅ Found' : '❌ Not found'}`);
+        });
+
+        // Update Excel file with found phone numbers
+        let updatedCount = 0;
+        const updateErrors = [];
+
+        for (const detail of lookupResults.details) {
+            if (detail.found && detail.phoneNumber) {
+                try {
+                    const updateSuccess = await updateLeadViaGraphAPI(graphClient, detail.email, {
+                        Phone: detail.phoneNumber
+                    });
+
+                    if (updateSuccess) {
+                        updatedCount++;
+                        console.log(`✅ Updated ${detail.name} with phone: ${detail.phoneNumber}`);
+                    } else {
+                        updateErrors.push({
+                            email: detail.email,
+                            name: detail.name,
+                            reason: 'Graph API update failed'
+                        });
+                    }
+                } catch (updateError) {
+                    console.error(`❌ Failed to update ${detail.name}:`, updateError.message);
+                    updateErrors.push({
+                        email: detail.email,
+                        name: detail.name,
+                        reason: updateError.message
+                    });
+                }
+            }
+        }
+
+        console.log(`✅ Phone lookup completed: ${lookupResults.found} found, ${updatedCount} updated in Excel`);
+
+        res.json({
+            success: true,
+            message: `Phone lookup completed: ${lookupResults.found} numbers found, ${updatedCount} updated in Excel`,
+            summary: {
+                requestedLeads: emails.length,
+                leadsFound: targetLeads.length,
+                phonesFound: lookupResults.found,
+                phonesNotFound: lookupResults.notFound,
+                lookupErrors: lookupResults.errors,
+                excelUpdated: updatedCount,
+                updateErrors: updateErrors.length
+            },
+            details: lookupResults.details,
+            updateErrors: updateErrors
+        });
+
+    } catch (error) {
+        console.error('❌ Phone lookup error:', error.message);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to perform phone number lookup',
             error: error.message
         });
     }
