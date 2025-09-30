@@ -160,22 +160,35 @@ Return ONLY the phone number in international format (e.g., +65-1234-5678 or +1-
         console.log(`📱 Extracted matches for ${lead.Name}:`, matches);
 
         if (matches && matches.length > 0) {
-            // Try each match until we find a valid one
+            // Collect ALL valid phone numbers
+            const validPhoneNumbers = [];
+
             for (const match of matches) {
                 const phoneNumber = match.trim();
 
                 // Validate it looks like a real phone number
                 if (this.isValidPhoneNumber(phoneNumber)) {
-                    console.log(`✅ Found valid phone number for ${lead.Name}: ${phoneNumber}`);
-                    return {
-                        found: true,
-                        phoneNumber: phoneNumber,
-                        confidence: 'high',
-                        source: 'OpenAI Web Search (gpt-4o-mini-search-preview)'
-                    };
+                    // Avoid duplicates
+                    if (!validPhoneNumbers.includes(phoneNumber)) {
+                        validPhoneNumbers.push(phoneNumber);
+                        console.log(`✅ Found valid phone number for ${lead.Name}: ${phoneNumber}`);
+                    }
                 } else {
                     console.log(`❌ Invalid phone format: ${phoneNumber} (digits: ${phoneNumber.replace(/\D/g, '').length})`);
                 }
+            }
+
+            // Return all found phone numbers
+            if (validPhoneNumbers.length > 0) {
+                const phoneNumberString = validPhoneNumbers.join(', ');
+                console.log(`📞 Total ${validPhoneNumbers.length} phone number(s) found for ${lead.Name}: ${phoneNumberString}`);
+                return {
+                    found: true,
+                    phoneNumber: phoneNumberString,
+                    confidence: 'high',
+                    source: 'OpenAI Web Search (gpt-4o-mini-search-preview)',
+                    count: validPhoneNumbers.length
+                };
             }
         }
 
