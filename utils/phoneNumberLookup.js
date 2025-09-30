@@ -65,30 +65,51 @@ Find their direct business phone number or company phone number from:
 
 Return ONLY the phone number in international format (e.g., +65-1234-5678 or +1-555-123-4567) or "NOT_FOUND" if you cannot find it.`;
 
-            const completion = await this.openai.chat.completions.create({
-                model: 'gpt-4o-mini-search-preview',
-                web_search_options: {
-                    user_location: {
-                        type: 'approximate',
-                        approximate: {
-                            country: 'SG',
-                            city: 'Singapore',
-                            region: 'Singapore'
-                        }
-                    },
-                    search_context_size: 'medium'
-                },
-                messages: [
-                    {
-                        role: 'system',
-                        content: 'You are a professional contact information researcher with web search capabilities. Search the web to find business phone numbers from publicly available sources like company websites, LinkedIn, and business directories. Return only the phone number in international format or "NOT_FOUND".'
-                    },
-                    {
-                        role: 'user',
-                        content: prompt
+            // Retry logic for rate limiting
+            let completion;
+            let retries = 3;
+
+            while (retries > 0) {
+                try {
+                    completion = await this.openai.chat.completions.create({
+                        model: 'gpt-4o-mini-search-preview',
+                        web_search_options: {
+                            user_location: {
+                                type: 'approximate',
+                                approximate: {
+                                    country: 'SG',
+                                    city: 'Singapore',
+                                    region: 'Singapore'
+                                }
+                            },
+                            search_context_size: 'medium'
+                        },
+                        messages: [
+                            {
+                                role: 'system',
+                                content: 'You are a professional contact information researcher with web search capabilities. Search the web to find business phone numbers from publicly available sources like company websites, LinkedIn, and business directories. Return only the phone number in international format or "NOT_FOUND".'
+                            },
+                            {
+                                role: 'user',
+                                content: prompt
+                            }
+                        ]
+                    });
+                    break; // Success, exit retry loop
+                } catch (apiError) {
+                    if (apiError.status === 429 && retries > 1) {
+                        // Rate limit hit, wait and retry
+                        const waitTime = apiError.error?.message?.match(/try again in (\d+)ms/)
+                            ? parseInt(apiError.error.message.match(/try again in (\d+)ms/)[1])
+                            : 1000;
+                        console.log(`⏳ Rate limit hit for ${Name}, waiting ${waitTime}ms before retry...`);
+                        await new Promise(resolve => setTimeout(resolve, waitTime));
+                        retries--;
+                    } else {
+                        throw apiError; // Not a rate limit or out of retries
                     }
-                ]
-            });
+                }
+            }
 
             const response = completion.choices[0].message.content.trim();
 
@@ -243,6 +264,11 @@ Return ONLY the phone number in international format (e.g., +65-1234-5678 or +1-
                 // Progress callback
                 if (onProgress) {
                     onProgress(i + 1, leads.length, lead, result);
+                }
+
+                // Rate limiting: wait 1 second between requests to avoid hitting API limits
+                if (i < leads.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                 }
 
             } catch (error) {
