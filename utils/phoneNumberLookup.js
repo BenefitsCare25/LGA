@@ -87,9 +87,7 @@ Return ONLY the phone number in international format (e.g., +65-1234-5678 or +1-
                         role: 'user',
                         content: prompt
                     }
-                ],
-                temperature: 0.2,
-                max_tokens: 150
+                ]
             });
 
             const response = completion.choices[0].message.content.trim();
