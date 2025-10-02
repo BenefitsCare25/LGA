@@ -41,6 +41,18 @@ router.post('/onedrive/append-to-table', requireDelegatedAuth, async (req, res) 
     try {
         const { leads, filename, folderPath = '/LGA-Leads', useCustomFile = false } = req.body;
 
+        console.log(`📨 ENDPOINT RECEIVED: ${leads?.length || 0} leads`);
+        if (leads && leads.length > 0) {
+            console.log(`📨 First lead received at endpoint:`);
+            console.log(`   Keys: ${Object.keys(leads[0]).join(', ')}`);
+            const firstLead = leads[0];
+            ['Name', 'Email', 'Phone', 'Company Name', 'Title'].forEach(key => {
+                if (firstLead[key] !== undefined) {
+                    console.log(`   ${key}: "${String(firstLead[key]).substring(0, 50)}"`);
+                }
+            });
+        }
+
         if (!leads || !Array.isArray(leads) || leads.length === 0) {
             return res.status(400).json({
                 error: 'Validation Error',
