@@ -1111,7 +1111,18 @@ async function appendDataToExcelTable(client, fileId, tableName, leads) {
         
         // Normalize lead data
         const normalizedLeads = leads.map(lead => normalizeLeadData(lead));
-        
+
+        // Debug first normalized lead
+        if (normalizedLeads.length > 0) {
+            console.log(`🔍 First normalized lead object keys:`);
+            console.log(`   ${Object.keys(normalizedLeads[0]).join(', ')}`);
+            console.log(`🔍 Sample values from first lead:`);
+            const firstLead = normalizedLeads[0];
+            ['Name', 'Email', 'Phone', 'Company Name'].forEach(key => {
+                console.log(`   ${key}: "${firstLead[key]}"`);
+            });
+        }
+
         // Get table columns to ensure proper order
         const columnsResponse = await client
             .api(`/me/drive/items/${fileId}/workbook/tables/${tableName}/columns`)
@@ -1119,14 +1130,29 @@ async function appendDataToExcelTable(client, fileId, tableName, leads) {
         
         const columns = columnsResponse.value;
         const headers = columns.map(col => col.name);
-        
+
+        console.log(`📋 OneDrive table has ${headers.length} columns in this order:`);
+        console.log(`   ${headers.join(', ')}`);
+
         // Prepare data rows in correct column order with proper data types
-        const tableRows = normalizedLeads.map(lead => {
-            return headers.map(header => {
+        const tableRows = normalizedLeads.map((lead, index) => {
+            const row = headers.map(header => {
                 const value = lead[header];
                 // Handle different data types appropriately
                 return formatCellValueForExcel(header, value);
             });
+
+            // Debug first row to verify mapping
+            if (index === 0) {
+                console.log(`📊 First row data mapping:`);
+                headers.forEach((header, i) => {
+                    const value = row[i];
+                    const hasData = value && String(value).trim() !== '' ? '✓' : '✗';
+                    console.log(`   ${hasData} ${header}: "${String(value).substring(0, 50)}"`);
+                });
+            }
+
+            return row;
         });
         
         // Append rows to table using Graph API
