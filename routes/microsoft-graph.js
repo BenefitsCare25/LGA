@@ -1109,14 +1109,27 @@ async function appendDataToExcelTable(client, fileId, tableName, leads) {
             return;
         }
         
+        // Debug BEFORE normalization
+        if (leads.length > 0) {
+            console.log(`🔍 RAW lead BEFORE normalization:`);
+            console.log(`   Keys: ${Object.keys(leads[0]).join(', ')}`);
+            const rawLead = leads[0];
+            console.log(`   Sample values from raw lead:`);
+            ['Name', 'name', 'Email', 'email', 'Phone', 'Phone Number', 'Company Name', 'company'].forEach(key => {
+                if (rawLead[key] !== undefined) {
+                    console.log(`   ${key}: "${String(rawLead[key]).substring(0, 50)}"`);
+                }
+            });
+        }
+
         // Normalize lead data
         const normalizedLeads = leads.map(lead => normalizeLeadData(lead));
 
-        // Debug first normalized lead
+        // Debug AFTER normalization
         if (normalizedLeads.length > 0) {
-            console.log(`🔍 First normalized lead object keys:`);
+            console.log(`🔍 NORMALIZED lead object keys:`);
             console.log(`   ${Object.keys(normalizedLeads[0]).join(', ')}`);
-            console.log(`🔍 Sample values from first lead:`);
+            console.log(`🔍 Sample values from normalized lead:`);
             const firstLead = normalizedLeads[0];
             ['Name', 'Email', 'Phone', 'Company Name'].forEach(key => {
                 console.log(`   ${key}: "${firstLead[key]}"`);
