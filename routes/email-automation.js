@@ -305,7 +305,7 @@ router.post('/master-list/upload', requireDelegatedAuth, upload.single('excelFil
         }
 
         // CRITICAL: Merge uploaded leads with current OneDrive data for accurate duplicate detection
-        const mergeResults = excelProcessor.mergeLeadsWithMaster(uploadedLeads, currentOneDriveData);
+        const mergeResults = await excelProcessor.mergeLeadsWithMaster(uploadedLeads, currentOneDriveData);
         
         // Update initialExistingCount with actual current data
         initialExistingCount = currentOneDriveData.length;
@@ -565,7 +565,7 @@ router.post('/master-list/upload-with-exclusions', requireDelegatedAuth, upload.
         }
 
         // Merge leads with existing data
-        const mergeResults = excelProcessor.mergeLeadsWithMaster(filteredLeads, existingData);
+        const mergeResults = await excelProcessor.mergeLeadsWithMaster(filteredLeads, existingData);
         
         if (mergeResults.newLeads.length === 0) {
             return res.json({
@@ -963,7 +963,7 @@ router.post('/master-list/merge-recovery', requireDelegatedAuth, upload.single('
         }
 
         // Merge recovery leads with current data (append mode)
-        const mergeResults = excelProcessor.mergeLeadsWithMaster(recoveryLeads, currentLeads);
+        const mergeResults = await excelProcessor.mergeLeadsWithMaster(recoveryLeads, currentLeads);
 
         console.log(`🔄 RECOVERY MERGE RESULTS:`);
         console.log(`   - Current leads: ${currentLeads.length}`);

@@ -372,7 +372,7 @@ class ExcelProcessor {
     /**
      * Merge uploaded leads with existing master data
      */
-    mergeLeadsWithMaster(uploadedLeads, existingData = []) {
+    async mergeLeadsWithMaster(uploadedLeads, existingData = []) {
         const results = {
             newLeads: [],
             duplicates: [],
@@ -390,18 +390,20 @@ class ExcelProcessor {
                 existingEmails.add(email);
             }
         });
-        
+
         console.log(`📧 Created lookup set with ${existingEmails.size} unique existing emails`);
 
-        uploadedLeads.forEach((lead, index) => {
+        // Process leads sequentially to handle async normalization
+        for (let index = 0; index < uploadedLeads.length; index++) {
+            const lead = uploadedLeads[index];
             const email = this.normalizeEmail(lead.Email || lead.email || '');
-            
+
             if (!email) {
                 console.warn(`⚠️ Row ${index + 1}: Skipping lead without valid email:`, {
                     name: lead.Name || lead.name || 'Unknown',
                     originalEmail: lead.Email || lead.email || 'None'
                 });
-                return;
+                continue;
             }
 
             if (existingEmails.has(email)) {
@@ -415,16 +417,16 @@ class ExcelProcessor {
                 if ((index + 1) % 10 === 0 || index + 1 === uploadedLeads.length) {
                     console.log(`✅ Processing new leads... (${index + 1}/${uploadedLeads.length})`);
                 }
-                // Normalize and add default automation settings
-                const normalizedLead = this.normalizeLeadData(lead, 'AI_Generated');
+                // Normalize and add default automation settings (AWAIT the async function)
+                const normalizedLead = await this.normalizeLeadData(lead, 'AI_Generated');
                 results.newLeads.push(normalizedLead);
                 existingEmails.add(email); // Prevent duplicates within current upload
             }
-        });
+        }
 
         // Merge results summary
         console.log(`📊 Processing results: ${uploadedLeads.length} uploaded, ${results.duplicates.length} duplicates skipped, ${results.newLeads.length} new leads ready for upload`);
-        
+
         return results;
     }
 
