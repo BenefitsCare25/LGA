@@ -1233,8 +1233,12 @@ async function updateLeadTrackingInTable(client, fileId, tableName, leadEmail, t
  * @returns {Object} Normalized lead data
  */
 function normalizeLeadData(lead) {
+    // IMPORTANT: Column order MUST match OneDrive Excel file exactly
+    // OneDrive order: Name, Title, Company Name, Company Website, Size, Email, Email Verified,
+    // LinkedIn URL, Industry, Location, Last Updated, AI_Generated_Email, Status, Campaign_Stage,
+    // Template_Used, Last_Email_Date, Next_Email_Date, Follow_Up_Days, Email_Count, Read_Date,
+    // Reply_Date, Email Bounce, Phone, Sent Date
     return {
-        // Basic lead information
         'Name': lead['Name'] || lead.name || '',
         'Title': lead['Title'] || lead.title || '',
         'Company Name': lead['Company Name'] || lead.organization_name || lead.company || '',
@@ -1245,11 +1249,8 @@ function normalizeLeadData(lead) {
         'LinkedIn URL': lead['LinkedIn URL'] || lead.linkedin_url || lead.linkedin || '',
         'Industry': lead['Industry'] || lead.industry || '',
         'Location': lead['Location'] || lead.country || lead.location || '',
-        'Phone': lead['Phone'] || lead['Phone Number'] || lead.phone || lead['Contact Number'] || lead.contact_number || '',
         'Last Updated': lead['Last Updated'] || require('../utils/dateFormatter').getCurrentFormattedDate(),
-        
-        // Email automation columns
-        'AI_Generated_Email': lead['AI_Generated_Email'] || '',
+        'AI_Generated_Email': lead['AI_Generated_Email'] || lead['Notes'] || lead.notes || '',
         'Status': lead['Status'] || 'New',
         'Campaign_Stage': lead['Campaign_Stage'] || 'First_Contact',
         'Template_Used': lead['Template_Used'] || '',
@@ -1259,7 +1260,9 @@ function normalizeLeadData(lead) {
         'Email_Count': lead['Email_Count'] || 0,
         'Read_Date': lead['Read_Date'] || '',
         'Reply_Date': lead['Reply_Date'] || '',
-        'Email Bounce': lead['Email Bounce'] || 'No' // Initialize bounce status
+        'Email Bounce': lead['Email Bounce'] || 'No',
+        'Phone': lead['Phone'] || lead['Phone Number'] || lead.phone || lead['Contact Number'] || lead.contact_number || '',
+        'Sent Date': lead['Sent Date'] || lead['Last_Email_Date'] || ''
     };
 }
 
