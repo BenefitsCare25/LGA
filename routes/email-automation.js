@@ -322,7 +322,20 @@ router.post('/master-list/upload', requireDelegatedAuth, upload.single('excelFil
         }
 
         // CRITICAL: Use Microsoft Graph Table API to APPEND data (no file replacement)
-        
+
+        console.log(`📤 BEFORE sending to Graph API: ${mergeResults.newLeads.length} leads`);
+        if (mergeResults.newLeads.length > 0) {
+            console.log(`📤 First lead BEFORE sending:`);
+            console.log(`   Keys: ${Object.keys(mergeResults.newLeads[0]).join(', ')}`);
+            const firstLead = mergeResults.newLeads[0];
+            ['Name', 'Email', 'Phone', 'Company Name', 'Title'].forEach(key => {
+                if (firstLead[key] !== undefined) {
+                    console.log(`   ${key}: "${String(firstLead[key]).substring(0, 50)}"`);
+                }
+            });
+            console.log(`📤 Full first lead object:`, JSON.stringify(mergeResults.newLeads[0]).substring(0, 200));
+        }
+
         // Use the Microsoft Graph table append functionality
         const appendResult = await appendLeadsToOneDriveTable({
             delegatedAuth: req.delegatedAuth,
