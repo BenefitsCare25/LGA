@@ -6,9 +6,9 @@
 
 class EmailDelayUtils {
     constructor() {
-        // Default delay range: 30-120 seconds
-        this.minDelay = 30000; // 30 seconds in milliseconds
-        this.maxDelay = 120000; // 120 seconds in milliseconds
+        // Default delay range: 15-60 seconds (reduced by half)
+        this.minDelay = 15000; // 15 seconds in milliseconds
+        this.maxDelay = 60000; // 60 seconds in milliseconds
     }
 
     /**
@@ -31,12 +31,12 @@ class EmailDelayUtils {
     }
 
     /**
-     * Wait for random delay between 30-120 seconds
-     * @param {number} min - Minimum delay in seconds (default: 30)
-     * @param {number} max - Maximum delay in seconds (default: 120)
+     * Wait for random delay between 15-60 seconds
+     * @param {number} min - Minimum delay in seconds (default: 15)
+     * @param {number} max - Maximum delay in seconds (default: 60)
      * @returns {Promise} Promise that resolves after random delay
      */
-    async randomDelay(min = 30, max = 120) {
+    async randomDelay(min = 15, max = 60) {
         const minMs = min * 1000;
         const maxMs = max * 1000;
         const delayMs = this.getRandomDelay(minMs, maxMs);
@@ -66,10 +66,10 @@ class EmailDelayUtils {
     /**
      * Calculate estimated completion time for bulk email sending
      * @param {number} emailCount - Number of emails to send
-     * @param {number} avgDelay - Average delay in seconds (default: 75)
+     * @param {number} avgDelay - Average delay in seconds (default: 37.5)
      * @returns {object} Estimation object with total time and completion time
      */
-    estimateBulkSendingTime(emailCount, avgDelay = 75) {
+    estimateBulkSendingTime(emailCount, avgDelay = 37.5) {
         const totalDelaySeconds = (emailCount - 1) * avgDelay; // No delay after last email
         const estimatedProcessingSeconds = emailCount * 5; // ~5 seconds per email processing
         const totalSeconds = totalDelaySeconds + estimatedProcessingSeconds;
@@ -107,9 +107,9 @@ class EmailDelayUtils {
         const progressRatio = emailIndex / totalEmails;
         const multiplier = 1.0 + (progressRatio * 0.5);
         
-        // Base delays with progressive increase
-        const baseMin = 30;
-        const baseMax = 120;
+        // Base delays with progressive increase (reduced by half)
+        const baseMin = 15;
+        const baseMax = 60;
         const adjustedMin = Math.round(baseMin * multiplier);
         const adjustedMax = Math.round(baseMax * multiplier);
         
@@ -127,9 +127,9 @@ class EmailDelayUtils {
             return 0; // No delay for first batch
         }
         
-        // Add 2-5 minutes between batches
-        const batchDelayMin = 120; // 2 minutes
-        const batchDelayMax = 300; // 5 minutes
+        // Add 1-2.5 minutes between batches (reduced by half)
+        const batchDelayMin = 60; // 1 minute
+        const batchDelayMax = 150; // 2.5 minutes
         
         console.log(`⏸️ Batch ${batchIndex} completed. Adding extended delay between batches...`);
         return await this.randomDelay(batchDelayMin, batchDelayMax);
@@ -162,9 +162,9 @@ class EmailDelayUtils {
             volumeMultiplier = 1.2;
         }
         
-        // Calculate adjusted delays
-        const baseMin = 30;
-        const baseMax = 120;
+        // Calculate adjusted delays (reduced by half)
+        const baseMin = 15;
+        const baseMax = 60;
         const adjustedMin = Math.round(baseMin * timeMultiplier * volumeMultiplier);
         const adjustedMax = Math.round(baseMax * timeMultiplier * volumeMultiplier);
         
