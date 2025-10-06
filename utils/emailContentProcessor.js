@@ -356,19 +356,22 @@ Joel Lee`;
      */
     convertToHTML(emailContent, leadEmail = null, leadData = null) {
         let htmlBody = emailContent.body || '';
-        
+
         // Clean placeholder signatures from body
         htmlBody = this.removePlaceholderSignatures(htmlBody);
-        
+
         // Convert line breaks to HTML
         htmlBody = htmlBody.replace(/\n/g, '<br>');
-        
+
         // Add professional CTA button for direct reply
         const ctaButton = this.generateCTAButton(leadData);
-        
+
         // Add professional Inspro signature
         const professionalSignature = this.generateProfessionalSignature();
-        
+
+        // Add unsubscribe link
+        const unsubscribeLink = this.generateUnsubscribeLink(leadEmail);
+
         // Add tracking pixel if email is provided
         let trackingPixel = '';
         if (leadEmail) {
@@ -376,7 +379,7 @@ Joel Lee`;
             const baseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
             trackingPixel = `<img src="${baseUrl}/api/email/track-read?id=${encodeURIComponent(trackingId)}" width="1" height="1" style="display:none;" alt="" />`;
         }
-        
+
         // Wrap in enhanced HTML structure with CTA button and professional signature
         const html = `
 <!DOCTYPE html>
@@ -396,6 +399,9 @@ Joel Lee`;
         .logo { margin-bottom: 10px; }
         .contact-info { font-size: 13px; color: #666; }
         .legal-text { font-size: 11px; color: #999; margin-top: 15px; border-top: 1px solid #f0f0f0; padding-top: 10px; }
+        .unsubscribe { text-align: center; margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-top: 1px solid #e0e0e0; }
+        .unsubscribe a { color: #666; text-decoration: none; font-size: 12px; }
+        .unsubscribe a:hover { color: #dc3545; text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -405,6 +411,7 @@ Joel Lee`;
         </div>
         ${ctaButton}
         ${professionalSignature}
+        ${unsubscribeLink}
         ${trackingPixel}
     </div>
 </body>
@@ -474,25 +481,40 @@ ${leadName}`);
         return `
         <div class="signature">
             <div class="logo">
-                <img src="https://ik.imagekit.io/ofkmpd3cb/inspro%20logo.jpg?updatedAt=1756520750006" 
-                     alt="Inspro Insurance Brokers" 
+                <img src="https://ik.imagekit.io/ofkmpd3cb/inspro%20logo.jpg?updatedAt=1756520750006"
+                     alt="Inspro Insurance Brokers"
                      style="height: 40px; max-width: 200px;" />
             </div>
-            
+
             <div class="contact-info">
                 <strong>Joel Lee – Client Relations Manager</strong><br>
                 <strong>Inspro Insurance Brokers Pte Ltd (199307139Z)</strong><br><br>
-                
+
                 38 Jalan Pemimpin M38 #02-08 Singapore 577178<br>
-                E: <a href="mailto:joellee@inspro.com.sg" style="color: #0066cc;">joellee@inspro.com.sg</a> 
+                E: <a href="mailto:joellee@inspro.com.sg" style="color: #0066cc;">joellee@inspro.com.sg</a>
                 W: <a href="https://www.inspro.com.sg" style="color: #0066cc;">www.inspro.com.sg</a>
             </div>
-            
+
             <div class="legal-text">
                 <p><strong>Privacy Statement:</strong> In accordance with data protection law we do not use or disclose personal information for any purpose that is unrelated to our services. In providing your data you have agreed to the use of this related to our services. A copy of our Privacy statement is available on request.</p>
-                
+
                 <p><strong>Confidentiality Notice:</strong> This e-mail is intended for the named addressee only. It contains information which may be privileged and confidential. Unless you are the named addressee you may neither use it, copy it nor disclose it to anyone else. If you have received it in error please notify the sender immediately by email or telephone. Thank You.</p>
             </div>
+        </div>`;
+    }
+
+    /**
+     * Generate unsubscribe link
+     */
+    generateUnsubscribeLink(leadEmail) {
+        if (!leadEmail) return '';
+
+        const baseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
+        const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?email=${encodeURIComponent(leadEmail)}`;
+
+        return `
+        <div class="unsubscribe">
+            <a href="${unsubscribeUrl}">Unsubscribe from this mailing list</a>
         </div>`;
     }
 

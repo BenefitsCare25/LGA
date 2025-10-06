@@ -13,6 +13,7 @@ const emailTrackingRoutes = require('./routes/email-tracking');
 const emailSchedulerRoutes = require('./routes/email-scheduler');
 const emailDelayTestRoutes = require('./routes/email-delay-test');
 const emailBounceRoutes = require('./routes/email-bounce');
+const emailUnsubscribeRoutes = require('./routes/email-unsubscribe');
 const authRoutes = require('./routes/auth');
 const githubAuthRoutes = require('./routes/github-auth');
 const campaignStatusRoutes = require('./routes/campaign-status');
@@ -107,6 +108,7 @@ app.use('/api/email-automation', emailAutomationRoutes);
 app.use('/api/email-automation/templates', emailTemplatesRoutes);
 app.use('/api/email-templates', emailTemplatesRoutes);
 app.use('/api/email', emailTrackingRoutes);
+app.use('/api/email', emailUnsubscribeRoutes);
 app.use('/api/email-scheduler', emailSchedulerRoutes);  // Fixed: Use correct path
 app.use('/api/email-delay', emailDelayTestRoutes);
 app.use('/api/email-bounce', emailBounceRoutes);
