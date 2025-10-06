@@ -4,9 +4,32 @@
  */
 
 const express = require('express');
-const { requireDelegatedAuth, getDelegatedAuthProvider } = require('../middleware/delegatedGraphAuth');
+const { Client } = require('@microsoft/microsoft-graph-client');
+require('isomorphic-fetch');
 const { getLeadsViaGraphAPI, getExcelColumnLetter } = require('../utils/excelGraphAPI');
 const router = express.Router();
+
+/**
+ * Get application-level Graph client (not user-delegated)
+ * This allows unsubscribe to work without user authentication
+ */
+async function getApplicationGraphClient() {
+    const { ClientSecretCredential } = require('@azure/identity');
+    const { Client } = require('@microsoft/microsoft-graph-client');
+    const { TokenCredentialAuthenticationProvider } = require('@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials');
+
+    const credential = new ClientSecretCredential(
+        process.env.AZURE_TENANT_ID,
+        process.env.AZURE_CLIENT_ID,
+        process.env.AZURE_CLIENT_SECRET
+    );
+
+    const authProvider = new TokenCredentialAuthenticationProvider(credential, {
+        scopes: ['https://graph.microsoft.com/.default']
+    });
+
+    return Client.initWithMiddleware({ authProvider });
+}
 
 /**
  * Handle unsubscribe request - removes lead from Excel file
@@ -179,8 +202,9 @@ router.get('/unsubscribe', async (req, res) => {
 /**
  * Confirm unsubscribe and remove from Excel
  * POST /api/email/unsubscribe/confirm?email=recipient@example.com
+ * No authentication required - uses application-level credentials
  */
-router.post('/unsubscribe/confirm', requireDelegatedAuth, async (req, res) => {
+router.post('/unsubscribe/confirm', async (req, res) => {
     try {
         const { email } = req.query;
 
@@ -193,8 +217,8 @@ router.post('/unsubscribe/confirm', requireDelegatedAuth, async (req, res) => {
 
         console.log(`🗑️ Processing unsubscribe confirmation for: ${email}`);
 
-        // Get authenticated Graph client
-        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
+        // Get application-level Graph client (no user auth required)
+        const graphClient = await getApplicationGraphClient();
 
         // Remove lead from Excel file
         const removed = await removeLeadFromExcel(graphClient, email);
@@ -227,7 +251,7 @@ router.post('/unsubscribe/confirm', requireDelegatedAuth, async (req, res) => {
 
 /**
  * Remove lead from Excel master file via Graph API
- * @param {object} graphClient - Microsoft Graph client
+ * @param {object} graphClient - Microsoft Graph client (application-level)
  * @param {string} email - Email address to remove
  * @returns {Promise<boolean>} True if removed, false if not found
  */
@@ -236,11 +260,14 @@ async function removeLeadFromExcel(graphClient, email) {
         const masterFileName = 'LGA-Master-Email-List.xlsx';
         const masterFolderPath = '/LGA-Email-Automation';
 
-        console.log(`🔍 Searching for ${email} in Excel file...`);
+        // Get the user's email from environment variable (the account that owns the OneDrive)
+        const oneDriveUserEmail = process.env.ONEDRIVE_USER_EMAIL || 'benefitscare@inspro.com.sg';
 
-        // Get the Excel file ID
+        console.log(`🔍 Searching for ${email} in Excel file (using application auth for user: ${oneDriveUserEmail})...`);
+
+        // Get the Excel file ID using application-level access to specific user's OneDrive
         const files = await graphClient
-            .api(`/me/drive/root:${masterFolderPath}:/children`)
+            .api(`/users/${oneDriveUserEmail}/drive/root:${masterFolderPath}:/children`)
             .filter(`name eq '${masterFileName}'`)
             .get();
 
@@ -251,9 +278,9 @@ async function removeLeadFromExcel(graphClient, email) {
 
         const fileId = files.value[0].id;
 
-        // Get worksheets to find the Leads sheet
+        // Get worksheets to find the Leads sheet (using user's drive path)
         const worksheets = await graphClient
-            .api(`/me/drive/items/${fileId}/workbook/worksheets`)
+            .api(`/users/${oneDriveUserEmail}/drive/items/${fileId}/workbook/worksheets`)
             .get();
 
         const leadsSheet = worksheets.value.find(sheet =>
@@ -267,7 +294,7 @@ async function removeLeadFromExcel(graphClient, email) {
 
         // Get worksheet data to find the email
         const usedRange = await graphClient
-            .api(`/me/drive/items/${fileId}/workbook/worksheets('${leadsSheet.name}')/usedRange`)
+            .api(`/users/${oneDriveUserEmail}/drive/items/${fileId}/workbook/worksheets('${leadsSheet.name}')/usedRange`)
             .get();
 
         if (!usedRange || !usedRange.values || usedRange.values.length <= 1) {
@@ -306,10 +333,10 @@ async function removeLeadFromExcel(graphClient, email) {
             return false;
         }
 
-        // Delete the row
+        // Delete the row (using user's drive path)
         const deleteRange = `${targetRowIndex}:${targetRowIndex}`;
         await graphClient
-            .api(`/me/drive/items/${fileId}/workbook/worksheets('${leadsSheet.name}')/range(address='${deleteRange}')/delete`)
+            .api(`/users/${oneDriveUserEmail}/drive/items/${fileId}/workbook/worksheets('${leadsSheet.name}')/range(address='${deleteRange}')/delete`)
             .post({
                 shift: 'Up'
             });

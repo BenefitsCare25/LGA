@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Unsubscribe Functionality</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 6px;
+        }
+        input[type="email"] {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            padding: 12px 24px;
+            margin: 5px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            color: white;
+        }
+        .btn-primary {
+            background-color: #007bff;
+        }
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+        }
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            display: none;
+        }
+        .result.success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .result.error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .result.info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-indicator.green {
+            background-color: #28a745;
+        }
+        .status-indicator.red {
+            background-color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Unsubscribe Functionality Test</h1>
+
+        <div class="test-section">
+            <h2>Test 1: Check Unsubscribe Page Load</h2>
+            <p>Test if the unsubscribe page loads correctly with an email parameter</p>
+            <input type="email" id="testEmail1" placeholder="Enter test email address" value="test@example.com">
+            <button class="btn-primary" onclick="testUnsubscribePage()">Test Unsubscribe Page</button>
+            <div id="result1" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 2: Generate Unsubscribe Link</h2>
+            <p>Generate a proper unsubscribe link for testing</p>
+            <input type="email" id="testEmail2" placeholder="Enter email address" value="test@example.com">
+            <button class="btn-primary" onclick="generateUnsubscribeLink()">Generate Link</button>
+            <div id="result2" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 3: Check Route Registration</h2>
+            <p>Verify that the unsubscribe endpoint is properly registered</p>
+            <button class="btn-primary" onclick="checkEndpoints()">Check Endpoints</button>
+            <div id="result3" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 4: Test Link in Email Context</h2>
+            <p>Preview how the unsubscribe link appears in actual emails</p>
+            <input type="email" id="testEmail4" placeholder="Enter email address" value="test@example.com">
+            <button class="btn-primary" onclick="previewEmailUnsubscribe()">Preview in Email</button>
+            <div id="result4" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        const baseUrl = window.location.origin;
+
+        function showResult(elementId, type, message) {
+            const resultDiv = document.getElementById(elementId);
+            resultDiv.className = `result ${type}`;
+            resultDiv.innerHTML = message;
+            resultDiv.style.display = 'block';
+        }
+
+        function testUnsubscribePage() {
+            const email = document.getElementById('testEmail1').value.trim();
+
+            if (!email) {
+                showResult('result1', 'error', '❌ Please enter an email address');
+                return;
+            }
+
+            const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?email=${encodeURIComponent(email)}`;
+
+            showResult('result1', 'info', `
+                <p><span class="status-indicator green"></span><strong>Unsubscribe URL Generated</strong></p>
+                <p>Opening in new window...</p>
+                <pre>${unsubscribeUrl}</pre>
+                <p><a href="${unsubscribeUrl}" target="_blank">Click here to test</a></p>
+            `);
+
+            // Open in new window
+            window.open(unsubscribeUrl, '_blank');
+        }
+
+        function generateUnsubscribeLink() {
+            const email = document.getElementById('testEmail2').value.trim();
+
+            if (!email) {
+                showResult('result2', 'error', '❌ Please enter an email address');
+                return;
+            }
+
+            const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?email=${encodeURIComponent(email)}`;
+
+            showResult('result2', 'success', `
+                <p><span class="status-indicator green"></span><strong>Unsubscribe Link Generated</strong></p>
+                <p><strong>Full URL:</strong></p>
+                <pre>${unsubscribeUrl}</pre>
+                <p><strong>HTML for Email:</strong></p>
+                <pre>&lt;a href="${unsubscribeUrl}"&gt;Unsubscribe from this mailing list&lt;/a&gt;</pre>
+                <button class="btn-primary" onclick="copyToClipboard('${unsubscribeUrl}')">Copy Link</button>
+            `);
+        }
+
+        async function checkEndpoints() {
+            showResult('result3', 'info', '<p>Checking endpoints...</p>');
+
+            try {
+                // Test 1: Check if unsubscribe endpoint exists
+                const testUrl = `${baseUrl}/api/email/unsubscribe?email=test@example.com`;
+                const response = await fetch(testUrl);
+
+                const checks = [];
+
+                if (response.ok) {
+                    checks.push('✅ Unsubscribe endpoint is accessible');
+                    checks.push(`✅ Response status: ${response.status}`);
+                    checks.push('✅ Page loads successfully');
+                } else {
+                    checks.push(`❌ Response status: ${response.status}`);
+                }
+
+                // Test 2: Check if confirm endpoint is registered
+                const confirmUrl = `${baseUrl}/api/email/unsubscribe/confirm`;
+                checks.push(`<br><strong>Confirm endpoint:</strong> ${confirmUrl}`);
+                checks.push('⚠️ Requires authentication - cannot test without session');
+
+                showResult('result3', 'success', `
+                    <p><span class="status-indicator green"></span><strong>Endpoint Status Check</strong></p>
+                    <ul style="text-align: left; margin: 10px 0;">
+                        ${checks.map(check => `<li>${check}</li>`).join('')}
+                    </ul>
+                `);
+
+            } catch (error) {
+                showResult('result3', 'error', `
+                    <p>❌ <strong>Error checking endpoints:</strong></p>
+                    <pre>${error.message}</pre>
+                `);
+            }
+        }
+
+        function previewEmailUnsubscribe() {
+            const email = document.getElementById('testEmail4').value.trim();
+
+            if (!email) {
+                showResult('result4', 'error', '❌ Please enter an email address');
+                return;
+            }
+
+            const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?email=${encodeURIComponent(email)}`;
+
+            const emailPreview = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: white; border: 1px solid #e0e0e0;">
+                    <h2>Sample Email Content</h2>
+                    <p>This is a sample email message with professional content...</p>
+
+                    <!-- Unsubscribe Section (as it appears in actual emails) -->
+                    <div style="text-align: center; margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-top: 1px solid #e0e0e0;">
+                        <a href="${unsubscribeUrl}" style="color: #666; text-decoration: none; font-size: 12px;">
+                            Unsubscribe from this mailing list
+                        </a>
+                    </div>
+                </div>
+            `;
+
+            showResult('result4', 'success', `
+                <p><span class="status-indicator green"></span><strong>Email Preview with Unsubscribe Link</strong></p>
+                <div style="margin: 20px 0;">
+                    ${emailPreview}
+                </div>
+                <p><strong>Unsubscribe URL:</strong></p>
+                <pre>${unsubscribeUrl}</pre>
+            `);
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('✅ Link copied to clipboard!');
+            }).catch(err => {
+                alert('❌ Failed to copy: ' + err);
+            });
+        }
+
+        // Run basic check on page load
+        window.onload = function() {
+            console.log('🧪 Unsubscribe Test Page Loaded');
+            console.log('Base URL:', baseUrl);
+            console.log('Unsubscribe endpoint:', baseUrl + '/api/email/unsubscribe');
+            console.log('Confirm endpoint:', baseUrl + '/api/email/unsubscribe/confirm');
+        };
+    </script>
+</body>
+</html>
