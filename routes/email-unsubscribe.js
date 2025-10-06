@@ -5,7 +5,6 @@
 
 const express = require('express');
 const { Client } = require('@microsoft/microsoft-graph-client');
-require('isomorphic-fetch');
 const { getLeadsViaGraphAPI, getExcelColumnLetter } = require('../utils/excelGraphAPI');
 const router = express.Router();
 
