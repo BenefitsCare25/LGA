@@ -82,60 +82,39 @@ class ExcelDuplicateChecker {
     }
 
     /**
-     * Check multiple indicators to determine if email was already sent
+     * Check if email can be sent based on 14-day cooldown period
      * @param {object} lead - Lead object from Excel
      * @returns {object} {alreadySent: boolean, reason: string}
      */
     checkSentIndicators(lead) {
-        const today = new Date().toISOString().split('T')[0];
+        const COOLDOWN_DAYS = 14;
 
-        // Priority 1: Check if Status indicates already sent
-        if (lead.Status) {
-            const status = lead.Status.toString().toLowerCase();
-            if (['sent', 'read', 'replied', 'clicked'].includes(status)) {
-                return {
-                    alreadySent: true,
-                    reason: `Status is '${lead.Status}' - already processed`
-                };
-            }
-        }
-
-        // Priority 2: Check Last_Email_Date (most reliable indicator)
+        // Only check Last_Email_Date for 14-day cooldown
         if (lead.Last_Email_Date) {
             const lastEmailDate = this.parseExcelDate(lead.Last_Email_Date);
             if (lastEmailDate) {
-                return {
-                    alreadySent: true,
-                    reason: `Last_Email_Date is ${lastEmailDate} - email already sent`
-                };
+                const lastSentDate = new Date(lastEmailDate);
+                const today = new Date();
+                const daysSinceLastEmail = Math.floor((today - lastSentDate) / (1000 * 60 * 60 * 24));
+
+                if (daysSinceLastEmail < COOLDOWN_DAYS) {
+                    return {
+                        alreadySent: true,
+                        reason: `Last email sent ${daysSinceLastEmail} days ago (${lastEmailDate}). Cooldown period: ${COOLDOWN_DAYS} days`
+                    };
+                } else {
+                    return {
+                        alreadySent: false,
+                        reason: `Last email sent ${daysSinceLastEmail} days ago (${lastEmailDate}). Cooldown period passed - safe to send`
+                    };
+                }
             }
         }
 
-        // Priority 3: Check Email_Count > 0
-        if (lead.Email_Count && parseInt(lead.Email_Count) > 0) {
-            return {
-                alreadySent: true,
-                reason: `Email_Count is ${lead.Email_Count} - emails already sent`
-            };
-        }
-
-        // Priority 4: 'Email Sent' column removed - using Status field instead
-        // This check is now handled by Priority 2: Status-based check
-
-        // Priority 5: 'Sent Date' column removed - using other indicators
-        // This check was removed as 'Sent Date' is no longer updated by the system
-
-        // Priority 6: Check Template_Used (indicates email was generated/sent)
-        if (lead.Template_Used && lead.Template_Used !== '' && lead.Template_Used !== 'None') {
-            return {
-                alreadySent: true,
-                reason: `Template_Used is '${lead.Template_Used}' - email already sent`
-            };
-        }
-
+        // No Last_Email_Date means first time sending
         return {
             alreadySent: false,
-            reason: 'No sent indicators found'
+            reason: 'No previous email found - first time sending'
         };
     }
 
