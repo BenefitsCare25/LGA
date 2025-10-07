@@ -133,10 +133,10 @@ router.get('/callback', async (req, res) => {
                         <div class="success">✅ Authentication Successful!</div>
                         <div class="info">
                             <p>Welcome, <strong>${result.user}</strong></p>
-                            <p>You have successfully authenticated with Microsoft 365.</p>
-                            <p>Session ID: <code>${sessionId}</code></p>
+                            <p>Redirecting you back to the application...</p>
+                            <p style="font-size: 12px; color: #999;">Session ID: <code>${sessionId}</code></p>
                         </div>
-                        <a href="${redirectUrl}" class="btn">Continue to Application</a>
+                        <a href="${redirectUrl}" class="btn">Continue Now (or wait 1 second)</a>
                     </div>
                     <script>
                         // Auto-close if opened in popup
@@ -149,10 +149,10 @@ router.get('/callback', async (req, res) => {
                             window.close();
                         }
                         
-                        // Auto-redirect after 3 seconds
+                        // Auto-redirect after 1 second (faster user experience)
                         setTimeout(() => {
                             window.location.href = '${redirectUrl}';
-                        }, 3000);
+                        }, 1000);
                     </script>
                 </body>
                 </html>
