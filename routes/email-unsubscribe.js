@@ -333,7 +333,8 @@ async function removeLeadFromExcel(graphClient, email) {
         }
 
         // Delete the row (using user's drive path)
-        const deleteRange = `${targetRowIndex}:${targetRowIndex}`;
+        // Use cell range notation (e.g., A1125:ZZ1125) to delete entire row
+        const deleteRange = `A${targetRowIndex}:ZZ${targetRowIndex}`;
         await graphClient
             .api(`/users/${oneDriveUserEmail}/drive/items/${fileId}/workbook/worksheets('${leadsSheet.name}')/range(address='${deleteRange}')/delete`)
             .post({
