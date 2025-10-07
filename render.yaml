@@ -26,7 +26,7 @@ services:
         sync: false
       - key: RENDER_EXTERNAL_URL
         value: https://lead-generation-automation.onrender.com
-    healthCheckPath: /
+    healthCheckPath: /health
     # Optimize build settings
     buildCommand: npm ci --no-audit --no-fund
     # Add disk space optimization
