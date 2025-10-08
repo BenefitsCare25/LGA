@@ -250,24 +250,35 @@ router.post('/scrape-leads', async (req, res) => {
             const uniqueLeads = [];
             const seen = new Set();
 
-            transformedLeads.forEach(lead => {
+            transformedLeads.forEach((lead, index) => {
                 const email = (lead.email || '').toLowerCase().trim();
                 const linkedin = (lead.linkedin_url || '').toLowerCase().trim();
                 const name = (lead.name || '').toLowerCase().trim();
                 const company = (lead.organization_name || '').toLowerCase().trim();
 
                 let identifier;
+                let identifierType;
                 if (email && email !== '') {
                     identifier = email;
+                    identifierType = 'email';
                 } else if (linkedin && linkedin !== '') {
                     identifier = linkedin;
+                    identifierType = 'linkedin';
                 } else {
                     identifier = `${name}|${company}`;
+                    identifierType = 'name+company';
+                }
+
+                // Debug first few leads
+                if (index < 3) {
+                    console.log(`🔍 Lead ${index}: ${lead.name} - ${identifierType}: "${identifier}"`);
                 }
 
                 if (!seen.has(identifier)) {
                     seen.add(identifier);
                     uniqueLeads.push(lead);
+                } else {
+                    console.log(`🔄 Duplicate ${index}: ${lead.name} - ${identifierType}: "${identifier}"`);
                 }
             });
 
@@ -839,24 +850,35 @@ async function processApolloJob(apolloJobId) {
             const uniqueLeads = [];
             const seen = new Set();
 
-            transformedLeads.forEach(lead => {
+            transformedLeads.forEach((lead, index) => {
                 const email = (lead.email || '').toLowerCase().trim();
                 const linkedin = (lead.linkedin_url || '').toLowerCase().trim();
                 const name = (lead.name || '').toLowerCase().trim();
                 const company = (lead.organization_name || '').toLowerCase().trim();
 
                 let identifier;
+                let identifierType;
                 if (email && email !== '') {
                     identifier = email;
+                    identifierType = 'email';
                 } else if (linkedin && linkedin !== '') {
                     identifier = linkedin;
+                    identifierType = 'linkedin';
                 } else {
                     identifier = `${name}|${company}`;
+                    identifierType = 'name+company';
+                }
+
+                // Debug first few leads
+                if (index < 3) {
+                    console.log(`🔍 Lead ${index}: ${lead.name} - ${identifierType}: "${identifier}"`);
                 }
 
                 if (!seen.has(identifier)) {
                     seen.add(identifier);
                     uniqueLeads.push(lead);
+                } else {
+                    console.log(`🔄 Duplicate ${index}: ${lead.name} - ${identifierType}: "${identifier}"`);
                 }
             });
 
