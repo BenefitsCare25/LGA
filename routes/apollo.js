@@ -26,6 +26,10 @@ async function scrapeWithApolloAPI(personTitles, companySizes, maxRecords = 0) {
     console.log('🚀 Starting Apollo API direct search...');
     console.log(`📋 Filters: ${personTitles.length} titles, ${companySizes.length} sizes`);
 
+    // Convert company sizes from "1-10" format to "1,10" format for Apollo API
+    const normalizedSizes = companySizes.map(size => size.replace('-', ','));
+    console.log(`📊 Normalized company sizes:`, { original: companySizes, normalized: normalizedSizes });
+
     const allLeads = [];
     let currentPage = 1;
     const effectiveMaxRecords = maxRecords === 0 ? 50000 : Math.min(maxRecords, 50000);
@@ -38,11 +42,14 @@ async function scrapeWithApolloAPI(personTitles, companySizes, maxRecords = 0) {
             const requestBody = {
                 person_titles: personTitles,
                 person_locations: ['Singapore', 'Singapore, Singapore'],
-                organization_num_employees_ranges: companySizes,
+                organization_num_employees_ranges: normalizedSizes,
                 contact_email_status: ['verified'],
                 per_page: APOLLO_PER_PAGE,
                 page: currentPage
             };
+
+            // Debug: Log the exact request being sent
+            console.log(`🔍 Apollo API Request Body:`, JSON.stringify(requestBody, null, 2));
 
             const response = await axios.post(
                 `${APOLLO_API_BASE_URL}/mixed_people/search`,
@@ -59,6 +66,15 @@ async function scrapeWithApolloAPI(personTitles, companySizes, maxRecords = 0) {
 
             const people = response.data.people || [];
             const pagination = response.data.pagination || {};
+
+            // Debug: Log response details
+            console.log(`📊 Apollo API Response - Page ${currentPage}:`, {
+                peopleCount: people.length,
+                pagination: pagination,
+                totalEntries: pagination.total_entries,
+                totalPages: pagination.total_pages,
+                hasMore: !!people.length
+            });
 
             console.log(`✅ Page ${currentPage}: ${people.length} leads fetched`);
             allLeads.push(...people);
