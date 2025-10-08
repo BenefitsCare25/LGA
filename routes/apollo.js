@@ -6,6 +6,128 @@ const router = express.Router();
 // Initialize Apollo job storage (in production, use Redis or database)
 global.apolloJobs = global.apolloJobs || new Map();
 
+// Apollo API Configuration
+const APOLLO_API_BASE_URL = 'https://api.apollo.io/api/v1';
+const APOLLO_MAX_PAGES = 500; // Apollo API limit
+const APOLLO_PER_PAGE = 100; // Apollo API page size
+
+/**
+ * Call Apollo.io API directly for lead scraping
+ * @param {Array} personTitles - Job titles to search for
+ * @param {Array} companySizes - Company size ranges (e.g., ["1-10", "11-50"])
+ * @param {Number} maxRecords - Maximum records to fetch (0 = max available, capped at 50k)
+ * @returns {Promise<Array>} Array of lead objects
+ */
+async function scrapeWithApolloAPI(personTitles, companySizes, maxRecords = 0) {
+    if (!process.env.APOLLO_API_KEY) {
+        throw new Error('Apollo API key not configured');
+    }
+
+    console.log('🚀 Starting Apollo API direct search...');
+    console.log(`📋 Filters: ${personTitles.length} titles, ${companySizes.length} sizes`);
+
+    const allLeads = [];
+    let currentPage = 1;
+    const effectiveMaxRecords = maxRecords === 0 ? 50000 : Math.min(maxRecords, 50000);
+    const maxPages = Math.min(Math.ceil(effectiveMaxRecords / APOLLO_PER_PAGE), APOLLO_MAX_PAGES);
+
+    while (currentPage <= maxPages) {
+        try {
+            console.log(`📄 Fetching page ${currentPage}/${maxPages}...`);
+
+            const requestBody = {
+                person_titles: personTitles,
+                person_locations: ['Singapore', 'Singapore, Singapore'],
+                organization_num_employees_ranges: companySizes,
+                contact_email_status: ['verified'],
+                per_page: APOLLO_PER_PAGE,
+                page: currentPage
+            };
+
+            const response = await axios.post(
+                `${APOLLO_API_BASE_URL}/mixed_people/search`,
+                requestBody,
+                {
+                    headers: {
+                        'Cache-Control': 'no-cache',
+                        'Content-Type': 'application/json',
+                        'x-api-key': process.env.APOLLO_API_KEY
+                    },
+                    timeout: 30000
+                }
+            );
+
+            const people = response.data.people || [];
+            const pagination = response.data.pagination || {};
+
+            console.log(`✅ Page ${currentPage}: ${people.length} leads fetched`);
+            allLeads.push(...people);
+
+            // Check if we've reached the end or our limit
+            if (people.length < APOLLO_PER_PAGE || allLeads.length >= effectiveMaxRecords) {
+                console.log(`🏁 Reached end: ${allLeads.length} total leads`);
+                break;
+            }
+
+            // Check pagination metadata
+            if (pagination.page >= pagination.total_pages) {
+                console.log(`🏁 Reached last page: ${pagination.total_pages}`);
+                break;
+            }
+
+            currentPage++;
+
+            // Rate limiting: small delay between requests
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+        } catch (error) {
+            console.error(`❌ Apollo API error on page ${currentPage}:`, error.message);
+
+            if (error.response?.status === 401) {
+                throw new Error('Invalid Apollo API key');
+            } else if (error.response?.status === 429) {
+                throw new Error('Apollo API rate limit exceeded');
+            } else if (error.response?.status === 402) {
+                throw new Error('Apollo API credits exhausted');
+            }
+
+            // If we have some data, return what we got
+            if (allLeads.length > 0) {
+                console.log(`⚠️ Returning ${allLeads.length} leads fetched before error`);
+                break;
+            }
+
+            throw error;
+        }
+    }
+
+    console.log(`✅ Apollo API search complete: ${allLeads.length} leads`);
+    return allLeads;
+}
+
+/**
+ * Transform Apollo API response to match our internal data structure
+ */
+function transformApolloLead(apolloLead) {
+    const organization = apolloLead.organization || {};
+    const employment = apolloLead.employment_history?.[0] || {};
+
+    return {
+        name: apolloLead.name || apolloLead.first_name + ' ' + apolloLead.last_name || '',
+        title: apolloLead.title || employment.title || '',
+        organization_name: organization.name || '',
+        organization_website_url: organization.website_url || organization.primary_domain || '',
+        estimated_num_employees: organization.estimated_num_employees || '',
+        email: apolloLead.email || '',
+        email_verified: apolloLead.email_status === 'verified' ? 'Y' : 'N',
+        linkedin_url: apolloLead.linkedin_url || '',
+        phone_number: apolloLead.phone_numbers?.[0]?.sanitized_number || apolloLead.sanitized_phone || organization.phone || '',
+        industry: organization.industry || '',
+        country: apolloLead.country || apolloLead.state || 'Singapore',
+        conversion_status: 'Pending'
+    };
+}
+
 // Apollo URL generation endpoint
 router.post('/generate-url', async (req, res) => {
     try {
@@ -74,7 +196,144 @@ router.post('/generate-url', async (req, res) => {
 // Apollo lead scraping endpoint
 router.post('/scrape-leads', async (req, res) => {
     try {
-        const { apolloUrl, maxRecords = 500 } = req.body;
+        const { apolloUrl, maxRecords = 500, jobTitles, companySizes } = req.body;
+
+        // Determine if we should use Apollo API or fallback to Apify
+        const useApolloAPI = process.env.APOLLO_API_KEY && process.env.USE_APOLLO_API !== 'false';
+
+        if (useApolloAPI) {
+            // **NEW: Direct Apollo API Integration**
+            console.log('🎯 Using Apollo API direct integration');
+
+            // Extract filters from URL or use provided parameters
+            let personTitles = jobTitles || [];
+            let companySizeRanges = companySizes || [];
+
+            // If no direct params, try to extract from Apollo URL
+            if ((!personTitles || personTitles.length === 0) && apolloUrl) {
+                const urlParams = new URLSearchParams(apolloUrl.split('?')[1] || '');
+                personTitles = urlParams.getAll('personTitles[]');
+                const rawSizes = urlParams.getAll('organizationNumEmployeesRanges[]');
+                companySizeRanges = rawSizes.map(s => s.replace(',', '-'));
+            }
+
+            if (personTitles.length === 0 || companySizeRanges.length === 0) {
+                return res.status(400).json({
+                    error: 'Validation Error',
+                    message: 'Job titles and company sizes are required for Apollo API'
+                });
+            }
+
+            // Call Apollo API
+            const rawData = await scrapeWithApolloAPI(personTitles, companySizeRanges, maxRecords || 0);
+
+            // Transform Apollo data to our format
+            const transformedLeads = rawData.map(transformApolloLead);
+
+            // Duplicate prevention
+            const uniqueLeads = [];
+            const seen = new Set();
+
+            transformedLeads.forEach(lead => {
+                const email = (lead.email || '').toLowerCase().trim();
+                const linkedin = (lead.linkedin_url || '').toLowerCase().trim();
+                const name = (lead.name || '').toLowerCase().trim();
+                const company = (lead.organization_name || '').toLowerCase().trim();
+
+                let identifier;
+                if (email && email !== '') {
+                    identifier = email;
+                } else if (linkedin && linkedin !== '') {
+                    identifier = linkedin;
+                } else {
+                    identifier = `${name}|${company}`;
+                }
+
+                if (!seen.has(identifier)) {
+                    seen.add(identifier);
+                    uniqueLeads.push(lead);
+                }
+            });
+
+            const duplicatesRemoved = transformedLeads.length - uniqueLeads.length;
+
+            // AI-powered phone lookup for leads without phone numbers
+            console.log(`📞 Checking for missing phone numbers in ${uniqueLeads.length} leads...`);
+            const leadsWithoutPhone = uniqueLeads.filter(lead => !lead.phone_number || lead.phone_number.trim() === '');
+
+            if (leadsWithoutPhone.length > 0) {
+                console.log(`🔍 Found ${leadsWithoutPhone.length} leads without phone numbers - starting AI lookup...`);
+                const phoneLookup = new PhoneNumberLookup();
+                let phonesFound = 0;
+
+                for (const lead of leadsWithoutPhone) {
+                    try {
+                        const lookupResult = await phoneLookup.findPhoneNumber({
+                            Name: lead.name,
+                            'Company Name': lead.organization_name,
+                            'LinkedIn URL': lead.linkedin_url,
+                            Email: lead.email
+                        });
+
+                        if (lookupResult.found) {
+                            lead.phone_number = lookupResult.phoneNumber;
+                            phonesFound++;
+                            console.log(`✅ Found phone for ${lead.name}: ${lookupResult.phoneNumber}`);
+                        }
+                    } catch (error) {
+                        console.error(`❌ Phone lookup error for ${lead.name}:`, error.message);
+                    }
+                }
+
+                console.log(`📞 AI phone lookup completed: ${phonesFound}/${leadsWithoutPhone.length} found`);
+            }
+
+            // Return response
+            if (uniqueLeads.length > 250) {
+                global.tempLeads = global.tempLeads || new Map();
+                const sessionId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+                global.tempLeads.set(sessionId, uniqueLeads);
+
+                setTimeout(() => global.tempLeads.delete(sessionId), 30 * 60 * 1000);
+
+                return res.json({
+                    success: true,
+                    count: uniqueLeads.length,
+                    sessionId: sessionId,
+                    metadata: {
+                        source: 'apollo_api',
+                        apolloUrl: apolloUrl || 'N/A',
+                        scrapedAt: new Date().toISOString(),
+                        maxRecords: maxRecords || 0,
+                        rawScraped: rawData.length,
+                        duplicatesRemoved: duplicatesRemoved,
+                        finalCount: uniqueLeads.length,
+                        jobTitles: personTitles,
+                        companySizes: companySizeRanges
+                    }
+                });
+            } else {
+                return res.json({
+                    success: true,
+                    count: uniqueLeads.length,
+                    leads: uniqueLeads,
+                    metadata: {
+                        source: 'apollo_api',
+                        apolloUrl: apolloUrl || 'N/A',
+                        scrapedAt: new Date().toISOString(),
+                        maxRecords: maxRecords || 0,
+                        rawScraped: rawData.length,
+                        duplicatesRemoved: duplicatesRemoved,
+                        finalCount: uniqueLeads.length,
+                        jobTitles: personTitles,
+                        companySizes: companySizeRanges
+                    }
+                });
+            }
+        }
+
+        // **FALLBACK: Original Apify Integration**
+        console.log('🔄 Using Apify fallback integration');
 
         // Validation
         if (!apolloUrl) {
@@ -99,9 +358,9 @@ router.post('/scrape-leads', async (req, res) => {
             });
         }
 
-        // Handle unlimited vs limited records  
+        // Handle unlimited vs limited records
         let recordLimit;
-        
+
         if (maxRecords === 0) {
             recordLimit = 0; // Truly unlimited - let Apify scrape all available
         } else {
@@ -525,15 +784,129 @@ router.post('/start-scrape-job', async (req, res) => {
 async function processApolloJob(apolloJobId) {
     const job = global.apolloJobs.get(apolloJobId);
     if (!job) return;
-    
+
     try {
-        const { apolloUrl, maxRecords } = job.params;
-        
+        const { apolloUrl, maxRecords, jobTitles, companySizes } = job.params;
+
         job.status = 'scraping';
-        
-        // Handle unlimited vs limited records  
+
+        // Determine if we should use Apollo API or fallback to Apify
+        const useApolloAPI = process.env.APOLLO_API_KEY && process.env.USE_APOLLO_API !== 'false';
+
+        if (useApolloAPI) {
+            // **NEW: Direct Apollo API Integration for background jobs**
+            console.log(`🎯 Apollo job ${apolloJobId}: Using Apollo API direct integration`);
+
+            // Extract filters from URL or use provided parameters
+            let personTitles = jobTitles || [];
+            let companySizeRanges = companySizes || [];
+
+            // If no direct params, try to extract from Apollo URL
+            if ((!personTitles || personTitles.length === 0) && apolloUrl) {
+                const urlParams = new URLSearchParams(apolloUrl.split('?')[1] || '');
+                personTitles = urlParams.getAll('personTitles[]');
+                const rawSizes = urlParams.getAll('organizationNumEmployeesRanges[]');
+                companySizeRanges = rawSizes.map(s => s.replace(',', '-'));
+            }
+
+            if (personTitles.length === 0 || companySizeRanges.length === 0) {
+                throw new Error('Job titles and company sizes are required for Apollo API');
+            }
+
+            // Call Apollo API
+            const rawData = await scrapeWithApolloAPI(personTitles, companySizeRanges, maxRecords || 0);
+
+            // Transform Apollo data to our format
+            const transformedLeads = rawData.map(transformApolloLead);
+
+            // Duplicate prevention
+            const uniqueLeads = [];
+            const seen = new Set();
+
+            transformedLeads.forEach(lead => {
+                const email = (lead.email || '').toLowerCase().trim();
+                const linkedin = (lead.linkedin_url || '').toLowerCase().trim();
+                const name = (lead.name || '').toLowerCase().trim();
+                const company = (lead.organization_name || '').toLowerCase().trim();
+
+                let identifier;
+                if (email && email !== '') {
+                    identifier = email;
+                } else if (linkedin && linkedin !== '') {
+                    identifier = linkedin;
+                } else {
+                    identifier = `${name}|${company}`;
+                }
+
+                if (!seen.has(identifier)) {
+                    seen.add(identifier);
+                    uniqueLeads.push(lead);
+                }
+            });
+
+            const duplicatesRemoved = transformedLeads.length - uniqueLeads.length;
+
+            // AI-powered phone lookup
+            console.log(`📞 Apollo job ${apolloJobId}: Checking for missing phone numbers in ${uniqueLeads.length} leads...`);
+            const leadsWithoutPhone = uniqueLeads.filter(lead => !lead.phone_number || lead.phone_number.trim() === '');
+
+            if (leadsWithoutPhone.length > 0) {
+                console.log(`🔍 Apollo job ${apolloJobId}: Found ${leadsWithoutPhone.length} leads without phone numbers - starting AI lookup...`);
+                const phoneLookup = new PhoneNumberLookup();
+                let phonesFound = 0;
+
+                for (const lead of leadsWithoutPhone) {
+                    try {
+                        const lookupResult = await phoneLookup.findPhoneNumber({
+                            Name: lead.name,
+                            'Company Name': lead.organization_name,
+                            'LinkedIn URL': lead.linkedin_url,
+                            Email: lead.email
+                        });
+
+                        if (lookupResult.found) {
+                            lead.phone_number = lookupResult.phoneNumber;
+                            phonesFound++;
+                            console.log(`✅ Apollo job ${apolloJobId}: Found phone for ${lead.name}: ${lookupResult.phoneNumber}`);
+                        }
+                    } catch (error) {
+                        console.error(`❌ Apollo job ${apolloJobId}: Phone lookup error for ${lead.name}:`, error.message);
+                    }
+                }
+
+                console.log(`📞 Apollo job ${apolloJobId}: AI phone lookup completed: ${phonesFound}/${leadsWithoutPhone.length} found`);
+            }
+
+            // Job completed successfully
+            job.status = 'completed';
+            job.result = {
+                success: true,
+                count: uniqueLeads.length,
+                leads: uniqueLeads,
+                metadata: {
+                    source: 'apollo_api',
+                    apolloUrl: apolloUrl || 'N/A',
+                    scrapedAt: new Date().toISOString(),
+                    maxRecords: maxRecords || 0,
+                    rawScraped: rawData.length,
+                    duplicatesRemoved: duplicatesRemoved,
+                    finalCount: uniqueLeads.length,
+                    jobTitles: personTitles,
+                    companySizes: companySizeRanges
+                }
+            };
+            job.completedAt = new Date().toISOString();
+
+            console.log(`✅ Apollo job ${apolloJobId} completed successfully with ${uniqueLeads.length} leads`);
+            return;
+        }
+
+        // **FALLBACK: Original Apify Integration**
+        console.log(`🔄 Apollo job ${apolloJobId}: Using Apify fallback integration`);
+
+        // Handle unlimited vs limited records
         let recordLimit;
-        
+
         if (maxRecords === 0) {
             recordLimit = 0; // Truly unlimited - let Apify scrape all available
         } else {
@@ -1002,9 +1375,40 @@ router.get('/job-result/:jobId', async (req, res) => {
 // Test endpoint for Apollo integration
 router.get('/test', async (req, res) => {
     const checks = {
+        apolloApiKey: !!process.env.APOLLO_API_KEY,
+        apolloApiConnection: false,
         apifyToken: !!process.env.APIFY_API_TOKEN,
-        apifyConnection: false
+        apifyConnection: false,
+        activeIntegration: 'none'
     };
+
+    // Test Apollo API connection if key is available
+    if (checks.apolloApiKey) {
+        try {
+            const testResponse = await axios.post(
+                `${APOLLO_API_BASE_URL}/mixed_people/search`,
+                {
+                    person_titles: ['CEO'],
+                    person_locations: ['Singapore'],
+                    per_page: 1,
+                    page: 1
+                },
+                {
+                    headers: {
+                        'Cache-Control': 'no-cache',
+                        'Content-Type': 'application/json',
+                        'x-api-key': process.env.APOLLO_API_KEY
+                    },
+                    timeout: 10000
+                }
+            );
+            checks.apolloApiConnection = testResponse.status === 200;
+            checks.activeIntegration = 'apollo_api';
+        } catch (error) {
+            checks.apolloApiConnection = false;
+            checks.apolloApiError = error.response?.status || error.message;
+        }
+    }
 
     // Test Apify connection if token is available
     if (checks.apifyToken) {
@@ -1016,20 +1420,35 @@ router.get('/test', async (req, res) => {
                 timeout: 5000
             });
             checks.apifyConnection = testResponse.status === 200;
+            if (!checks.apolloApiConnection && checks.apifyConnection) {
+                checks.activeIntegration = 'apify_fallback';
+            }
         } catch (error) {
             checks.apifyConnection = false;
             checks.apifyError = error.response?.status || 'Connection failed';
         }
     }
 
-    const allGood = Object.values(checks).every(check => 
-        typeof check === 'boolean' ? check : true
-    );
+    const apolloReady = checks.apolloApiConnection;
+    const apifyReady = checks.apifyConnection;
+    const anyReady = apolloReady || apifyReady;
 
-    res.status(allGood ? 200 : 500).json({
-        status: allGood ? 'OK' : 'Error',
+    let message = 'Apollo integration has issues';
+    if (apolloReady) {
+        message = 'Apollo API direct integration ready (primary)';
+    } else if (apifyReady) {
+        message = 'Apify fallback integration ready (Apollo API unavailable)';
+    }
+
+    res.status(anyReady ? 200 : 500).json({
+        status: anyReady ? 'OK' : 'Error',
         checks,
-        message: allGood ? 'Apollo integration ready' : 'Apollo integration has issues'
+        message,
+        recommendation: !apolloReady && !apifyReady
+            ? 'Configure APOLLO_API_KEY or APIFY_API_TOKEN in environment variables'
+            : apolloReady
+                ? 'Using Apollo API direct integration (recommended)'
+                : 'Using Apify fallback - consider adding APOLLO_API_KEY for direct access'
     });
 });
 
