@@ -753,7 +753,7 @@ async function processApolloJob(apolloJobId) {
                     apolloUrl: apolloUrl || 'N/A',
                     scrapedAt: new Date().toISOString(),
                     maxRecords: maxRecords || 0,
-                    rawScraped: rawData.length,
+                    rawScraped: enrichedData.length,
                     duplicatesRemoved: duplicatesRemoved,
                     finalCount: uniqueLeads.length,
                     jobTitles: personTitles,
