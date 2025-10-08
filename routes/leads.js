@@ -933,7 +933,17 @@ async function processWorkflowJob(jobId, protocol, host) {
     
     try {
         const { jobTitles, companySizes, maxRecords, generateOutreach, includePhoneNumbers = false, enableAiPhoneFinder = true, useProductMaterials, chunkSize, excludeEmailDomains, excludeIndustries, saveToOneDrive, sendEmailCampaign, templateChoice, emailTemplate, emailSubject, trackEmailReads } = job.params;
-        
+
+        // Debug: Log extracted parameters
+        console.log(`🔍 Job ${jobId} - Extracted params:`, {
+            jobTitles,
+            companySizes,
+            jobTitlesType: typeof jobTitles,
+            companySizesType: typeof companySizes,
+            jobTitlesIsArray: Array.isArray(jobTitles),
+            companySizesIsArray: Array.isArray(companySizes)
+        });
+
         // Step 1: Generate Web URL
         const totalSteps = 4 + (saveToOneDrive ? 1 : 0) + (sendEmailCampaign ? 1 : 0);
         job.progress = { step: 2, message: 'Generating Web URL...', total: totalSteps };
