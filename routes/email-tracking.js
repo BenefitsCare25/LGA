@@ -1,6 +1,5 @@
 const express = require('express');
-const XLSX = require('xlsx'); // Still needed for legacy diagnostic function - TODO: Remove when migrated to Graph API
-const axios = require('axios');
+const XLSX = require('xlsx'); // Used for diagnostic function
 const { requireDelegatedAuth, getDelegatedAuthProvider } = require('../middleware/delegatedGraphAuth');
 const ExcelProcessor = require('../utils/excelProcessor');
 const excelUpdateQueue = require('../utils/excelUpdateQueue');
@@ -164,7 +163,6 @@ router.get('/diagnostic/:email?', requireDelegatedAuth, async (req, res) => {
         const { email } = req.params;
         
         const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
-        // TODO: Migrate this diagnostic function to use Graph API directly like updateExcelViaGraphAPI
         const masterWorkbook = await downloadMasterFile(graphClient, false);
         
         if (!masterWorkbook) {
