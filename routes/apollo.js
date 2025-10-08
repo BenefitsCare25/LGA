@@ -76,6 +76,11 @@ async function scrapeWithApolloAPI(personTitles, companySizes, maxRecords = 0) {
                 hasMore: !!people.length
             });
 
+            // Debug: Log first person to see raw structure
+            if (currentPage === 1 && people.length > 0) {
+                console.log(`🔍 Sample Apollo API person object:`, JSON.stringify(people[0], null, 2));
+            }
+
             console.log(`✅ Page ${currentPage}: ${people.length} leads fetched`);
             allLeads.push(...people);
 

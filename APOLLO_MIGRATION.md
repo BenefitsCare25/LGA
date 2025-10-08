@@ -52,7 +52,20 @@ USE_APOLLO_API=false
 | **Pagination** | 100/page, 500 pages max | Auto-handled |
 | **Cost** | Per credit | Per run |
 | **Reliability** | Direct API, stable | Scraper, may break |
-| **Email/Phone** | Existing data only | Existing data only |
+| **Email/Phone** | ⚠️ **Your account data only** | Scrapes all visible data |
+
+## Important Email/Phone Limitation
+
+**Apollo API does NOT return new email addresses or phone numbers.**
+
+- The API only returns emails/phones already saved in your Apollo account
+- If you haven't enriched contacts in Apollo UI first, the API returns empty emails
+- This is a documented Apollo API limitation per their docs
+
+**Solutions:**
+1. **Use Apify** (fallback) - Scrapes visible emails from Apollo UI
+2. **Enrich in Apollo first** - Add contacts to lists in Apollo UI to save emails
+3. **Use People Enrichment API** - Separate API to discover new emails (costs extra credits)
 
 ## API Limits
 
