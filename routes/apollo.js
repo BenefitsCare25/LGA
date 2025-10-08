@@ -16,9 +16,10 @@ const APOLLO_PER_PAGE = 100; // Apollo API page size
  * @param {Array} personTitles - Job titles to search for
  * @param {Array} companySizes - Company size ranges (e.g., ["1-10", "11-50"])
  * @param {Number} maxRecords - Maximum records to fetch (0 = max available, capped at 50k)
+ * @param {Boolean} includePhoneNumbers - Whether to reveal phone numbers (costs extra credits)
  * @returns {Promise<Array>} Array of lead objects
  */
-async function scrapeWithApolloAPI(personTitles, companySizes, maxRecords = 0) {
+async function scrapeWithApolloAPI(personTitles, companySizes, maxRecords = 0, includePhoneNumbers = false) {
     if (!process.env.APOLLO_API_KEY) {
         throw new Error('Apollo API key not configured');
     }
@@ -44,8 +45,8 @@ async function scrapeWithApolloAPI(personTitles, companySizes, maxRecords = 0) {
                 person_locations: ['Singapore', 'Singapore, Singapore'],
                 organization_num_employees_ranges: normalizedSizes,
                 contact_email_status: ['verified'],
-                reveal_personal_emails: true,  // Request personal emails (costs credits)
-                reveal_phone_number: true,     // Request phone numbers (costs credits)
+                reveal_personal_emails: true,     // Always request emails (costs credits)
+                reveal_phone_number: includePhoneNumbers,  // Only if user opts in (costs extra credits)
                 per_page: APOLLO_PER_PAGE,
                 page: currentPage
             };
@@ -135,14 +136,37 @@ function transformApolloLead(apolloLead) {
     const organization = apolloLead.organization || {};
     const employment = apolloLead.employment_history?.[0] || {};
 
+    // Prioritize work email over personal email
+    let selectedEmail = '';
+    let emailType = '';
+
+    // Check for work/corporate email first
+    if (apolloLead.email) {
+        selectedEmail = apolloLead.email;
+        emailType = 'work';
+    }
+
+    // If no work email, check personal emails
+    if (!selectedEmail && apolloLead.personal_emails && apolloLead.personal_emails.length > 0) {
+        selectedEmail = apolloLead.personal_emails[0];
+        emailType = 'personal';
+    }
+
+    // Fallback to organization email if nothing else
+    if (!selectedEmail && apolloLead.organization_email) {
+        selectedEmail = apolloLead.organization_email;
+        emailType = 'org';
+    }
+
     return {
         name: apolloLead.name || apolloLead.first_name + ' ' + apolloLead.last_name || '',
         title: apolloLead.title || employment.title || '',
         organization_name: organization.name || '',
         organization_website_url: organization.website_url || organization.primary_domain || '',
         estimated_num_employees: organization.estimated_num_employees || '',
-        email: apolloLead.email || '',
+        email: selectedEmail,
         email_verified: apolloLead.email_status === 'verified' ? 'Y' : 'N',
+        email_type: emailType, // Track which type of email was used
         linkedin_url: apolloLead.linkedin_url || '',
         phone_number: apolloLead.phone_numbers?.[0]?.sanitized_number || apolloLead.sanitized_phone || organization.phone || '',
         industry: organization.industry || '',
@@ -219,7 +243,7 @@ router.post('/generate-url', async (req, res) => {
 // Apollo lead scraping endpoint
 router.post('/scrape-leads', async (req, res) => {
     try {
-        const { apolloUrl, maxRecords = 500, jobTitles, companySizes } = req.body;
+        const { apolloUrl, maxRecords = 500, jobTitles, companySizes, includePhoneNumbers = false } = req.body;
 
         // Determine if we should use Apollo API or fallback to Apify
         const useApolloAPI = process.env.APOLLO_API_KEY && process.env.USE_APOLLO_API !== 'false';
@@ -248,7 +272,7 @@ router.post('/scrape-leads', async (req, res) => {
             }
 
             // Call Apollo API
-            const rawData = await scrapeWithApolloAPI(personTitles, companySizeRanges, maxRecords || 0);
+            const rawData = await scrapeWithApolloAPI(personTitles, companySizeRanges, maxRecords || 0, includePhoneNumbers);
 
             // Transform Apollo data to our format
             const transformedLeads = rawData.map(transformApolloLead);
@@ -820,7 +844,7 @@ async function processApolloJob(apolloJobId) {
     if (!job) return;
 
     try {
-        const { apolloUrl, maxRecords, jobTitles, companySizes } = job.params;
+        const { apolloUrl, maxRecords, jobTitles, companySizes, includePhoneNumbers = false } = job.params;
 
         job.status = 'scraping';
 
@@ -848,7 +872,7 @@ async function processApolloJob(apolloJobId) {
             }
 
             // Call Apollo API
-            const rawData = await scrapeWithApolloAPI(personTitles, companySizeRanges, maxRecords || 0);
+            const rawData = await scrapeWithApolloAPI(personTitles, companySizeRanges, maxRecords || 0, includePhoneNumbers);
 
             // Transform Apollo data to our format
             const transformedLeads = rawData.map(transformApolloLead);

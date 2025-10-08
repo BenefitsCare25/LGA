@@ -1572,6 +1572,14 @@
                                     <input type="checkbox" id="generateOutreach" checked style="accent-color: var(--color-primary-500);">
                                     <label for="generateOutreach">🤖 Generate AI Outreach</label>
                                 </div>
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="includePhoneNumbers" style="accent-color: var(--color-primary-500);">
+                                    <label for="includePhoneNumbers">📞 Include Phone Numbers</label>
+                                    <small style="color: var(--color-gray-500); margin-left: var(--space-2);">(costs extra credits)</small>
+                                </div>
+                            </div>
+
+                            <div class="processing-row-dual" style="margin-top: var(--space-3);">
                                 <div class="number-input-group">
                                     <label for="maxRecords">📊 Max Leads:</label>
                                     <input type="number" id="maxRecords" value="0" min="0" max="10000">
@@ -2077,6 +2085,7 @@
                         formDataWithFile.append('jobTitles', JSON.stringify(formData.jobTitles));
                         formDataWithFile.append('companySizes', JSON.stringify(formData.companySizes));
                         formDataWithFile.append('generateOutreach', formData.generateOutreach);
+                        formDataWithFile.append('includePhoneNumbers', formData.includePhoneNumbers);
                         formDataWithFile.append('useProductMaterials', formData.useProductMaterials);
                         formDataWithFile.append('maxRecords', formData.maxRecords);
                         formDataWithFile.append('excludeIndustries', JSON.stringify(formData.excludeIndustries));
@@ -2102,6 +2111,7 @@
                                 jobTitles: formData.jobTitles,
                                 companySizes: formData.companySizes,
                                 generateOutreach: formData.generateOutreach,
+                                includePhoneNumbers: formData.includePhoneNumbers,
                                 useProductMaterials: formData.useProductMaterials,
                                 maxRecords: formData.maxRecords,
                                 chunkSize: 100,
@@ -2388,9 +2398,10 @@
                 // Get single job title selection
                 const selectedJobTitle = this.jobTitlesMultiselect.querySelector('input[type="radio"]:checked');
                 const jobTitles = selectedJobTitle ? [selectedJobTitle.closest('.multiselect-option').dataset.value] : [];
-                
+
                 const companySizes = this.getSelectedValues(this.companySizeMultiselect);
                 const generateOutreach = document.getElementById('generateOutreach').checked;
+                const includePhoneNumbers = document.getElementById('includePhoneNumbers').checked;
                 const useProductMaterials = this.uploadedFiles.length > 0; // Auto-use materials if uploaded
                 const maxRecords = parseInt(document.getElementById('maxRecords').value) || 0;
                 
@@ -2413,13 +2424,14 @@
                 const emailSubject = document.getElementById('emailSubject').value.trim();
                 const trackEmailReads = document.getElementById('trackEmailReads').checked;
                 
-                return { 
-                    jobTitles, 
-                    companySizes, 
-                    generateOutreach, 
-                    useProductMaterials, 
-                    maxRecords, 
-                    excludeEmailDomains, 
+                return {
+                    jobTitles,
+                    companySizes,
+                    generateOutreach,
+                    includePhoneNumbers,
+                    useProductMaterials,
+                    maxRecords,
+                    excludeEmailDomains,
                     excludeIndustries,
                     saveToOneDrive,
                     sendEmailCampaign,
