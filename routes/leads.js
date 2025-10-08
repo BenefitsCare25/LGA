@@ -746,6 +746,10 @@ router.post('/start-workflow-job-with-exclusions', upload.single('exclusionsFile
         const parsedExcludeIndustries = typeof excludeIndustries === 'string' ?
             JSON.parse(excludeIndustries || '[]') : excludeIndustries;
 
+        // Parse numeric values (FormData sends numbers as strings)
+        const parsedMaxRecords = typeof maxRecords === 'string' ? parseInt(maxRecords, 10) : (maxRecords || 0);
+        const parsedChunkSize = typeof chunkSize === 'string' ? parseInt(chunkSize, 10) : (chunkSize || 100);
+
         // Convert boolean strings to actual booleans (FormData sends "true"/"false" as strings)
         const parsedGenerateOutreach = generateOutreach === 'false' ? false : !!generateOutreach;
         const parsedIncludePhoneNumbers = includePhoneNumbers === 'false' ? false : !!includePhoneNumbers;
@@ -791,12 +795,12 @@ router.post('/start-workflow-job-with-exclusions', upload.single('exclusionsFile
             params: {
                 jobTitles: parsedJobTitles,
                 companySizes: parsedCompanySizes,
-                maxRecords,
+                maxRecords: parsedMaxRecords,
                 generateOutreach: parsedGenerateOutreach,
                 includePhoneNumbers: parsedIncludePhoneNumbers,
                 enableAiPhoneFinder: parsedEnableAiPhoneFinder,
                 useProductMaterials: parsedUseProductMaterials,
-                chunkSize,
+                chunkSize: parsedChunkSize,
                 excludeEmailDomains,
                 excludeIndustries: parsedExcludeIndustries,
                 saveToOneDrive: parsedSaveToOneDrive,
