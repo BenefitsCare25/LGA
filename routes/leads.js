@@ -720,12 +720,14 @@ global.backgroundJobs = global.backgroundJobs || new Map();
 // Start workflow job with exclusion file upload
 router.post('/start-workflow-job-with-exclusions', upload.single('exclusionsFile'), async (req, res) => {
     try {
-        const { 
-            jobTitles, 
-            companySizes, 
-            maxRecords = 0, 
-            generateOutreach = true, 
-            useProductMaterials = false, 
+        const {
+            jobTitles,
+            companySizes,
+            maxRecords = 0,
+            generateOutreach = true,
+            includePhoneNumbers = false,
+            enableAiPhoneFinder = true,
+            useProductMaterials = false,
             chunkSize = 100,
             excludeIndustries = [],
             saveToOneDrive = false,
@@ -737,12 +739,21 @@ router.post('/start-workflow-job-with-exclusions', upload.single('exclusionsFile
         } = req.body;
 
         // Parse JSON strings from FormData - all arrays come as strings when using multipart
-        const parsedJobTitles = typeof jobTitles === 'string' ? 
+        const parsedJobTitles = typeof jobTitles === 'string' ?
             JSON.parse(jobTitles || '[]') : jobTitles;
-        const parsedCompanySizes = typeof companySizes === 'string' ? 
+        const parsedCompanySizes = typeof companySizes === 'string' ?
             JSON.parse(companySizes || '[]') : companySizes;
-        const parsedExcludeIndustries = typeof excludeIndustries === 'string' ? 
+        const parsedExcludeIndustries = typeof excludeIndustries === 'string' ?
             JSON.parse(excludeIndustries || '[]') : excludeIndustries;
+
+        // Convert boolean strings to actual booleans (FormData sends "true"/"false" as strings)
+        const parsedGenerateOutreach = generateOutreach === 'false' ? false : !!generateOutreach;
+        const parsedIncludePhoneNumbers = includePhoneNumbers === 'false' ? false : !!includePhoneNumbers;
+        const parsedEnableAiPhoneFinder = enableAiPhoneFinder === 'false' ? false : !!enableAiPhoneFinder;
+        const parsedUseProductMaterials = useProductMaterials === 'false' ? false : !!useProductMaterials;
+        const parsedSaveToOneDrive = saveToOneDrive === 'false' ? false : !!saveToOneDrive;
+        const parsedSendEmailCampaign = sendEmailCampaign === 'false' ? false : !!sendEmailCampaign;
+        const parsedTrackEmailReads = trackEmailReads === 'false' ? false : !!trackEmailReads;
 
         // Extract exclusion domains from uploaded file
         let excludeEmailDomains = [];
@@ -775,23 +786,25 @@ router.post('/start-workflow-job-with-exclusions', upload.single('exclusionsFile
         const jobStatus = {
             id: jobId,
             status: 'started',
-            progress: { step: 1, message: 'Starting workflow with domain exclusions...', total: saveToOneDrive || sendEmailCampaign ? 6 : 4 },
+            progress: { step: 1, message: 'Starting workflow with domain exclusions...', total: parsedSaveToOneDrive || parsedSendEmailCampaign ? 6 : 4 },
             startTime: new Date().toISOString(),
-            params: { 
-                jobTitles: parsedJobTitles, 
-                companySizes: parsedCompanySizes, 
-                maxRecords, 
-                generateOutreach, 
-                useProductMaterials, 
-                chunkSize, 
-                excludeEmailDomains, 
-                excludeIndustries: parsedExcludeIndustries, 
-                saveToOneDrive, 
-                sendEmailCampaign, 
-                templateChoice, 
-                emailTemplate, 
-                emailSubject, 
-                trackEmailReads,
+            params: {
+                jobTitles: parsedJobTitles,
+                companySizes: parsedCompanySizes,
+                maxRecords,
+                generateOutreach: parsedGenerateOutreach,
+                includePhoneNumbers: parsedIncludePhoneNumbers,
+                enableAiPhoneFinder: parsedEnableAiPhoneFinder,
+                useProductMaterials: parsedUseProductMaterials,
+                chunkSize,
+                excludeEmailDomains,
+                excludeIndustries: parsedExcludeIndustries,
+                saveToOneDrive: parsedSaveToOneDrive,
+                sendEmailCampaign: parsedSendEmailCampaign,
+                templateChoice,
+                emailTemplate,
+                emailSubject,
+                trackEmailReads: parsedTrackEmailReads,
                 exclusionFileUploaded: !!req.file,
                 exclusionFileName: req.file?.originalname
             },
