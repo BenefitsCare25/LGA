@@ -917,7 +917,7 @@ async function processWorkflowJob(jobId, protocol, host) {
     if (!job) return;
     
     try {
-        const { jobTitles, companySizes, maxRecords, generateOutreach, useProductMaterials, chunkSize, excludeEmailDomains, excludeIndustries, saveToOneDrive, sendEmailCampaign, templateChoice, emailTemplate, emailSubject, trackEmailReads } = job.params;
+        const { jobTitles, companySizes, maxRecords, generateOutreach, includePhoneNumbers = false, enableAiPhoneFinder = true, useProductMaterials, chunkSize, excludeEmailDomains, excludeIndustries, saveToOneDrive, sendEmailCampaign, templateChoice, emailTemplate, emailSubject, trackEmailReads } = job.params;
         
         // Step 1: Generate Web URL
         const totalSteps = 4 + (saveToOneDrive ? 1 : 0) + (sendEmailCampaign ? 1 : 0);
@@ -959,7 +959,7 @@ async function processWorkflowJob(jobId, protocol, host) {
             // Start Web scraping asynchronously
             
             const apolloJobResponse = await axios.post(`${protocol}://${host}/api/apollo/start-scrape-job`, {
-                apolloUrl, maxRecords
+                apolloUrl, maxRecords, jobTitles, companySizes, includePhoneNumbers, enableAiPhoneFinder
             });
             
             const apolloJobId = apolloJobResponse.data.jobId;

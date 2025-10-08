@@ -561,7 +561,7 @@ router.post('/get-leads-chunk', async (req, res) => {
 // Start Apollo scraping job asynchronously
 router.post('/start-scrape-job', async (req, res) => {
     try {
-        const { apolloUrl, maxRecords = 500 } = req.body;
+        const { apolloUrl, maxRecords = 500, jobTitles, companySizes, includePhoneNumbers = false, enableAiPhoneFinder = true } = req.body;
 
         // Validation
         if (!apolloUrl) {
@@ -578,23 +578,23 @@ router.post('/start-scrape-job', async (req, res) => {
             });
         }
 
-        // Check if Apify API token is configured
-        if (!process.env.APIFY_API_TOKEN) {
+        // Check if Apollo API key is configured
+        if (!process.env.APOLLO_API_KEY) {
             return res.status(500).json({
                 error: 'Configuration Error',
-                message: 'Apify API token not configured'
+                message: 'Apollo API key not configured'
             });
         }
 
         // Generate unique Apollo job ID
         const apolloJobId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
-        
+
         // Initialize Apollo job status
         const apolloJobStatus = {
             id: apolloJobId,
             status: 'started',
             startTime: new Date().toISOString(),
-            params: { apolloUrl, maxRecords },
+            params: { apolloUrl, maxRecords, jobTitles, companySizes, includePhoneNumbers, enableAiPhoneFinder },
             result: null,
             error: null,
             completedAt: null
