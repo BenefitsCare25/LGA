@@ -698,12 +698,33 @@ router.post('/export-excel', async (req, res) => {
             finalFilename = filename;
         } else if (metadata && metadata.jobTitles && metadata.companySizes) {
             // Format: [job titles]_[company sizes]_[total leads]_[date].xlsx
-            const jobTitlesStr = metadata.jobTitles.slice(0, 3).join('-').replace(/[^a-zA-Z0-9-]/g, '');
-            const companySizesStr = metadata.companySizes.join('-');
+            // Use readable format matching UI filter selections
+            const jobTitlesStr = metadata.jobTitles.slice(0, 3).join('+').replace(/[^a-zA-Z0-9+]/g, '');
+
+            // Convert company size ranges to readable format
+            const companySizesReadable = metadata.companySizes.map(size => {
+                const trimmed = (size || '').trim();
+
+                console.log(`🔍 Processing size: "${size}" -> trimmed: "${trimmed}"`);
+
+                // Handle 10K+ case (comes as "10001," from Apollo API)
+                if (trimmed === '10001,') return '10K+';
+
+                // Handle comma-separated ranges from Apollo API (e.g., "1,10" -> "1-10")
+                if (trimmed.includes(',') && !trimmed.endsWith(',')) {
+                    return trimmed.replace(',', '-');
+                }
+
+                // Handle already formatted ranges (e.g., "1-10")
+                return trimmed;
+            }).join('+');
+
+            console.log(`✅ Final company sizes string: "${companySizesReadable}"`);
+
             const totalLeads = leads.length;
             const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
-            finalFilename = `${jobTitlesStr}_${companySizesStr}_${totalLeads}_${dateStr}.xlsx`;
+            finalFilename = `${jobTitlesStr}_${companySizesReadable}_${totalLeads}_${dateStr}.xlsx`;
         } else {
             // Fallback to timestamp-based filename
             const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
