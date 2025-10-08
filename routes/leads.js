@@ -856,12 +856,14 @@ router.post('/start-workflow-job-with-exclusions', upload.single('exclusionsFile
 // Background job processing to avoid 5-minute timeout limit
 router.post('/start-workflow-job', async (req, res) => {
     try {
-        const { 
-            jobTitles, 
-            companySizes, 
-            maxRecords = 0, 
-            generateOutreach = true, 
-            useProductMaterials = false, 
+        const {
+            jobTitles,
+            companySizes,
+            maxRecords = 0,
+            generateOutreach = true,
+            includePhoneNumbers = false,
+            enableAiPhoneFinder = true,
+            useProductMaterials = false,
             chunkSize = 100,
             excludeEmailDomains = [],
             excludeIndustries = [],
@@ -882,7 +884,7 @@ router.post('/start-workflow-job', async (req, res) => {
             status: 'started',
             progress: { step: 1, message: 'Starting workflow...', total: saveToOneDrive || sendEmailCampaign ? 6 : 4 },
             startTime: new Date().toISOString(),
-            params: { jobTitles, companySizes, maxRecords, generateOutreach, useProductMaterials, chunkSize, excludeEmailDomains, excludeIndustries, saveToOneDrive, sendEmailCampaign, templateChoice, emailTemplate, emailSubject, trackEmailReads },
+            params: { jobTitles, companySizes, maxRecords, generateOutreach, includePhoneNumbers, enableAiPhoneFinder, useProductMaterials, chunkSize, excludeEmailDomains, excludeIndustries, saveToOneDrive, sendEmailCampaign, templateChoice, emailTemplate, emailSubject, trackEmailReads },
             result: null,
             error: null,
             completedAt: null
