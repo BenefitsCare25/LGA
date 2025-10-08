@@ -7,9 +7,11 @@ This project has been upgraded to use **Apollo.io API directly** instead of the 
 ## What Changed
 
 ### Backend Integration
-- **New**: Direct Apollo API integration via `https://api.apollo.io/api/v1/mixed_people/search`
-- **Fallback**: Apify integration still available as backup
-- **Auto-switching**: System automatically uses Apollo API if available, falls back to Apify otherwise
+- **New**: Two-step Apollo API integration:
+  1. Search API: `https://api.apollo.io/api/v1/mixed_people/search` (basic info)
+  2. Enrichment API: `https://api.apollo.io/api/v1/people/bulk_match` (email unlock)
+- **Removed**: Apify integration completely removed
+- **Email Extraction**: Now uses proper Apollo enrichment workflow to unlock emails
 
 ### Frontend
 - **No changes required** - All existing filters work seamlessly with Apollo API
@@ -17,7 +19,7 @@ This project has been upgraded to use **Apollo.io API directly** instead of the 
 
 ## Environment Variables Setup
 
-### Required for Apollo API (Recommended)
+### Required for Apollo API
 Add this to your Render environment variables:
 
 ```bash
@@ -29,19 +31,7 @@ APOLLO_API_KEY=your_apollo_api_key_here
 2. Go to Settings → Integrations → API
 3. Copy your API key
 
-### Optional Fallback (Legacy)
-Keep Apify as backup (optional):
-
-```bash
-APIFY_API_TOKEN=your_apify_token_here
-```
-
-### Toggle Integration Method (Optional)
-Force Apify even if Apollo key exists:
-
-```bash
-USE_APOLLO_API=false
-```
+**Note**: Apify integration has been completely removed. Only Apollo API is supported.
 
 ## Key Differences
 
@@ -54,60 +44,49 @@ USE_APOLLO_API=false
 | **Reliability** | Direct API, stable | Scraper, may break |
 | **Email/Phone** | ⚠️ **Your account data only** | Scrapes all visible data |
 
-## ⚠️ CRITICAL: Email Extraction Limitation
+## ✅ Email Extraction Solution
 
-**Apollo API CANNOT extract emails without exporting contacts first.**
+**Apollo API now properly extracts emails using enrichment workflow.**
 
-### The Problem
+### The Two-Step Process
 
-Apollo API returns `email_not_unlocked@domain.com` for all leads because:
-- Search API (`/mixed_people/search`) **does NOT unlock emails**
-- `reveal_personal_emails: true` parameter **does NOT work** without export
-- You must **export/save contacts** in Apollo UI first (costs 1 credit per contact)
-- This is Apollo's intentional design to protect their data
+1. **Search API** (`/mixed_people/search`):
+   - Finds leads matching filters
+   - Returns basic info (name, company, title, LinkedIn)
+   - **Does NOT unlock emails** (by design)
 
-### The Solution: Use Apify ✅
+2. **Enrichment API** (`/people/bulk_match`):
+   - Takes lead info from search results
+   - Enriches with email addresses and phone numbers
+   - Processes 10 leads per batch
+   - **Properly unlocks emails** with `reveal_personal_emails: true`
 
-**Apify scrapes actual visible emails from Apollo UI** - bypassing the API lock.
+### How It Works
 
-**Default Behavior:**
-- System now uses **Apify by default** for reliable email extraction
-- Apollo API only used if you explicitly set `USE_APOLLO_API=true`
+```javascript
+// Step 1: Search for leads
+const searchResults = await scrapeWithApolloAPI(titles, sizes, maxRecords);
 
-### Environment Variable Control
-
-**Use Apify (Default - Recommended):**
-```bash
-# Don't set USE_APOLLO_API, or set to false
-USE_APOLLO_API=false
+// Step 2: Enrich with emails (batches of 10)
+const enrichedData = await enrichApolloLeads(searchResults, includePhoneNumbers);
 ```
 
-**Force Apollo API (Not Recommended - emails will be locked):**
-```bash
-USE_APOLLO_API=true
-```
+### Credit Costs
 
-### Why Apify is Better for Email Extraction
+- **Search**: Credits per search query
+- **Enrichment**: Credits per lead enriched
+- **Phone Numbers**: Additional credits if opted in
 
-| Feature | Apify | Apollo API |
-|---------|-------|------------|
-| **Email Extraction** | ✅ Actual emails | ❌ `email_not_unlocked@domain.com` |
-| **Credit Cost** | Per run | Per search + per export |
-| **Setup Complexity** | Simple | Requires export workflow |
-| **Reliability** | High | Requires manual unlock steps |
+**Example**: 100 leads = 1 search + 100 enrichments (+ 100 phone reveals if opted in)
 
 ## API Limits
 
 ### Apollo API
 - **Max records per search**: 50,000 (500 pages × 100 per page)
+- **Enrichment batch size**: 10 leads per request
 - **Rate limits**: Varies by plan
-- **Credits**: Consumes credits per search
-- **Note**: Does not discover new emails/phones, returns existing data only
-
-### Apify (Fallback)
-- No hard record limit
-- Per-run pricing
-- May be slower for large datasets
+- **Credits**: Consumes credits per search + per enrichment
+- **Note**: Enrichment unlocks emails from Apollo's database
 
 ## Testing Your Setup
 
@@ -130,19 +109,17 @@ Visit: `http://localhost:3000/api/apollo/test`
 }
 ```
 
-**Expected Response (Fallback to Apify):**
+**Expected Response (Apollo API Not Configured):**
 ```json
 {
-  "status": "OK",
+  "status": "ERROR",
   "checks": {
     "apolloApiKey": false,
     "apolloApiConnection": false,
-    "apifyToken": true,
-    "apifyConnection": true,
-    "activeIntegration": "apify_fallback"
+    "activeIntegration": "none"
   },
-  "message": "Apify fallback integration ready (Apollo API unavailable)",
-  "recommendation": "Using Apify fallback - consider adding APOLLO_API_KEY for direct access"
+  "message": "Apollo API key not configured",
+  "recommendation": "Add APOLLO_API_KEY environment variable"
 }
 ```
 
@@ -163,8 +140,8 @@ The frontend filters map automatically to Apollo API:
 - [ ] Restart Render service to load new env var
 - [ ] Test integration: `https://your-app.onrender.com/api/apollo/test`
 - [ ] Verify frontend still works (no code changes needed)
-- [ ] Monitor logs for `🎯 Using Apollo API direct integration` message
-- [ ] Optional: Remove `APIFY_API_TOKEN` if no longer needed
+- [ ] Monitor logs for `🎯 Using Apollo API direct integration with enrichment` message
+- [ ] Remove `APIFY_API_TOKEN` and `USE_APOLLO_API` env vars (no longer needed)
 
 ## Troubleshooting
 
@@ -182,33 +159,30 @@ The frontend filters map automatically to Apollo API:
 - Reduce maxRecords in frontend
 - System will retry automatically with exponential backoff
 
-### Fallback to Apify automatically
-- This is normal if Apollo API key is not configured
-- System logs will show: `🔄 Using Apify fallback integration`
-- Add `APOLLO_API_KEY` to use direct Apollo API
+### Error: "Enrichment failed"
+- Check Apollo API credits are sufficient
+- Verify enrichment batches are processing correctly
+- Review logs for specific enrichment errors
 
 ## Advanced Configuration
 
-### Force Apify Usage
-Even with Apollo API key configured:
-```bash
-USE_APOLLO_API=false
-```
-
-### Increase Record Limit Safety
-Default max is 10,000 for Apify, override with:
-```bash
-MAX_LEADS_PER_REQUEST=20000
-```
+### Enrichment Batch Size
+Default is 10 leads per enrichment request (Apollo API limit).
+This is hardcoded for optimal performance.
 
 ### Enable Debug Logging
 ```bash
 NODE_ENV=development
 ```
 
+View detailed logs for:
+- Search API requests and responses
+- Enrichment batch processing
+- Email prioritization logic
+
 ## Response Format
 
-Both Apollo API and Apify return the same data structure to maintain compatibility:
+Apollo API with enrichment returns:
 
 ```json
 {
@@ -238,8 +212,9 @@ For issues:
 
 ## Next Steps
 
-Once Apollo API is working:
-1. Monitor credit usage in Apollo.io dashboard
-2. Consider removing Apify integration if no longer needed
+Once Apollo API enrichment is working:
+1. Monitor credit usage in Apollo.io dashboard (search + enrichment costs)
+2. Remove `APIFY_API_TOKEN` and `USE_APOLLO_API` environment variables
 3. Optimize search filters to reduce credit consumption
 4. Set up alerts for credit limits
+5. Monitor enrichment success rates in logs
