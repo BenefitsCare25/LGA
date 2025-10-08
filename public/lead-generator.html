@@ -1580,6 +1580,14 @@
                             </div>
 
                             <div class="processing-row-dual" style="margin-top: var(--space-3);">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="enableAiPhoneFinder" checked style="accent-color: var(--color-primary-500);">
+                                    <label for="enableAiPhoneFinder">🔍 AI Phone Finder</label>
+                                    <small style="color: var(--color-gray-500); margin-left: var(--space-2);">(for missing phones)</small>
+                                </div>
+                            </div>
+
+                            <div class="processing-row-dual" style="margin-top: var(--space-3);">
                                 <div class="number-input-group">
                                     <label for="maxRecords">📊 Max Leads:</label>
                                     <input type="number" id="maxRecords" value="0" min="0" max="10000">
@@ -2402,6 +2410,7 @@
                 const companySizes = this.getSelectedValues(this.companySizeMultiselect);
                 const generateOutreach = document.getElementById('generateOutreach').checked;
                 const includePhoneNumbers = document.getElementById('includePhoneNumbers').checked;
+                const enableAiPhoneFinder = document.getElementById('enableAiPhoneFinder').checked;
                 const useProductMaterials = this.uploadedFiles.length > 0; // Auto-use materials if uploaded
                 const maxRecords = parseInt(document.getElementById('maxRecords').value) || 0;
                 
@@ -2429,6 +2438,7 @@
                     companySizes,
                     generateOutreach,
                     includePhoneNumbers,
+                    enableAiPhoneFinder,
                     useProductMaterials,
                     maxRecords,
                     excludeEmailDomains,

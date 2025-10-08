@@ -318,7 +318,7 @@ router.post('/generate-url', async (req, res) => {
 // Apollo lead scraping endpoint
 router.post('/scrape-leads', async (req, res) => {
     try {
-        const { apolloUrl, maxRecords = 500, jobTitles, companySizes, includePhoneNumbers = false } = req.body;
+        const { apolloUrl, maxRecords = 500, jobTitles, companySizes, includePhoneNumbers = false, enableAiPhoneFinder = true } = req.body;
 
         // **Apollo API Integration (Search + Enrichment)**
         if (!process.env.APOLLO_API_KEY) {
@@ -396,35 +396,41 @@ router.post('/scrape-leads', async (req, res) => {
 
             const duplicatesRemoved = transformedLeads.length - uniqueLeads.length;
 
-            // AI-powered phone lookup for leads without phone numbers
-            console.log(`📞 Checking for missing phone numbers in ${uniqueLeads.length} leads...`);
-            const leadsWithoutPhone = uniqueLeads.filter(lead => !lead.phone_number || lead.phone_number.trim() === '');
+            // AI-powered phone lookup for leads without phone numbers (if enabled)
+            if (enableAiPhoneFinder) {
+                console.log(`📞 Checking for missing phone numbers in ${uniqueLeads.length} leads...`);
+                const leadsWithoutPhone = uniqueLeads.filter(lead => !lead.phone_number || lead.phone_number.trim() === '');
 
-            if (leadsWithoutPhone.length > 0) {
-                console.log(`🔍 Found ${leadsWithoutPhone.length} leads without phone numbers - starting AI lookup...`);
-                const phoneLookup = new PhoneNumberLookup();
-                let phonesFound = 0;
+                if (leadsWithoutPhone.length > 0) {
+                    console.log(`🔍 Found ${leadsWithoutPhone.length} leads without phone numbers - starting AI lookup...`);
+                    const phoneLookup = new PhoneNumberLookup();
+                    let phonesFound = 0;
 
-                for (const lead of leadsWithoutPhone) {
-                    try {
-                        const lookupResult = await phoneLookup.findPhoneNumber({
-                            Name: lead.name,
-                            'Company Name': lead.organization_name,
-                            'LinkedIn URL': lead.linkedin_url,
-                            Email: lead.email
-                        });
+                    for (const lead of leadsWithoutPhone) {
+                        try {
+                            const lookupResult = await phoneLookup.findPhoneNumber({
+                                Name: lead.name,
+                                'Company Name': lead.organization_name,
+                                'LinkedIn URL': lead.linkedin_url,
+                                Email: lead.email
+                            });
 
-                        if (lookupResult.found) {
-                            lead.phone_number = lookupResult.phoneNumber;
-                            phonesFound++;
-                            console.log(`✅ Found phone for ${lead.name}: ${lookupResult.phoneNumber}`);
+                            if (lookupResult.found) {
+                                lead.phone_number = lookupResult.phoneNumber;
+                                phonesFound++;
+                                console.log(`✅ Found phone for ${lead.name}: ${lookupResult.phoneNumber}`);
+                            }
+                        } catch (error) {
+                            console.error(`❌ Phone lookup error for ${lead.name}:`, error.message);
                         }
-                    } catch (error) {
-                        console.error(`❌ Phone lookup error for ${lead.name}:`, error.message);
                     }
-                }
 
-                console.log(`📞 AI phone lookup completed: ${phonesFound}/${leadsWithoutPhone.length} found`);
+                    console.log(`📞 AI phone lookup completed: ${phonesFound}/${leadsWithoutPhone.length} found`);
+                } else {
+                    console.log(`✅ All leads already have phone numbers`);
+                }
+            } else {
+                console.log(`⏭️ AI phone finder disabled by user`);
             }
 
             // Return response
@@ -637,7 +643,7 @@ async function processApolloJob(apolloJobId) {
     if (!job) return;
 
     try {
-        const { apolloUrl, maxRecords, jobTitles, companySizes, includePhoneNumbers = false } = job.params;
+        const { apolloUrl, maxRecords, jobTitles, companySizes, includePhoneNumbers = false, enableAiPhoneFinder = true } = job.params;
 
         job.status = 'scraping';
 
@@ -711,35 +717,41 @@ async function processApolloJob(apolloJobId) {
 
             const duplicatesRemoved = transformedLeads.length - uniqueLeads.length;
 
-            // AI-powered phone lookup
-            console.log(`📞 Apollo job ${apolloJobId}: Checking for missing phone numbers in ${uniqueLeads.length} leads...`);
-            const leadsWithoutPhone = uniqueLeads.filter(lead => !lead.phone_number || lead.phone_number.trim() === '');
+            // AI-powered phone lookup (if enabled)
+            if (enableAiPhoneFinder) {
+                console.log(`📞 Apollo job ${apolloJobId}: Checking for missing phone numbers in ${uniqueLeads.length} leads...`);
+                const leadsWithoutPhone = uniqueLeads.filter(lead => !lead.phone_number || lead.phone_number.trim() === '');
 
-            if (leadsWithoutPhone.length > 0) {
-                console.log(`🔍 Apollo job ${apolloJobId}: Found ${leadsWithoutPhone.length} leads without phone numbers - starting AI lookup...`);
-                const phoneLookup = new PhoneNumberLookup();
-                let phonesFound = 0;
+                if (leadsWithoutPhone.length > 0) {
+                    console.log(`🔍 Apollo job ${apolloJobId}: Found ${leadsWithoutPhone.length} leads without phone numbers - starting AI lookup...`);
+                    const phoneLookup = new PhoneNumberLookup();
+                    let phonesFound = 0;
 
-                for (const lead of leadsWithoutPhone) {
-                    try {
-                        const lookupResult = await phoneLookup.findPhoneNumber({
-                            Name: lead.name,
-                            'Company Name': lead.organization_name,
-                            'LinkedIn URL': lead.linkedin_url,
-                            Email: lead.email
-                        });
+                    for (const lead of leadsWithoutPhone) {
+                        try {
+                            const lookupResult = await phoneLookup.findPhoneNumber({
+                                Name: lead.name,
+                                'Company Name': lead.organization_name,
+                                'LinkedIn URL': lead.linkedin_url,
+                                Email: lead.email
+                            });
 
-                        if (lookupResult.found) {
-                            lead.phone_number = lookupResult.phoneNumber;
-                            phonesFound++;
-                            console.log(`✅ Apollo job ${apolloJobId}: Found phone for ${lead.name}: ${lookupResult.phoneNumber}`);
+                            if (lookupResult.found) {
+                                lead.phone_number = lookupResult.phoneNumber;
+                                phonesFound++;
+                                console.log(`✅ Apollo job ${apolloJobId}: Found phone for ${lead.name}: ${lookupResult.phoneNumber}`);
+                            }
+                        } catch (error) {
+                            console.error(`❌ Apollo job ${apolloJobId}: Phone lookup error for ${lead.name}:`, error.message);
                         }
-                    } catch (error) {
-                        console.error(`❌ Apollo job ${apolloJobId}: Phone lookup error for ${lead.name}:`, error.message);
                     }
-                }
 
-                console.log(`📞 Apollo job ${apolloJobId}: AI phone lookup completed: ${phonesFound}/${leadsWithoutPhone.length} found`);
+                    console.log(`📞 Apollo job ${apolloJobId}: AI phone lookup completed: ${phonesFound}/${leadsWithoutPhone.length} found`);
+                } else {
+                    console.log(`✅ Apollo job ${apolloJobId}: All leads already have phone numbers`);
+                }
+            } else {
+                console.log(`⏭️ Apollo job ${apolloJobId}: AI phone finder disabled by user`);
             }
 
             // Job completed successfully
