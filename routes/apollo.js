@@ -45,8 +45,6 @@ async function scrapeWithApolloAPI(personTitles, companySizes, maxRecords = 0, i
                 person_locations: ['Singapore', 'Singapore, Singapore'],
                 organization_num_employees_ranges: normalizedSizes,
                 contact_email_status: ['verified'],
-                reveal_personal_emails: true,     // Always request emails (costs credits)
-                reveal_phone_number: includePhoneNumbers,  // Only if user opts in (costs extra credits)
                 per_page: APOLLO_PER_PAGE,
                 page: currentPage
             };
@@ -127,6 +125,83 @@ async function scrapeWithApolloAPI(personTitles, companySizes, maxRecords = 0, i
 
     console.log(`✅ Apollo API search complete: ${allLeads.length} leads`);
     return allLeads;
+}
+
+/**
+ * Enrich Apollo leads with email addresses using bulk enrichment API
+ * @param {Array} searchResults - Results from search API
+ * @param {Boolean} includePhoneNumbers - Whether to reveal phone numbers
+ * @returns {Promise<Array>} Enriched lead objects
+ */
+async function enrichApolloLeads(searchResults, includePhoneNumbers = false) {
+    if (!process.env.APOLLO_API_KEY) {
+        throw new Error('Apollo API key not configured');
+    }
+
+    console.log(`🔍 Enriching ${searchResults.length} leads with email data...`);
+
+    const enrichedLeads = [];
+    const BATCH_SIZE = 10; // Apollo bulk enrichment allows max 10 per request
+
+    for (let i = 0; i < searchResults.length; i += BATCH_SIZE) {
+        const batch = searchResults.slice(i, i + BATCH_SIZE);
+        console.log(`📦 Enriching batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(searchResults.length / BATCH_SIZE)} (${batch.length} leads)...`);
+
+        try {
+            // Prepare enrichment details for each person in batch
+            const details = batch.map(person => {
+                const org = person.organization || {};
+                return {
+                    first_name: person.first_name,
+                    last_name: person.last_name,
+                    name: person.name,
+                    organization_name: org.name,
+                    domain: org.primary_domain || org.website_url?.replace(/^https?:\/\/(www\.)?/, '').split('/')[0],
+                    linkedin_url: person.linkedin_url,
+                    id: person.id
+                };
+            });
+
+            const response = await axios.post(
+                `${APOLLO_API_BASE_URL}/people/bulk_match`,
+                {
+                    details: details,
+                    reveal_personal_emails: true,
+                    reveal_phone_number: includePhoneNumbers
+                },
+                {
+                    headers: {
+                        'Cache-Control': 'no-cache',
+                        'Content-Type': 'application/json',
+                        'x-api-key': process.env.APOLLO_API_KEY
+                    },
+                    timeout: 30000
+                }
+            );
+
+            const matches = response.data.matches || [];
+            console.log(`✅ Batch enriched: ${matches.length} matches found`);
+
+            // Merge enriched data back into original search results
+            batch.forEach((searchPerson, idx) => {
+                const enrichedPerson = matches[idx] || searchPerson;
+                enrichedLeads.push(enrichedPerson);
+            });
+
+            // Rate limiting: small delay between batches
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+        } catch (error) {
+            console.error(`❌ Enrichment error for batch ${Math.floor(i / BATCH_SIZE) + 1}:`, error.message);
+
+            // If enrichment fails, use original search results for this batch
+            console.log(`⚠️ Using un-enriched data for batch ${Math.floor(i / BATCH_SIZE) + 1}`);
+            enrichedLeads.push(...batch);
+        }
+    }
+
+    console.log(`✅ Enrichment complete: ${enrichedLeads.length} total leads`);
+    return enrichedLeads;
 }
 
 /**
@@ -245,18 +320,19 @@ router.post('/scrape-leads', async (req, res) => {
     try {
         const { apolloUrl, maxRecords = 500, jobTitles, companySizes, includePhoneNumbers = false } = req.body;
 
-        // Determine if we should use Apollo API or fallback to Apify
-        // NOTE: Apollo API returns email_not_unlocked@domain.com unless contacts are exported first
-        // Apify is recommended for email extraction as it scrapes actual visible emails
-        const useApolloAPI = process.env.APOLLO_API_KEY && process.env.USE_APOLLO_API === 'true';
+        // **Apollo API Integration (Search + Enrichment)**
+        if (!process.env.APOLLO_API_KEY) {
+            return res.status(500).json({
+                error: 'Configuration Error',
+                message: 'Apollo API key not configured'
+            });
+        }
 
-        if (useApolloAPI) {
-            // **NEW: Direct Apollo API Integration**
-            console.log('🎯 Using Apollo API direct integration');
+        console.log('🎯 Using Apollo API direct integration with enrichment');
 
-            // Extract filters from URL or use provided parameters
-            let personTitles = jobTitles || [];
-            let companySizeRanges = companySizes || [];
+        // Extract filters from URL or use provided parameters
+        let personTitles = jobTitles || [];
+        let companySizeRanges = companySizes || [];
 
             // If no direct params, try to extract from Apollo URL
             if ((!personTitles || personTitles.length === 0) && apolloUrl) {
@@ -273,11 +349,14 @@ router.post('/scrape-leads', async (req, res) => {
                 });
             }
 
-            // Call Apollo API
-            const rawData = await scrapeWithApolloAPI(personTitles, companySizeRanges, maxRecords || 0, includePhoneNumbers);
+            // Step 1: Search for leads (basic info only, no emails)
+            const searchResults = await scrapeWithApolloAPI(personTitles, companySizeRanges, maxRecords || 0, false);
+
+            // Step 2: Enrich leads with email addresses
+            const enrichedData = await enrichApolloLeads(searchResults, includePhoneNumbers);
 
             // Transform Apollo data to our format
-            const transformedLeads = rawData.map(transformApolloLead);
+            const transformedLeads = enrichedData.map(transformApolloLead);
 
             // Duplicate prevention
             const uniqueLeads = [];
@@ -365,323 +444,28 @@ router.post('/scrape-leads', async (req, res) => {
                         apolloUrl: apolloUrl || 'N/A',
                         scrapedAt: new Date().toISOString(),
                         maxRecords: maxRecords || 0,
-                        rawScraped: rawData.length,
+                        rawScraped: enrichedData.length,
                         duplicatesRemoved: duplicatesRemoved,
                         finalCount: uniqueLeads.length,
                         jobTitles: personTitles,
                         companySizes: companySizeRanges
                     }
                 });
-            } else {
-                return res.json({
-                    success: true,
-                    count: uniqueLeads.length,
-                    leads: uniqueLeads,
-                    metadata: {
-                        source: 'apollo_api',
-                        apolloUrl: apolloUrl || 'N/A',
-                        scrapedAt: new Date().toISOString(),
-                        maxRecords: maxRecords || 0,
-                        rawScraped: rawData.length,
-                        duplicatesRemoved: duplicatesRemoved,
-                        finalCount: uniqueLeads.length,
-                        jobTitles: personTitles,
-                        companySizes: companySizeRanges
-                    }
-                });
-            }
-        }
-
-        // **FALLBACK: Original Apify Integration**
-        console.log('🔄 Using Apify fallback integration');
-
-        // Validation
-        if (!apolloUrl) {
-            return res.status(400).json({
-                error: 'Validation Error',
-                message: 'Apollo URL is required'
-            });
-        }
-
-        if (!apolloUrl.includes('apollo.io')) {
-            return res.status(400).json({
-                error: 'Validation Error',
-                message: 'Invalid Apollo URL'
-            });
-        }
-
-        // Check if Apify API token is configured
-        if (!process.env.APIFY_API_TOKEN) {
-            return res.status(500).json({
-                error: 'Configuration Error',
-                message: 'Apify API token not configured'
-            });
-        }
-
-        // Handle unlimited vs limited records
-        let recordLimit;
-
-        if (maxRecords === 0) {
-            recordLimit = 0; // Truly unlimited - let Apify scrape all available
         } else {
-            // Optional safety limit (can be overridden with environment variable)
-            const safetyLimit = parseInt(process.env.MAX_LEADS_PER_REQUEST) || 10000;
-            recordLimit = Math.min(parseInt(maxRecords), safetyLimit);
-        }
-
-        console.log(`🔍 Starting Apollo scrape for ${recordLimit} records...`);
-
-        console.log(`⏱️ No timeout limit - scraper will run until completion for ${recordLimit} records`);
-
-        let apifyResponse;
-        let retryCount = 0;
-        const maxRetries = 2;
-
-        while (retryCount <= maxRetries) {
-            try {
-                console.log(`🎯 Attempt ${retryCount + 1}/${maxRetries + 1} - Calling Apify scraper...`);
-                
-                apifyResponse = await axios.post(
-                    'https://api.apify.com/v2/acts/code_crafter~apollo-io-scraper/run-sync-get-dataset-items',
-                    {
-                        cleanOutput: true,
-                        totalRecords: recordLimit,
-                        url: apolloUrl
-                    },
-                    {
-                        headers: {
-                            'Accept': 'application/json',
-                            'Authorization': `Bearer ${process.env.APIFY_API_TOKEN}`,
-                            'Connection': 'keep-alive',
-                            'User-Agent': 'LGA-Lead-Generator/1.0'
-                        },
-                        timeout: 0, // No timeout - let it run until completion
-                        maxRedirects: 5,
-                        validateStatus: function (status) {
-                            return status < 500; // Resolve only if status is less than 500
-                        }
-                    }
-                ).catch(error => {
-                    // Remove sensitive data from error logs
-                    if (error.config && error.config.headers && error.config.headers.Authorization) {
-                        error.config.headers.Authorization = 'Bearer [REDACTED]';
-                    }
-                    throw error;
-                });
-                
-                console.log('✅ Apify scraper completed successfully');
-                console.log('📊 Response data extracted');
-                break; // Success, exit retry loop
-                
-            } catch (error) {
-                retryCount++;
-                console.error(`❌ Attempt ${retryCount}/${maxRetries + 1} failed:`, error.code || error.message);
-                
-                if (retryCount > maxRetries) {
-                    // All retries exhausted - provide specific error messages
-                    if (error.code === 'ECONNABORTED') {
-                        throw new Error(`Apollo scraping was interrupted. Please try again with fewer records (current: ${recordLimit}) or check your network connection.`);
-                    } else if (error.code === 'ECONNRESET' || error.message.includes('socket hang up') || error.message.includes('ECONNRESET')) {
-                        throw new Error(`Network connection lost during scraping. This may be due to high server load. Please try again in a few minutes or reduce the record count (current: ${recordLimit}).`);
-                    } else if (error.code === 'ETIMEDOUT' || error.message.includes('ETIMEDOUT')) {
-                        throw new Error(`Network timeout during scraping. Please check your internet connection and try again.`);
-                    } else if (error.response && error.response.status === 429) {
-                        throw new Error(`Apify API rate limit exceeded. Please wait a few minutes before trying again.`);
-                    } else if (error.response && error.response.status >= 500) {
-                        throw new Error(`Apify server error (${error.response.status}). Please try again in a few minutes.`);
-                    } else {
-                        throw new Error(`Apify scraper failed after ${maxRetries + 1} attempts: ${error.message}`);
-                    }
-                } else {
-                    // Wait before retry with longer delays for network issues
-                    let waitTime;
-                    if (error.code === 'ECONNRESET' || error.message.includes('socket hang up')) {
-                        // Longer wait for connection issues
-                        waitTime = Math.pow(2, retryCount - 1) * 10000; // 10s, 20s delays
-                        console.log(`🌐 Network issue detected - waiting ${waitTime/1000}s before retry...`);
-                    } else {
-                        // Standard exponential backoff
-                        waitTime = Math.pow(2, retryCount - 1) * 5000; // 5s, 10s delays
-                        console.log(`⏳ Waiting ${waitTime/1000}s before retry...`);
-                    }
-                    await new Promise(resolve => setTimeout(resolve, waitTime));
-                }
-            }
-        }
-
-        // Validate and extract data from Apify response
-        let rawData = [];
-        
-        if (apifyResponse.data) {
-            if (Array.isArray(apifyResponse.data)) {
-                rawData = apifyResponse.data;
-            } else if (typeof apifyResponse.data === 'object') {
-                // Check if it's an error response
-                if (apifyResponse.data.error) {
-                    console.error('❌ Apify API error:', apifyResponse.data);
-                    throw new Error(`Apify API error: ${apifyResponse.data.error}`);
-                }
-                // Try to find data in nested structure
-                rawData = apifyResponse.data.items || apifyResponse.data.data || apifyResponse.data.results || [];
-            }
-        }
-        
-        // Ensure rawData is an array
-        if (!Array.isArray(rawData)) {
-            console.error('❌ Invalid Apify response format:', typeof rawData, rawData);
-            throw new Error(`Invalid response format from Apify: expected array, got ${typeof rawData}`);
-        }
-        
-        console.log(`✅ Successfully scraped ${rawData.length} leads`);
-
-        // Extract total count from Apify response metadata if available
-        let totalAvailable = rawData.length;
-        let limitReached = false;
-        
-        if (apifyResponse.headers && apifyResponse.headers['x-apify-total-results']) {
-            totalAvailable = parseInt(apifyResponse.headers['x-apify-total-results']);
-            limitReached = totalAvailable > rawData.length;
-        }
-
-        // Duplicate prevention: Remove duplicates based on email and LinkedIn URL
-        const uniqueLeads = [];
-        const seen = new Set();
-        
-        rawData.forEach(lead => {
-            // Create unique identifier: email + linkedin_url (fallback to name + company)
-            const email = (lead.email || '').toLowerCase().trim();
-            const linkedin = (lead.linkedin_url || '').toLowerCase().trim();
-            const name = (lead.name || '').toLowerCase().trim();
-            const company = (lead.organization_name || '').toLowerCase().trim();
-            
-            let identifier;
-            if (email && email !== '') {
-                identifier = email; // Email is most unique
-            } else if (linkedin && linkedin !== '') {
-                identifier = linkedin; // LinkedIn URL second most unique
-            } else {
-                identifier = `${name}|${company}`; // Fallback to name+company
-            }
-            
-            if (!seen.has(identifier)) {
-                seen.add(identifier);
-                uniqueLeads.push(lead);
-            } else {
-                console.log(`🔄 Removed duplicate: ${lead.name} (${identifier})`);
-            }
-        });
-
-        const duplicatesRemoved = rawData.length - uniqueLeads.length;
-        if (duplicatesRemoved > 0) {
-            console.log(`🧹 Removed ${duplicatesRemoved} duplicate records`);
-        }
-
-        // Transform leads to match n8n workflow structure
-        const transformedLeads = uniqueLeads.map(lead => ({
-            name: lead.name || '',
-            title: lead.title || '',
-            organization_name: lead.organization_name || '',
-            organization_website_url: lead.organization_website_url || '',
-            estimated_num_employees: lead.estimated_num_employees || '',
-            email: lead.email || '',
-            email_verified: lead.email ? 'Y' : 'N',
-            linkedin_url: lead.linkedin_url || '',
-            phone_number: lead.organization_phone || '',
-            industry: lead.industry || '',
-            country: lead.country || 'Singapore',
-            conversion_status: 'Pending'
-        }));
-
-        // AI-powered phone lookup for leads without phone numbers
-        console.log(`📞 Checking for missing phone numbers in ${transformedLeads.length} leads...`);
-        const leadsWithoutPhone = transformedLeads.filter(lead => !lead.phone_number || (typeof lead.phone_number === 'string' && lead.phone_number.trim() === ''));
-
-        if (leadsWithoutPhone.length > 0) {
-            console.log(`🔍 Found ${leadsWithoutPhone.length} leads without phone numbers - starting AI lookup...`);
-
-            const phoneLookup = new PhoneNumberLookup();
-            let phonesFound = 0;
-
-            for (const lead of leadsWithoutPhone) {
-                try {
-                    const lookupResult = await phoneLookup.findPhoneNumber({
-                        Name: lead.name,
-                        'Company Name': lead.organization_name,
-                        'LinkedIn URL': lead.linkedin_url,
-                        Email: lead.email
-                    });
-
-                    if (lookupResult.found) {
-                        lead.phone_number = lookupResult.phoneNumber;
-                        phonesFound++;
-                        console.log(`✅ Found phone for ${lead.name}: ${lookupResult.phoneNumber}`);
-                    } else {
-                        console.log(`❌ No phone found for ${lead.name}: ${lookupResult.reason}`);
-                    }
-                } catch (error) {
-                    console.error(`❌ Phone lookup error for ${lead.name}:`, error.message);
-                }
-            }
-
-            console.log(`📞 AI phone lookup completed: ${phonesFound}/${leadsWithoutPhone.length} found`);
-        } else {
-            console.log(`✅ All leads already have phone numbers`);
-        }
-
-        // For large datasets, don't return all leads in the response to avoid memory issues
-        if (transformedLeads.length > 250) {
-            // Store leads temporarily (in a real app, you'd use Redis or database)
-            global.tempLeads = global.tempLeads || new Map();
-            const sessionId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
-            global.tempLeads.set(sessionId, transformedLeads);
-            
-            // Clean up old sessions after 30 minutes
-            setTimeout(() => {
-                global.tempLeads.delete(sessionId);
-            }, 30 * 60 * 1000);
-
-            res.json({
+            return res.json({
                 success: true,
-                count: transformedLeads.length,
-                sessionId: sessionId, // Use this to retrieve leads in chunks
+                count: uniqueLeads.length,
+                leads: uniqueLeads,
                 metadata: {
-                    apolloUrl,
+                    source: 'apollo_api',
+                    apolloUrl: apolloUrl || 'N/A',
                     scrapedAt: new Date().toISOString(),
-                    maxRecords: recordLimit,
-                    totalAvailable: totalAvailable,
-                    rawScraped: rawData.length,
+                    maxRecords: maxRecords || 0,
+                    rawScraped: enrichedData.length,
                     duplicatesRemoved: duplicatesRemoved,
-                    finalCount: transformedLeads.length,
-                    limitReached: limitReached,
-                    deduplicationStats: {
-                        input: rawData.length,
-                        duplicates: duplicatesRemoved,
-                        unique: transformedLeads.length,
-                        deduplicationRate: rawData.length > 0 ? ((duplicatesRemoved / rawData.length) * 100).toFixed(1) + '%' : '0%'
-                    }
-                }
-            });
-        } else {
-            // For smaller datasets, return leads directly
-            res.json({
-                success: true,
-                count: transformedLeads.length,
-                leads: transformedLeads,
-                metadata: {
-                    apolloUrl,
-                    scrapedAt: new Date().toISOString(),
-                    maxRecords: recordLimit,
-                    totalAvailable: totalAvailable,
-                    rawScraped: rawData.length,
-                    duplicatesRemoved: duplicatesRemoved,
-                    finalCount: transformedLeads.length,
-                    limitReached: limitReached,
-                    deduplicationStats: {
-                        input: rawData.length,
-                        duplicates: duplicatesRemoved,
-                        unique: transformedLeads.length,
-                        deduplicationRate: rawData.length > 0 ? ((duplicatesRemoved / rawData.length) * 100).toFixed(1) + '%' : '0%'
-                    }
+                    finalCount: uniqueLeads.length,
+                    jobTitles: personTitles,
+                    companySizes: companySizeRanges
                 }
             });
         }
@@ -699,15 +483,22 @@ router.post('/scrape-leads', async (req, res) => {
 
         if (error.response?.status === 401) {
             return res.status(401).json({
-                error: 'Authentication Error', 
-                message: 'Invalid Apify API token'
+                error: 'Authentication Error',
+                message: 'Invalid Apollo API key'
             });
         }
 
         if (error.response?.status === 429) {
             return res.status(429).json({
                 error: 'Rate Limit Error',
-                message: 'Apify API rate limit exceeded. Please try again later.'
+                message: 'Apollo API rate limit exceeded. Please try again later.'
+            });
+        }
+
+        if (error.response?.status === 402) {
+            return res.status(402).json({
+                error: 'Credits Error',
+                message: 'Apollo API credits exhausted. Please check your account.'
             });
         }
 
@@ -850,14 +641,12 @@ async function processApolloJob(apolloJobId) {
 
         job.status = 'scraping';
 
-        // Determine if we should use Apollo API or fallback to Apify
-        // NOTE: Apollo API returns email_not_unlocked@domain.com unless contacts are exported first
-        // Apify is recommended for email extraction as it scrapes actual visible emails
-        const useApolloAPI = process.env.APOLLO_API_KEY && process.env.USE_APOLLO_API === 'true';
+        // Apollo API Integration for background jobs
+        if (!process.env.APOLLO_API_KEY) {
+            throw new Error('Apollo API key not configured');
+        }
 
-        if (useApolloAPI) {
-            // **NEW: Direct Apollo API Integration for background jobs**
-            console.log(`🎯 Apollo job ${apolloJobId}: Using Apollo API direct integration`);
+        console.log(`🎯 Apollo job ${apolloJobId}: Using Apollo API with enrichment`);
 
             // Extract filters from URL or use provided parameters
             let personTitles = jobTitles || [];
@@ -875,11 +664,14 @@ async function processApolloJob(apolloJobId) {
                 throw new Error('Job titles and company sizes are required for Apollo API');
             }
 
-            // Call Apollo API
-            const rawData = await scrapeWithApolloAPI(personTitles, companySizeRanges, maxRecords || 0, includePhoneNumbers);
+            // Step 1: Search for leads (basic info only, no emails)
+            const searchResults = await scrapeWithApolloAPI(personTitles, companySizeRanges, maxRecords || 0, false);
+
+            // Step 2: Enrich leads with email addresses
+            const enrichedData = await enrichApolloLeads(searchResults, includePhoneNumbers);
 
             // Transform Apollo data to our format
-            const transformedLeads = rawData.map(transformApolloLead);
+            const transformedLeads = enrichedData.map(transformApolloLead);
 
             // Duplicate prevention
             const uniqueLeads = [];
