@@ -246,7 +246,9 @@ router.post('/scrape-leads', async (req, res) => {
         const { apolloUrl, maxRecords = 500, jobTitles, companySizes, includePhoneNumbers = false } = req.body;
 
         // Determine if we should use Apollo API or fallback to Apify
-        const useApolloAPI = process.env.APOLLO_API_KEY && process.env.USE_APOLLO_API !== 'false';
+        // NOTE: Apollo API returns email_not_unlocked@domain.com unless contacts are exported first
+        // Apify is recommended for email extraction as it scrapes actual visible emails
+        const useApolloAPI = process.env.APOLLO_API_KEY && process.env.USE_APOLLO_API === 'true';
 
         if (useApolloAPI) {
             // **NEW: Direct Apollo API Integration**
@@ -849,7 +851,9 @@ async function processApolloJob(apolloJobId) {
         job.status = 'scraping';
 
         // Determine if we should use Apollo API or fallback to Apify
-        const useApolloAPI = process.env.APOLLO_API_KEY && process.env.USE_APOLLO_API !== 'false';
+        // NOTE: Apollo API returns email_not_unlocked@domain.com unless contacts are exported first
+        // Apify is recommended for email extraction as it scrapes actual visible emails
+        const useApolloAPI = process.env.APOLLO_API_KEY && process.env.USE_APOLLO_API === 'true';
 
         if (useApolloAPI) {
             // **NEW: Direct Apollo API Integration for background jobs**

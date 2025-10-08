@@ -54,25 +54,47 @@ USE_APOLLO_API=false
 | **Reliability** | Direct API, stable | Scraper, may break |
 | **Email/Phone** | ⚠️ **Your account data only** | Scrapes all visible data |
 
-## Email/Phone Extraction
+## ⚠️ CRITICAL: Email Extraction Limitation
 
-**✅ Email extraction is NOW ENABLED** via `reveal_personal_emails` parameter.
+**Apollo API CANNOT extract emails without exporting contacts first.**
 
-### How It Works
-- Apollo API uses `reveal_personal_emails: true` to request emails
-- Apollo API uses `reveal_phone_number: true` to request phone numbers
-- **⚠️ Each email/phone revelation costs additional credits**
+### The Problem
 
-### Credit Cost
-- Search API: Costs credits per search
-- `reveal_personal_emails: true`: Costs **extra credits per lead** revealed
-- `reveal_phone_number: true`: Costs **extra credits per lead** revealed
-- Example: 100 leads with emails = search credits + 100× reveal credits
+Apollo API returns `email_not_unlocked@domain.com` for all leads because:
+- Search API (`/mixed_people/search`) **does NOT unlock emails**
+- `reveal_personal_emails: true` parameter **does NOT work** without export
+- You must **export/save contacts** in Apollo UI first (costs 1 credit per contact)
+- This is Apollo's intentional design to protect their data
 
-### Fallback Options
-If you want to avoid extra credit costs:
-1. **Use Apify** - Scrapes visible data without per-lead costs
-2. **Disable reveal flags** - Set `USE_APOLLO_API=false` to use Apify
+### The Solution: Use Apify ✅
+
+**Apify scrapes actual visible emails from Apollo UI** - bypassing the API lock.
+
+**Default Behavior:**
+- System now uses **Apify by default** for reliable email extraction
+- Apollo API only used if you explicitly set `USE_APOLLO_API=true`
+
+### Environment Variable Control
+
+**Use Apify (Default - Recommended):**
+```bash
+# Don't set USE_APOLLO_API, or set to false
+USE_APOLLO_API=false
+```
+
+**Force Apollo API (Not Recommended - emails will be locked):**
+```bash
+USE_APOLLO_API=true
+```
+
+### Why Apify is Better for Email Extraction
+
+| Feature | Apify | Apollo API |
+|---------|-------|------------|
+| **Email Extraction** | ✅ Actual emails | ❌ `email_not_unlocked@domain.com` |
+| **Credit Cost** | Per run | Per search + per export |
+| **Setup Complexity** | Simple | Requires export workflow |
+| **Reliability** | High | Requires manual unlock steps |
 
 ## API Limits
 
