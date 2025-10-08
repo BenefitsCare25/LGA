@@ -44,6 +44,8 @@ async function scrapeWithApolloAPI(personTitles, companySizes, maxRecords = 0) {
                 person_locations: ['Singapore', 'Singapore, Singapore'],
                 organization_num_employees_ranges: normalizedSizes,
                 contact_email_status: ['verified'],
+                reveal_personal_emails: true,  // Request personal emails (costs credits)
+                reveal_phone_number: true,     // Request phone numbers (costs credits)
                 per_page: APOLLO_PER_PAGE,
                 page: currentPage
             };

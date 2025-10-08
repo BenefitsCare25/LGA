@@ -54,18 +54,25 @@ USE_APOLLO_API=false
 | **Reliability** | Direct API, stable | Scraper, may break |
 | **Email/Phone** | ⚠️ **Your account data only** | Scrapes all visible data |
 
-## Important Email/Phone Limitation
+## Email/Phone Extraction
 
-**Apollo API does NOT return new email addresses or phone numbers.**
+**✅ Email extraction is NOW ENABLED** via `reveal_personal_emails` parameter.
 
-- The API only returns emails/phones already saved in your Apollo account
-- If you haven't enriched contacts in Apollo UI first, the API returns empty emails
-- This is a documented Apollo API limitation per their docs
+### How It Works
+- Apollo API uses `reveal_personal_emails: true` to request emails
+- Apollo API uses `reveal_phone_number: true` to request phone numbers
+- **⚠️ Each email/phone revelation costs additional credits**
 
-**Solutions:**
-1. **Use Apify** (fallback) - Scrapes visible emails from Apollo UI
-2. **Enrich in Apollo first** - Add contacts to lists in Apollo UI to save emails
-3. **Use People Enrichment API** - Separate API to discover new emails (costs extra credits)
+### Credit Cost
+- Search API: Costs credits per search
+- `reveal_personal_emails: true`: Costs **extra credits per lead** revealed
+- `reveal_phone_number: true`: Costs **extra credits per lead** revealed
+- Example: 100 leads with emails = search credits + 100× reveal credits
+
+### Fallback Options
+If you want to avoid extra credit costs:
+1. **Use Apify** - Scrapes visible data without per-lead costs
+2. **Disable reveal flags** - Set `USE_APOLLO_API=false` to use Apify
 
 ## API Limits
 
