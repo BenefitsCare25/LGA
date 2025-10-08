@@ -634,7 +634,7 @@ async function generateOutreachContent(lead, useProductMaterials = false) {
 // Export leads to Excel
 router.post('/export-excel', async (req, res) => {
     try {
-        const { leads, filename } = req.body;
+        const { leads, filename, metadata } = req.body;
 
         // Validation
         if (!leads || !Array.isArray(leads) || leads.length === 0) {
@@ -687,14 +687,28 @@ router.post('/export-excel', async (req, res) => {
         XLSX.utils.book_append_sheet(wb, ws, 'Leads');
 
         // Generate Excel file buffer
-        const excelBuffer = XLSX.write(wb, { 
-            type: 'buffer', 
-            bookType: 'xlsx' 
+        const excelBuffer = XLSX.write(wb, {
+            type: 'buffer',
+            bookType: 'xlsx'
         });
 
-        // Generate filename with timestamp if not provided
-        const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
-        const finalFilename = filename || `singapore-leads-${timestamp}.xlsx`;
+        // Generate filename based on metadata or use default
+        let finalFilename;
+        if (filename) {
+            finalFilename = filename;
+        } else if (metadata && metadata.jobTitles && metadata.companySizes) {
+            // Format: [job titles]_[company sizes]_[total leads]_[date].xlsx
+            const jobTitlesStr = metadata.jobTitles.slice(0, 3).join('-').replace(/[^a-zA-Z0-9-]/g, '');
+            const companySizesStr = metadata.companySizes.join('-');
+            const totalLeads = leads.length;
+            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+            finalFilename = `${jobTitlesStr}_${companySizesStr}_${totalLeads}_${dateStr}.xlsx`;
+        } else {
+            // Fallback to timestamp-based filename
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+            finalFilename = `singapore-leads-${timestamp}.xlsx`;
+        }
 
 
         // Send file as download

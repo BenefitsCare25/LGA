@@ -1770,9 +1770,10 @@
                 this.companySizeMultiselect = document.getElementById('companySizeMultiselect');
                 this.jobTitlesPreview = document.getElementById('jobTitlesPreview');
                 this.companySizePreview = document.getElementById('companySizePreview');
-                
+
                 this.currentLeads = null;
-                
+                this.currentMetadata = null;
+
                 // Timer properties
                 this.startTime = null;
                 this.timerInterval = null;
@@ -2223,6 +2224,7 @@
                     
                     // Store and display results
                     this.currentLeads = result.leads;
+                    this.currentMetadata = result.metadata;
                     this.displayLeads(result.leads, result.metadata);
                     
                     const successMsg = `🎉 Successfully loaded ${result.leads.length} leads!`;
@@ -2275,14 +2277,15 @@
                         // Add new leads to collection
                         allLeads.push(...data.leads);
                         this.currentLeads = allLeads;
-                        
+                        this.currentMetadata = metadata;
+
                         // Add detailed logs for each lead
                         data.leads.forEach((lead, index) => {
                             const leadNum = data.processed - data.leads.length + index + 1;
                             const outreachStatus = lead.outreach_generated ? '✅ AI content generated' : '⚪ No outreach';
                             this.addLog(`Processing lead ${leadNum}/${data.processed + data.remaining}: ${lead.name} - ${outreachStatus}`, 'processing');
                         });
-                        
+
                         // Update display with all leads so far
                         this.displayLeads(allLeads, metadata);
                         
@@ -2544,11 +2547,14 @@
 
                 try {
                     this.showStatus('Generating Excel file...', 'info');
-                    
+
                     const response = await fetch('/api/leads/export-excel', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ leads: this.currentLeads })
+                        body: JSON.stringify({
+                            leads: this.currentLeads,
+                            metadata: this.currentMetadata
+                        })
                     });
 
                     if (!response.ok) {
