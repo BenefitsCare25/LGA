@@ -1627,84 +1627,11 @@
                     </div>
                 </div>
 
-                <!-- Microsoft Graph Integration Section -->
-                <div class="form-group">
-                    <div class="filter-card">
-                        <label class="form-label">
-                            <span class="emoji">🔗</span>
-                            <span>Microsoft 365 Integration</span>
-                            <small style="color: var(--color-gray-500); font-weight: var(--font-weight-normal); margin-left: var(--space-2);">(Optional - OneDrive & Outlook integration)</small>
-                        </label>
-                        <div class="processing-options">
-                            <!-- OneDrive Save Option -->
-                            <div class="processing-row">
-                                <div class="checkbox-group">
-                                    <input type="checkbox" id="saveToOneDrive" style="accent-color: var(--color-primary-500);">
-                                    <label for="saveToOneDrive">📊 Save to OneDrive Excel</label>
-                                    <small style="color: var(--color-gray-500); font-size: var(--font-size-xs); margin-left: var(--space-4);">Creates Excel file in OneDrive with tracking columns</small>
-                                </div>
-                            </div>
-                            
-                            <!-- Email Campaign Section -->
-                            <div class="processing-row">
-                                <div class="checkbox-group">
-                                    <input type="checkbox" id="sendEmailCampaign" style="accent-color: var(--color-primary-500);">
-                                    <label for="sendEmailCampaign">📧 Send Email Campaign</label>
-                                    <small style="color: var(--color-gray-500); font-size: var(--font-size-xs); margin-left: var(--space-4);">Automated email sending with read tracking</small>
-                                </div>
-                            </div>
-                            
-                            <!-- Email Campaign Details (hidden by default) -->
-                            <div class="email-campaign-details" id="emailCampaignDetails" style="display: none; margin-left: var(--space-4); margin-top: var(--space-3); padding: var(--space-3); background: var(--color-gray-50); border-radius: var(--border-radius-sm);">
-                                <div style="display: flex; flex-direction: column; gap: var(--space-3);">
-                                    <div>
-                                        <label for="emailSubject" style="font-weight: var(--font-weight-medium); color: var(--color-gray-700);">Email Subject:</label>
-                                        <input type="text" id="emailSubject" placeholder="Professional introduction from {name}" style="width: 100%; margin-top: var(--space-1); padding: var(--space-2); border: 1px solid var(--color-gray-300); border-radius: var(--border-radius-sm);">
-                                        <small style="color: var(--color-gray-500);">Use {name} and {company} for personalization</small>
-                                    </div>
-                                    <div>
-                                        <label for="templateChoice" style="font-weight: var(--font-weight-medium); color: var(--color-gray-700);">Email Template:</label>
-                                        <div style="margin-top: var(--space-1);">
-                                            <select id="templateChoice" style="width: 100%; padding: var(--space-2); border: 1px solid var(--color-gray-300); border-radius: var(--border-radius-sm); margin-bottom: var(--space-2);">
-                                                <option value="AI_Generated">AI Generated Content (Default)</option>
-                                                <option value="custom">Custom Template</option>
-                                            </select>
-                                            
-                                            <!-- Custom template textarea (hidden by default) -->
-                                            <div id="customTemplateSection" style="display: none;">
-                                                <textarea id="emailTemplate" rows="6" placeholder="Hello {name},&#10;&#10;I hope this email finds you well. I noticed your role as {title} at {company} and wanted to reach out...&#10;&#10;Best regards" style="width: 100%; margin-bottom: var(--space-2); padding: var(--space-2); border: 1px solid var(--color-gray-300); border-radius: var(--border-radius-sm); font-family: var(--font-family);"></textarea>
-                                            </div>
-                                            
-                                            <!-- Template preview section -->
-                                            <div id="templatePreview" style="display: none; padding: var(--space-2); background: var(--color-gray-50); border: 1px solid var(--color-gray-200); border-radius: var(--border-radius-sm); margin-bottom: var(--space-2);">
-                                                <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); color: var(--color-gray-700); margin-bottom: var(--space-1);">Preview:</div>
-                                                <div id="templatePreviewContent" style="font-size: var(--font-size-sm); color: var(--color-gray-600);"></div>
-                                            </div>
-                                            
-                                            <button type="button" id="refreshTemplatesBtn" style="padding: var(--space-1) var(--space-2); background: var(--color-gray-100); border: 1px solid var(--color-gray-300); border-radius: var(--border-radius-sm); font-size: var(--font-size-sm); cursor: pointer; margin-bottom: var(--space-2);">
-                                                🔄 Refresh Templates
-                                            </button>
-                                        </div>
-                                        <small style="color: var(--color-gray-500);">Use {name}, {company}, {title}, {industry} for personalization. HTML supported.</small>
-                                    </div>
-                                    <div class="checkbox-group">
-                                        <input type="checkbox" id="trackEmailReads" checked style="accent-color: var(--color-primary-500);">
-                                        <label for="trackEmailReads">📈 Track Email Opens & Replies</label>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
             </form>
             
             <div class="form-actions">
-                <div class="action-buttons" style="margin-bottom: 0; gap: var(--space-3);">
-                    <button type="button" class="btn btn-primary" id="generateUrlBtn" style="flex: 1;">
-                        🔗 Generate Search Link
-                    </button>
-                    <button type="submit" class="submit-btn" id="generateBtn" style="flex: 2;" form="leadForm">
+                <div class="action-buttons" style="margin-bottom: 0;">
+                    <button type="submit" class="submit-btn" id="generateBtn" style="width: 100%;" form="leadForm">
                         🚀 Generate & Process Leads
                     </button>
                 </div>
