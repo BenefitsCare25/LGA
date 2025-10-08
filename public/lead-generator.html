@@ -2625,7 +2625,6 @@
                 this.processingLogs.classList.remove('hidden');
                 this.outputSection.classList.remove('hidden');
                 this.generateBtn.disabled = true;
-                this.generateUrlBtn.disabled = true;
                 this.downloadExcelBtn.disabled = true; // Disable download button
                 
                 // Show loading icon and update icon
@@ -2650,8 +2649,7 @@
                 // Keep processing logs visible after completion
                 // User can manually close them
                 this.generateBtn.disabled = false;
-                this.generateUrlBtn.disabled = false;
-                
+
                 // Hide loading state
                 this.showLoadingState(false);
                 
