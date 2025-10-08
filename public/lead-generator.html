@@ -1757,7 +1757,6 @@
                 this.leadsSection = document.getElementById('leadsSection');
                 this.emptyState = document.getElementById('emptyState');
                 
-                this.generateUrlBtn = document.getElementById('generateUrlBtn');
                 this.generateBtn = document.getElementById('generateBtn');
                 this.copyBtn = document.getElementById('copyBtn');
                 this.downloadExcelBtn = document.getElementById('downloadExcelBtn');
@@ -1795,7 +1794,6 @@
 
             bindEvents() {
                 this.form.addEventListener('submit', (e) => this.handleCompleteWorkflow(e));
-                this.generateUrlBtn.addEventListener('click', () => this.handleGenerateUrl());
                 this.copyBtn.addEventListener('click', () => this.copyUrl());
                 this.downloadExcelBtn.addEventListener('click', () => this.downloadExcel());
                 this.viewOutreachBtn.addEventListener('click', () => this.viewOutreachContent());
@@ -1809,19 +1807,6 @@
                     this.logsContainer.innerHTML = '';
                     this.updateLogCount(0);
                 });
-
-                // Microsoft Graph Integration event listeners
-                document.getElementById('sendEmailCampaign').addEventListener('change', (e) => {
-                    this.toggleEmailCampaignDetails(e.target.checked);
-                });
-
-                // Add validation for email campaign fields
-                document.getElementById('emailSubject').addEventListener('input', () => this.validateEmailCampaign());
-                document.getElementById('emailTemplate').addEventListener('input', () => this.validateEmailCampaign());
-                
-                // Template management event listeners
-                document.getElementById('templateChoice').addEventListener('change', (e) => this.handleTemplateChoice(e.target.value));
-                document.getElementById('refreshTemplatesBtn').addEventListener('click', () => this.loadTemplates());
                 
                 document.getElementById('toggleLogsBtn').addEventListener('click', () => {
                     const container = this.logsContainer;
@@ -2352,13 +2337,13 @@
                     .map(industry => industry.trim())
                     .filter(industry => industry.length > 0);
 
-                // Microsoft Graph Integration options
-                const saveToOneDrive = document.getElementById('saveToOneDrive').checked;
-                const sendEmailCampaign = document.getElementById('sendEmailCampaign').checked;
-                const templateChoice = document.getElementById('templateChoice').value;
-                const emailTemplate = templateChoice === 'custom' ? document.getElementById('emailTemplate').value.trim() : '';
-                const emailSubject = document.getElementById('emailSubject').value.trim();
-                const trackEmailReads = document.getElementById('trackEmailReads').checked;
+                // Microsoft Graph Integration options (removed from UI, set defaults)
+                const saveToOneDrive = false;
+                const sendEmailCampaign = false;
+                const templateChoice = '';
+                const emailTemplate = '';
+                const emailSubject = '';
+                const trackEmailReads = false;
                 
                 return {
                     jobTitles,
@@ -2831,7 +2816,10 @@ Best regards,
                 const templateChoice = document.getElementById('templateChoice');
                 const emailTemplate = document.getElementById('emailTemplate');
                 const submitBtn = document.getElementById('generateBtn');
-                
+
+                // Return true if elements don't exist (feature removed)
+                if (!sendEmailCheckbox) return true;
+
                 if (sendEmailCheckbox.checked) {
                     const hasSubject = emailSubject.value.trim().length > 0;
                     const isCustomTemplate = templateChoice.value === 'custom';
@@ -2889,7 +2877,10 @@ Best regards,
 
             populateTemplateDropdown(templates) {
                 const templateChoice = document.getElementById('templateChoice');
-                
+
+                // Return early if element doesn't exist (feature removed)
+                if (!templateChoice) return;
+
                 // Clear existing options except default ones
                 const options = templateChoice.querySelectorAll('option[value^="template_"]');
                 options.forEach(option => option.remove());
