@@ -90,11 +90,11 @@ class EmailDelayUtils {
     }
 
     /**
-     * Progressive delay - starts with shorter delays and increases over time
+     * Progressive delay - fixed random delay between emails
      * Helps avoid detection patterns while maintaining efficiency
      * @param {number} emailIndex - Current email index (0-based)
      * @param {number} totalEmails - Total number of emails
-     * @returns {Promise} Promise that resolves after progressive delay
+     * @returns {Promise} Promise that resolves after random delay
      */
     async progressiveDelay(emailIndex, totalEmails) {
         // Skip delay for first email
@@ -103,17 +103,11 @@ class EmailDelayUtils {
             return 0;
         }
 
-        // Calculate progressive multiplier (1.0 to 1.5)
-        const progressRatio = emailIndex / totalEmails;
-        const multiplier = 1.0 + (progressRatio * 0.5);
-        
-        // Base delays with progressive increase (reduced by half)
+        // Fixed random delay (15-60 seconds) throughout campaign
         const baseMin = 15;
         const baseMax = 60;
-        const adjustedMin = Math.round(baseMin * multiplier);
-        const adjustedMax = Math.round(baseMax * multiplier);
-        
-        return await this.randomDelay(adjustedMin, adjustedMax);
+
+        return await this.randomDelay(baseMin, baseMax);
     }
 
     /**
