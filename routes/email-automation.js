@@ -22,12 +22,13 @@ const upload = multer({
         fileSize: 10 * 1024 * 1024 // 10MB limit
     },
     fileFilter: (req, file, cb) => {
-        // Accept Excel files for master list uploads
+        // Accept Excel and CSV files for master list uploads
         if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-            file.mimetype === 'application/vnd.ms-excel') {
+            file.mimetype === 'application/vnd.ms-excel' ||
+            file.mimetype === 'text/csv') {
             cb(null, true);
         } else {
-            cb(new Error('Only Excel files (.xlsx, .xls) are allowed'), false);
+            cb(new Error('Only Excel files (.xlsx, .xls) and CSV files (.csv) are allowed'), false);
         }
     }
 });

@@ -117,18 +117,18 @@ class ExcelProcessor {
     }
 
     /**
-     * Parse uploaded Excel file and extract leads
+     * Parse uploaded Excel or CSV file and extract leads
      */
     parseUploadedFile(fileBuffer) {
         try {
-            
+
             const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
-            
+
             // Try to intelligently find the leads sheet, fallback to first sheet
             const sheetInfo = this.findLeadsSheet(workbook);
             let worksheet;
             let sheetName;
-            
+
             if (sheetInfo) {
                 worksheet = sheetInfo.sheet;
                 sheetName = sheetInfo.name;
@@ -139,20 +139,23 @@ class ExcelProcessor {
                 worksheet = workbook.Sheets[sheetName];
                 console.log(`📊 Using first sheet as fallback: "${sheetName}"`);
             }
-            
+
             const data = XLSX.utils.sheet_to_json(worksheet);
-            
+
             console.log(`📊 Parsed ${data.length} rows from uploaded file`);
-            
+
+            // Apply column mapping to normalize different CSV/Excel formats
+            const mappedData = data.map(row => this.mapColumnsToStandard(row));
+
             // Normalize and validate data
-            const validLeads = data.filter(row => this.isValidLead(row));
-            
+            const validLeads = mappedData.filter(row => this.isValidLead(row));
+
             console.log(`✅ ${validLeads.length} valid leads found`);
-            
+
             return validLeads;
         } catch (error) {
-            console.error('❌ Excel parsing error:', error);
-            throw new Error('Failed to parse Excel file: ' + error.message);
+            console.error('❌ Excel/CSV parsing error:', error);
+            throw new Error('Failed to parse Excel/CSV file: ' + error.message);
         }
     }
 
@@ -869,6 +872,88 @@ class ExcelProcessor {
         
         console.error(`❌ No valid lead data sheet found in workbook. Available sheets: ${Object.keys(workbook.Sheets).join(', ')}`);
         return null;
+    }
+
+    /**
+     * Map various CSV/Excel column formats to our standard format
+     * Handles Apollo.io CSV exports and other common formats
+     */
+    mapColumnsToStandard(row) {
+        const mapped = {};
+
+        // Name mapping: combine First Name + Last Name if separate, or use Name field
+        if (row['First Name'] || row['Last Name']) {
+            const firstName = row['First Name'] || '';
+            const lastName = row['Last Name'] || '';
+            mapped.Name = `${firstName} ${lastName}`.trim();
+        } else {
+            mapped.Name = row.Name || row.name || row['Full Name'] || '';
+        }
+
+        // Email mapping (priority order)
+        mapped.Email = row.Email || row.email || row['Email Address'] || row['email_address'] || '';
+
+        // Phone mapping: try multiple phone field variations
+        mapped.Phone = row.Phone || row.phone ||
+                      row['Phone Number'] || row['Corporate Phone'] ||
+                      row['Other Phone'] || row['Company Phone'] ||
+                      row['Contact Number'] || '';
+
+        // Company mapping
+        mapped['Company Name'] = row['Company Name'] || row.Company ||
+                                 row.organization_name || row.company ||
+                                 row['Company Name for Emails'] || '';
+
+        // Website mapping
+        mapped['Company Website'] = row['Company Website'] || row.Website ||
+                                   row.website || row.organization_website_url || '';
+
+        // Size mapping: # Employees or Size
+        mapped.Size = row.Size || row['# Employees'] ||
+                     row['#Employees'] || row.estimated_num_employees || '';
+
+        // Title mapping
+        mapped.Title = row.Title || row.title || row['Job Title'] || '';
+
+        // LinkedIn mapping
+        mapped['LinkedIn URL'] = row['LinkedIn URL'] || row['Person Linkedin Url'] ||
+                                row.linkedin_url || row.linkedin || '';
+
+        // Industry mapping
+        mapped.Industry = row.Industry || row.industry || '';
+
+        // Location mapping
+        mapped.Location = row.Location || row.location || row.country || '';
+
+        // Email verified mapping
+        mapped['Email Verified'] = row['Email Verified'] || row['Email Status'] ||
+                                  row.email_verified || 'N';
+
+        // AI Generated content (if exists)
+        mapped.AI_Generated_Email = row.AI_Generated_Email || row.Notes || row.notes || '';
+
+        // Copy any other fields that might exist
+        Object.keys(row).forEach(key => {
+            if (!mapped[key] && !this.isCommonUnmappedField(key)) {
+                mapped[key] = row[key];
+            }
+        });
+
+        return mapped;
+    }
+
+    /**
+     * Check if a field is commonly unmapped (to avoid cluttering)
+     */
+    isCommonUnmappedField(fieldName) {
+        const unmappedFields = [
+            'First Name', 'Last Name', '# Employees', '#Employees',
+            'Person Linkedin Url', 'Email Status', 'Corporate Phone',
+            'Other Phone', 'Company Phone', 'Seniority', 'Departments',
+            'Keywords', 'Company Linkedin Url', 'Facebook Url', 'Twitter Url',
+            'Company Name for Emails'
+        ];
+        return unmappedFields.includes(fieldName);
     }
 
     // Helper methods
