@@ -159,18 +159,27 @@ router.get('/unsubscribe', async (req, res) => {
                     const userEmail = '${email}';
 
                     async function confirmUnsubscribe() {
+                        console.log('🔘 [CLIENT] Confirm button clicked!');
+                        console.log('📧 [CLIENT] Email:', userEmail);
+
                         const button = document.getElementById('confirmBtn');
                         button.disabled = true;
                         button.textContent = 'Processing...';
 
                         try {
-                            const response = await fetch('/api/email/unsubscribe/confirm?email=${encodeURIComponent(email)}', {
+                            const url = '/api/email/unsubscribe/confirm?email=${encodeURIComponent(email)}';
+                            console.log('📤 [CLIENT] Sending POST request to:', url);
+
+                            const response = await fetch(url, {
                                 method: 'POST'
                             });
 
+                            console.log('📥 [CLIENT] Response status:', response.status);
                             const result = await response.json();
+                            console.log('📋 [CLIENT] Response data:', result);
 
                             if (result.success) {
+                                console.log('✅ [CLIENT] Unsubscribe successful!');
                                 document.getElementById('content').innerHTML =
                                     '<h1 class="success">✓ Successfully Unsubscribed</h1>' +
                                     '<p>You have been removed from our mailing list.</p>' +
@@ -178,14 +187,21 @@ router.get('/unsubscribe', async (req, res) => {
                                     '<p>You will no longer receive emails from us.</p>' +
                                     '<p class="info">If you unsubscribed by mistake, please contact us at BenefitsCare@inspro.com.sg</p>';
                             } else {
+                                console.error('❌ [CLIENT] Unsubscribe failed:', result.message);
                                 throw new Error(result.message || 'Failed to unsubscribe');
                             }
                         } catch (error) {
+                            console.error('❌ [CLIENT] Error:', error);
                             alert('Error: ' + error.message + '\\nPlease contact us directly at BenefitsCare@inspro.com.sg');
                             button.disabled = false;
                             button.textContent = 'Confirm Unsubscribe';
                         }
                     }
+
+                    // Log when page loads
+                    console.log('✅ [CLIENT] Unsubscribe confirmation page loaded');
+                    console.log('📧 [CLIENT] Email address:', userEmail);
+                    console.log('💡 [CLIENT] Click "Confirm Unsubscribe" to proceed');
                 </script>
             </head>
             <body>
