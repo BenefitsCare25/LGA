@@ -6,9 +6,9 @@
 
 class EmailDelayUtils {
     constructor() {
-        // Default delay range: 30-60 seconds
-        this.minDelay = 30000; // 30 seconds in milliseconds
-        this.maxDelay = 60000; // 60 seconds in milliseconds
+        // Default delay range: 15-30 seconds (reduced by half for faster sending)
+        this.minDelay = 15000; // 15 seconds in milliseconds
+        this.maxDelay = 30000; // 30 seconds in milliseconds
     }
 
     /**
@@ -31,12 +31,12 @@ class EmailDelayUtils {
     }
 
     /**
-     * Wait for random delay between 30-60 seconds
-     * @param {number} min - Minimum delay in seconds (default: 30)
-     * @param {number} max - Maximum delay in seconds (default: 60)
+     * Wait for random delay between 15-30 seconds
+     * @param {number} min - Minimum delay in seconds (default: 15)
+     * @param {number} max - Maximum delay in seconds (default: 30)
      * @returns {Promise} Promise that resolves after random delay
      */
-    async randomDelay(min = 30, max = 60) {
+    async randomDelay(min = 15, max = 30) {
         const minMs = min * 1000;
         const maxMs = max * 1000;
         const delayMs = this.getRandomDelay(minMs, maxMs);
@@ -66,10 +66,10 @@ class EmailDelayUtils {
     /**
      * Calculate estimated completion time for bulk email sending
      * @param {number} emailCount - Number of emails to send
-     * @param {number} avgDelay - Average delay in seconds (default: 37.5)
+     * @param {number} avgDelay - Average delay in seconds (default: 22.5)
      * @returns {object} Estimation object with total time and completion time
      */
-    estimateBulkSendingTime(emailCount, avgDelay = 45) {
+    estimateBulkSendingTime(emailCount, avgDelay = 22.5) {
         const totalDelaySeconds = (emailCount - 1) * avgDelay; // No delay after last email
         const estimatedProcessingSeconds = emailCount * 5; // ~5 seconds per email processing
         const totalSeconds = totalDelaySeconds + estimatedProcessingSeconds;
@@ -103,15 +103,15 @@ class EmailDelayUtils {
             return 0;
         }
 
-        // Fixed random delay (30-60 seconds) throughout campaign
-        const baseMin = 30;
-        const baseMax = 60;
+        // Fixed random delay (15-30 seconds) throughout campaign
+        const baseMin = 15;
+        const baseMax = 30;
 
         return await this.randomDelay(baseMin, baseMax);
     }
 
     /**
-     * Batch delay - same as regular delay (30-60 seconds)
+     * Batch delay - same as regular delay (15-30 seconds)
      * @param {number} batchIndex - Current batch index
      * @param {number} batchSize - Size of each batch
      * @returns {Promise} Promise that resolves after batch delay
@@ -121,9 +121,9 @@ class EmailDelayUtils {
             return 0; // No delay for first batch
         }
 
-        // Use same delay as regular emails (30-60 seconds)
-        const batchDelayMin = 30;
-        const batchDelayMax = 60;
+        // Use same delay as regular emails (15-30 seconds)
+        const batchDelayMin = 15;
+        const batchDelayMax = 30;
 
         console.log(`⏸️ Batch ${batchIndex} completed. Adding delay...`);
         return await this.randomDelay(batchDelayMin, batchDelayMax);
@@ -156,11 +156,11 @@ class EmailDelayUtils {
             volumeMultiplier = 1.2;
         }
         
-        // Fixed delay: 30-60 seconds (no multipliers)
-        const baseMin = 30;
-        const baseMax = 60;
+        // Fixed delay: 15-30 seconds (no multipliers)
+        const baseMin = 15;
+        const baseMax = 30;
 
-        console.log(`🧠 Smart delay: Time=${hour}h, Volume=${emailsSentToday} - using fixed 30-60s delay`);
+        console.log(`🧠 Smart delay: Time=${hour}h, Volume=${emailsSentToday} - using fixed 15-30s delay`);
         return await this.randomDelay(baseMin, baseMax);
     }
 

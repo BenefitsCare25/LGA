@@ -383,22 +383,8 @@ router.post('/master-list/upload', requireDelegatedAuth, upload.single('excelFil
                 }
             } else {
                 console.error('❌ Post-upload verification failed - no Leads sheet found');
-                
-                // Enhanced debugging for failed verification
-                if (verificationWorkbook) {
-                    const availableSheets = Object.keys(verificationWorkbook.Sheets);
-                    console.error(`❌ Available sheets in downloaded file: [${availableSheets.join(', ')}]`);
-                    
-                    // Check if we have a Sheet1 with data (indicating corruption)
-                    if (availableSheets.includes('Sheet1')) {
-                        const sheet1Data = XLSX.utils.sheet_to_json(verificationWorkbook.Sheets['Sheet1']);
-                        console.error(`❌ Sheet1 detected - OneDrive corruption possible`);
-                        console.error(`❌ This is a known Microsoft Graph API Excel upload corruption issue`);
-                    }
-                } else {
-                    console.error(`❌ Could not download verification file at all`);
-                }
-                
+                console.error(`❌ Could not retrieve lead data from OneDrive file`);
+
                 throw new Error('Post-upload verification failed: No Leads sheet found in uploaded file');
             }
         } catch (verifyError) {

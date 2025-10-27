@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const PhoneNumberLookup = require('../utils/phoneNumberLookup');
+const { deduplicateLeads } = require('../utils/leadDeduplication');
 const router = express.Router();
 
 // Initialize Apollo job storage (in production, use Redis or database)
@@ -358,43 +359,8 @@ router.post('/scrape-leads', async (req, res) => {
             // Transform Apollo data to our format
             const transformedLeads = enrichedData.map(transformApolloLead);
 
-            // Duplicate prevention
-            const uniqueLeads = [];
-            const seen = new Set();
-
-            transformedLeads.forEach((lead, index) => {
-                const email = (lead.email || '').toLowerCase().trim();
-                const linkedin = (lead.linkedin_url || '').toLowerCase().trim();
-                const name = (lead.name || '').toLowerCase().trim();
-                const company = (lead.organization_name || '').toLowerCase().trim();
-
-                let identifier;
-                let identifierType;
-                if (email && email !== '') {
-                    identifier = email;
-                    identifierType = 'email';
-                } else if (linkedin && linkedin !== '') {
-                    identifier = linkedin;
-                    identifierType = 'linkedin';
-                } else {
-                    identifier = `${name}|${company}`;
-                    identifierType = 'name+company';
-                }
-
-                // Debug first few leads
-                if (index < 3) {
-                    console.log(`🔍 Lead ${index}: ${lead.name} - ${identifierType}: "${identifier}"`);
-                }
-
-                if (!seen.has(identifier)) {
-                    seen.add(identifier);
-                    uniqueLeads.push(lead);
-                } else {
-                    console.log(`🔄 Duplicate ${index}: ${lead.name} - ${identifierType}: "${identifier}"`);
-                }
-            });
-
-            const duplicatesRemoved = transformedLeads.length - uniqueLeads.length;
+            // Duplicate prevention using centralized utility
+            const { uniqueLeads, duplicatesRemoved } = deduplicateLeads(transformedLeads, { debug: true });
 
             // AI-powered phone lookup for leads without phone numbers (if enabled)
             if (enableAiPhoneFinder) {
@@ -679,43 +645,8 @@ async function processApolloJob(apolloJobId) {
             // Transform Apollo data to our format
             const transformedLeads = enrichedData.map(transformApolloLead);
 
-            // Duplicate prevention
-            const uniqueLeads = [];
-            const seen = new Set();
-
-            transformedLeads.forEach((lead, index) => {
-                const email = (lead.email || '').toLowerCase().trim();
-                const linkedin = (lead.linkedin_url || '').toLowerCase().trim();
-                const name = (lead.name || '').toLowerCase().trim();
-                const company = (lead.organization_name || '').toLowerCase().trim();
-
-                let identifier;
-                let identifierType;
-                if (email && email !== '') {
-                    identifier = email;
-                    identifierType = 'email';
-                } else if (linkedin && linkedin !== '') {
-                    identifier = linkedin;
-                    identifierType = 'linkedin';
-                } else {
-                    identifier = `${name}|${company}`;
-                    identifierType = 'name+company';
-                }
-
-                // Debug first few leads
-                if (index < 3) {
-                    console.log(`🔍 Lead ${index}: ${lead.name} - ${identifierType}: "${identifier}"`);
-                }
-
-                if (!seen.has(identifier)) {
-                    seen.add(identifier);
-                    uniqueLeads.push(lead);
-                } else {
-                    console.log(`🔄 Duplicate ${index}: ${lead.name} - ${identifierType}: "${identifier}"`);
-                }
-            });
-
-            const duplicatesRemoved = transformedLeads.length - uniqueLeads.length;
+            // Duplicate prevention using centralized utility
+            const { uniqueLeads, duplicatesRemoved } = deduplicateLeads(transformedLeads, { debug: true });
 
             // AI-powered phone lookup (if enabled)
             if (enableAiPhoneFinder) {
@@ -783,11 +714,6 @@ async function processApolloJob(apolloJobId) {
         job.completedAt = new Date().toISOString();
     }
 }
-
-// Poll Apify run until completion
-// REMOVED: pollApifyRun function (132 lines)
-// Dead code - Apify integration was replaced with Apollo API direct integration
-// Successfully migrated to scrapeWithApolloAPI() and enrichApolloLeads()
 
 // Get Apollo job status
 router.get('/job-status/:jobId', async (req, res) => {

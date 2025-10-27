@@ -833,7 +833,7 @@ async function sendEmailsToLeads(graphClient, leads, emailContentType, templates
 
             // Add progressive delay between emails (skip delay for last email)
             if (i < leads.length - 1) {
-                const delaySeconds = Math.floor(Math.random() * (60 - 30 + 1)) + 30; // 30-60 seconds
+                const delaySeconds = Math.floor(Math.random() * (30 - 15 + 1)) + 15; // 15-30 seconds
                 await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
             }
 
@@ -910,11 +910,6 @@ async function sendEmailsToLeads(graphClient, leads, emailContentType, templates
         }
     };
 }
-
-// REMOVED: updateLeadsAfterCampaign function 
-// This was causing duplicate Excel updates with the same data already updated in real-time
-// Real-time per-email updates (lines 527-556) are sufficient and more accurate
-
 
 function getLeadsByCampaign(allLeads, campaignId) {
     // This is a simplified approach - in a real system you'd track campaign associations
@@ -1063,15 +1058,6 @@ async function createScheduledCampaign(graphClient, campaignData) {
 }
 
 
-// Helper function to get master file data using Graph Workbook API
-// REMOVED: getMasterFileData, convertGraphTableToLeads, downloadMasterFileRaw functions (195 lines)
-// Dead code - replaced by getLeadsViaGraphAPI() from utils/excelGraphAPI.js
-// These functions used XLSX library for raw file parsing, now using Graph API for direct Excel access
-
-// REMOVED: updateLeadStatusViaGraph function
-// This was a duplicate Excel update function that caused the same data to be updated twice
-// The system now uses only updateLeadViaGraphAPI from utils/excelGraphAPI.js for all updates
-
 // Helper function to calculate next email date
 function calculateNextEmailDate(fromDate, followUpDays) {
     const nextDate = new Date(fromDate);
@@ -1082,10 +1068,6 @@ function calculateNextEmailDate(fromDate, followUpDays) {
 // Helper function to get Excel column letter from number (A, B, C, ... Z, AA, AB, etc.)
 
 // Graph API helper functions for migrated functionality
-
-
-// REMOVED: Duplicate getTemplatesViaGraphAPI function (50 lines)
-// Now imported from email-templates.js for consistency and DRY principles
 
 async function getCampaignHistoryViaGraphAPI(graphClient) {
     try {
@@ -1331,8 +1313,8 @@ async function sendEmailsToLeadsWithAttachments(graphClient, leads, emailContent
             }
         },
         getDelay: async (index, total) => {
-            // Progressive delay: 30-60 seconds
-            const delaySeconds = Math.floor(Math.random() * (60 - 30 + 1)) + 30;
+            // Progressive delay: 15-30 seconds
+            const delaySeconds = Math.floor(Math.random() * (30 - 15 + 1)) + 15;
             return delaySeconds * 1000;
         },
         trackReads: false
