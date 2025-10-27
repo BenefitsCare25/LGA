@@ -287,4 +287,97 @@ router.get('/test-graph', async (req, res) => {
     }
 });
 
+// Get refresh token for bootstrap configuration (one-time setup endpoint)
+router.get('/get-refresh-token', async (req, res) => {
+    try {
+        const sessionId = req.headers['x-session-id'] || req.query.sessionId;
+
+        if (!sessionId) {
+            return res.status(401).json({
+                success: false,
+                error: 'Session ID required',
+                message: 'Please authenticate first via /auth/login'
+            });
+        }
+
+        const authProvider = getDelegatedAuthProvider();
+
+        if (!authProvider.isAuthenticated(sessionId)) {
+            return res.status(401).json({
+                success: false,
+                error: 'Session not authenticated',
+                message: 'Please authenticate via /auth/login first'
+            });
+        }
+
+        const tokenData = authProvider.userTokens.get(sessionId);
+
+        if (!tokenData || !tokenData.refreshToken) {
+            return res.status(404).json({
+                success: false,
+                error: 'No refresh token available',
+                message: 'Session exists but refresh token not found'
+            });
+        }
+
+        const userInfo = authProvider.getUserInfo(sessionId);
+
+        res.json({
+            success: true,
+            message: 'Refresh token extracted successfully',
+            user: userInfo.username,
+            refreshToken: tokenData.refreshToken,
+            sessionId: sessionId,
+            instructions: {
+                title: 'Refresh Token Bootstrap Setup',
+                steps: [
+                    {
+                        step: 1,
+                        action: 'Copy the refresh token below',
+                        note: 'This is a one-time operation'
+                    },
+                    {
+                        step: 2,
+                        action: 'Add to Render environment variables',
+                        variables: {
+                            BOOTSTRAP_REFRESH_TOKEN: '<paste refresh token here>',
+                            BOOTSTRAP_SESSION_EMAIL: userInfo.username
+                        }
+                    },
+                    {
+                        step: 3,
+                        action: 'Restart the service',
+                        note: 'Server will auto-authenticate on every startup'
+                    },
+                    {
+                        step: 4,
+                        action: 'Verify in logs',
+                        lookFor: '✅ Refresh token bootstrap successful'
+                    }
+                ],
+                benefits: [
+                    'Works with MFA enabled',
+                    'Complies with Conditional Access policies',
+                    'Session persists for 90+ days',
+                    'Automatic token refresh',
+                    'No manual re-authentication needed'
+                ],
+                security: [
+                    'Store refresh token securely in environment variables only',
+                    'Never commit refresh tokens to source control',
+                    'Treat refresh tokens like passwords',
+                    'Refresh tokens provide full account access'
+                ]
+            }
+        });
+
+    } catch (error) {
+        console.error('Refresh token extraction error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
 module.exports = router;

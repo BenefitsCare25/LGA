@@ -462,7 +462,7 @@ class DelegatedGraphAuth {
         try {
             const client = await this.getGraphClient(sessionId);
             const userInfo = await client.api('/me').get();
-            
+
             console.log(`✅ Graph connection test successful for: ${userInfo.displayName}`);
             return {
                 success: true,
@@ -476,6 +476,82 @@ class DelegatedGraphAuth {
                 error: error.message
             };
         }
+    }
+
+    /**
+     * Bootstrap service account authentication on server startup
+     * Tries ROPC first, then refresh token bootstrap, finally falls back to OAuth
+     * @returns {Object} Bootstrap result with session ID or null
+     */
+    async bootstrapServiceAccount() {
+        console.log('🚀 Attempting service account bootstrap...');
+
+        // Try ROPC authentication first (if configured)
+        const ROPCGraphAuth = require('./ropcGraphAuth');
+        if (ROPCGraphAuth.isConfigured()) {
+            console.log('🔐 Method 1: ROPC (username/password) authentication');
+            const validation = ROPCGraphAuth.validateConfiguration();
+
+            if (validation.warnings.length > 0) {
+                validation.warnings.forEach(warning => console.log(`⚠️ ${warning}`));
+            }
+
+            try {
+                const ropcAuth = new ROPCGraphAuth();
+                const result = await ropcAuth.createSessionFromROPC(this);
+
+                if (result.success) {
+                    console.log('✅ ROPC authentication successful');
+                    console.log(`🔑 Default session ID: ${result.sessionId}`);
+                    console.log('📧 Email automation enabled for unattended operation');
+                    return result;
+                } else {
+                    console.error('❌ ROPC authentication failed:', result.error);
+                    console.log('⚠️ Falling back to refresh token bootstrap...');
+                }
+            } catch (error) {
+                console.error('❌ ROPC bootstrap error:', error.message);
+                console.log('⚠️ Falling back to refresh token bootstrap...');
+            }
+        }
+
+        // Try refresh token bootstrap (if configured)
+        const SessionBootstrap = require('../utils/sessionBootstrap');
+        if (SessionBootstrap.isConfigured()) {
+            console.log('🔐 Method 2: Refresh token bootstrap');
+            const validation = SessionBootstrap.validateConfiguration();
+
+            if (validation.warnings.length > 0) {
+                validation.warnings.forEach(warning => console.log(`⚠️ ${warning}`));
+            }
+
+            try {
+                const result = await SessionBootstrap.bootstrapFromEnv(this);
+
+                if (result.success) {
+                    console.log('✅ Refresh token bootstrap successful');
+                    console.log(`🔑 Default session ID: ${result.sessionId}`);
+                    console.log('📧 Email automation enabled for unattended operation');
+                    return result;
+                } else {
+                    console.error('❌ Refresh token bootstrap failed:', result.error);
+                    if (result.hint) {
+                        console.log(`💡 ${result.hint}`);
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Bootstrap error:', error.message);
+            }
+        }
+
+        // No automatic authentication available
+        console.log('⚠️ No automatic authentication configured');
+        console.log('💡 Options:');
+        console.log('   1. ROPC: Set AZURE_SERVICE_ACCOUNT_USERNAME and AZURE_SERVICE_ACCOUNT_PASSWORD');
+        console.log('   2. Bootstrap: Set BOOTSTRAP_REFRESH_TOKEN and BOOTSTRAP_SESSION_EMAIL');
+        console.log('   3. OAuth: Users can authenticate via /auth/login');
+
+        return null;
     }
 }
 

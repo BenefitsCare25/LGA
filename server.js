@@ -212,6 +212,32 @@ app.listen(PORT, async () => {
         console.warn('📝 OneDrive and Email automation features will be disabled');
     } else {
         console.log('🔗 Microsoft Graph integration enabled');
+
+        // Bootstrap service account authentication for unattended operation
+        try {
+            const { getDelegatedAuthProvider } = require('./middleware/delegatedGraphAuth');
+            const delegatedAuth = getDelegatedAuthProvider();
+            const bootstrapResult = await delegatedAuth.bootstrapServiceAccount();
+
+            if (bootstrapResult && bootstrapResult.success) {
+                // Store default session ID for automated operations
+                global.DEFAULT_SESSION_ID = bootstrapResult.sessionId;
+                global.DEFAULT_USER_EMAIL = bootstrapResult.user;
+
+                console.log('✅ Service account ready for unattended email automation');
+                console.log(`📧 Default session: ${bootstrapResult.sessionId}`);
+                console.log(`👤 Service account: ${bootstrapResult.user}`);
+            } else {
+                console.warn('⚠️  No automatic authentication available');
+                console.warn('📝 Email automation requires manual authentication via /auth/login');
+                console.warn('💡 To enable unattended operation, configure:');
+                console.warn('   - ROPC: AZURE_SERVICE_ACCOUNT_USERNAME and AZURE_SERVICE_ACCOUNT_PASSWORD');
+                console.warn('   - OR Bootstrap: BOOTSTRAP_REFRESH_TOKEN and BOOTSTRAP_SESSION_EMAIL');
+            }
+        } catch (bootstrapError) {
+            console.error('❌ Service account bootstrap error:', bootstrapError.message);
+            console.warn('📝 Email automation will require manual authentication');
+        }
     }
 });
 
