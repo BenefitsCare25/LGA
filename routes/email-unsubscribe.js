@@ -421,95 +421,22 @@ async function removeLeadFromExcel(graphClient, email) {
 
         console.log(`📧 [UNSUBSCRIBE-EXCEL] Email column found at index ${emailColumnIndex}: "${headers[emailColumnIndex]}"`);
 
-        // Helper function to normalize email addresses (same as main route)
-        const normalizeEmail = (rawEmail) => {
-            if (!rawEmail || typeof rawEmail !== 'string') return '';
-
-            let normalized = rawEmail;
-
-            // Remove all whitespace (including non-breaking spaces, zero-width spaces, etc.)
-            normalized = normalized.replace(/\s+/g, '');
-
-            // Normalize Unicode characters
-            normalized = normalized.normalize('NFKC');
-
-            // Convert to lowercase
-            normalized = normalized.toLowerCase();
-
-            // Remove any invisible characters (zero-width, control characters)
-            normalized = normalized.replace(/[\u200B-\u200D\uFEFF\u0000-\u001F\u007F-\u009F]/g, '');
-
-            // Extract email if it's in format "Name <email@domain.com>"
-            const emailMatch = normalized.match(/<([^>]+)>$/);
-            if (emailMatch) {
-                normalized = emailMatch[1];
-            }
-
-            return normalized;
-        };
-
-        // Normalize the search email
-        const normalizedSearchEmail = normalizeEmail(email);
-        console.log(`🔍 [UNSUBSCRIBE-EXCEL] Normalized search email: "${normalizedSearchEmail}"`);
-        console.log(`🔍 [UNSUBSCRIBE-EXCEL] Search email length: ${normalizedSearchEmail.length} characters`);
-
-        // Show first 5 emails from Excel for debugging
-        console.log('📋 [UNSUBSCRIBE-EXCEL] Sample emails from Excel (first 5 rows):');
-        for (let i = 0; i < Math.min(5, rows.length); i++) {
-            const sampleEmail = rows[i][emailColumnIndex];
-            if (sampleEmail) {
-                const normalizedSample = normalizeEmail(sampleEmail);
-                console.log(`   ${i + 1}. Raw: "${sampleEmail}" → Normalized: "${normalizedSample}"`);
-            }
-        }
-
         // Find target row
         console.log(`🔍 [UNSUBSCRIBE-EXCEL] Searching ${rows.length} rows for matching email...`);
         let targetRowIndex = -1;
-        let checkedCount = 0;
-
         for (let i = 0; i < rows.length; i++) {
             const rowEmail = rows[i][emailColumnIndex];
-            if (rowEmail) {
-                checkedCount++;
-                const normalizedRowEmail = normalizeEmail(rowEmail);
-
-                if (normalizedRowEmail === normalizedSearchEmail) {
-                    targetRowIndex = i + 2; // +2 for 1-based and header row
-                    console.log(`✅ [UNSUBSCRIBE-EXCEL] Step 2.4/5 Complete: Found lead at row ${targetRowIndex}`);
-                    console.log(`📍 [UNSUBSCRIBE-EXCEL] Raw email in Excel: "${rowEmail}"`);
-                    console.log(`📍 [UNSUBSCRIBE-EXCEL] Normalized match: "${normalizedRowEmail}" === "${normalizedSearchEmail}"`);
-                    console.log(`📍 [UNSUBSCRIBE-EXCEL] Lead data: ${JSON.stringify(rows[i].slice(0, 5))}...`);
-                    break;
-                }
+            if (rowEmail && rowEmail.toLowerCase().trim() === email.toLowerCase().trim()) {
+                targetRowIndex = i + 2; // +2 for 1-based and header row
+                console.log(`✅ [UNSUBSCRIBE-EXCEL] Step 2.4/5 Complete: Found lead at row ${targetRowIndex}`);
+                console.log(`📍 [UNSUBSCRIBE-EXCEL] Lead data: ${JSON.stringify(rows[i].slice(0, 5))}...`);
+                break;
             }
         }
 
         if (targetRowIndex === -1) {
             console.log(`⚠️ [UNSUBSCRIBE-EXCEL] Lead with email ${email} not found in Excel file`);
-            console.log(`⚠️ [UNSUBSCRIBE-EXCEL] Searched ${rows.length} total rows, ${checkedCount} had email values`);
-            console.log(`⚠️ [UNSUBSCRIBE-EXCEL] Column searched: "${headers[emailColumnIndex]}" at index ${emailColumnIndex}`);
-
-            // Check for partial matches (for debugging)
-            const searchPrefix = normalizedSearchEmail.substring(0, 10);
-            const partialMatches = rows.filter((row, idx) => {
-                const rowEmail = row[emailColumnIndex];
-                if (!rowEmail) return false;
-                const normalizedRowEmail = normalizeEmail(rowEmail);
-                return normalizedRowEmail.includes(searchPrefix);
-            });
-
-            if (partialMatches.length > 0) {
-                console.log(`🔍 [UNSUBSCRIBE-EXCEL] Found ${partialMatches.length} partial match(es) (similar emails):`);
-                partialMatches.slice(0, 3).forEach((row, idx) => {
-                    const rawEmail = row[emailColumnIndex];
-                    const normalizedEmail = normalizeEmail(rawEmail);
-                    console.log(`   ${idx + 1}. Raw: "${rawEmail}" → Normalized: "${normalizedEmail}"`);
-                });
-            } else {
-                console.log(`🔍 [UNSUBSCRIBE-EXCEL] No partial matches found for "${normalizedSearchEmail.substring(0, 20)}..."`);
-            }
-
+            console.log(`⚠️ [UNSUBSCRIBE-EXCEL] Searched ${rows.length} rows in column "${headers[emailColumnIndex]}"`);
             return false;
         }
 
