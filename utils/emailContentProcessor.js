@@ -355,6 +355,10 @@ Joel Lee`;
      * Convert email content to HTML format with tracking and professional signature
      */
     convertToHTML(emailContent, leadEmail = null, leadData = null) {
+        console.log(`📄 [CONVERT-HTML] convertToHTML called with leadEmail: "${leadEmail}"`);
+        console.log(`📄 [CONVERT-HTML] leadData.Email: "${leadData?.Email}"`);
+        console.log(`📄 [CONVERT-HTML] leadData.Name: "${leadData?.Name}"`);
+
         let htmlBody = emailContent.body || '';
 
         // Clean placeholder signatures from body
@@ -369,8 +373,11 @@ Joel Lee`;
         // Add professional Inspro signature
         const professionalSignature = this.generateProfessionalSignature();
 
-        // Add unsubscribe link
-        const unsubscribeLink = this.generateUnsubscribeLink(leadEmail);
+        // Add unsubscribe link - CRITICAL: Use leadData.Email if leadEmail is null/wrong
+        const emailForUnsubscribe = leadEmail || leadData?.Email;
+        console.log(`🔗 [CONVERT-HTML] Email for unsubscribe link: "${emailForUnsubscribe}"`);
+
+        const unsubscribeLink = this.generateUnsubscribeLink(emailForUnsubscribe);
 
         // Add tracking pixel if email is provided
         let trackingPixel = '';
@@ -507,10 +514,18 @@ ${leadName}`);
      * Generate unsubscribe link
      */
     generateUnsubscribeLink(leadEmail) {
-        if (!leadEmail) return '';
+        console.log(`🔗 [UNSUBSCRIBE-LINK] generateUnsubscribeLink called with: "${leadEmail}"`);
+        console.log(`🔗 [UNSUBSCRIBE-LINK] Email type: ${typeof leadEmail}, length: ${leadEmail ? leadEmail.length : 'N/A'}`);
+
+        if (!leadEmail) {
+            console.warn(`⚠️ [UNSUBSCRIBE-LINK] No email provided, returning empty unsubscribe link`);
+            return '';
+        }
 
         const baseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
         const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?email=${encodeURIComponent(leadEmail)}`;
+
+        console.log(`✅ [UNSUBSCRIBE-LINK] Generated unsubscribe URL: ${unsubscribeUrl.substring(0, 100)}...`);
 
         return `
         <div class="unsubscribe">
@@ -522,6 +537,12 @@ ${leadName}`);
      * Create email message object for Microsoft Graph API
      */
     createEmailMessage(emailContent, leadEmail, leadData = null, trackReads = false, attachments = []) {
+        console.log(`📧 [CREATE-EMAIL-MESSAGE] Creating email for: "${leadEmail}"`);
+        console.log(`📧 [CREATE-EMAIL-MESSAGE] leadData.Email: "${leadData?.Email}"`);
+        console.log(`📧 [CREATE-EMAIL-MESSAGE] leadData.Name: "${leadData?.Name}"`);
+        console.log(`📧 [CREATE-EMAIL-MESSAGE] trackReads: ${trackReads}`);
+        console.log(`📧 [CREATE-EMAIL-MESSAGE] Passing to convertToHTML - leadEmail: "${trackReads ? leadEmail : null}"`);
+
         const emailMessage = {
             subject: emailContent.subject,
             body: {
