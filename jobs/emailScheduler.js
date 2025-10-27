@@ -420,7 +420,7 @@ class EmailScheduler {
                 
                 // Add delay after failures to maintain sending pattern
                 if (j < leads.length - 1) {
-                    await this.emailDelayUtils.randomDelay(15, 45); // Shorter delay after failures
+                    await this.emailDelayUtils.randomDelay(30, 60); // Fixed 30-60 second delay
                 }
             }
         }

@@ -6,8 +6,8 @@
 
 class EmailDelayUtils {
     constructor() {
-        // Default delay range: 15-60 seconds (reduced by half)
-        this.minDelay = 15000; // 15 seconds in milliseconds
+        // Default delay range: 30-60 seconds
+        this.minDelay = 30000; // 30 seconds in milliseconds
         this.maxDelay = 60000; // 60 seconds in milliseconds
     }
 
@@ -156,14 +156,12 @@ class EmailDelayUtils {
             volumeMultiplier = 1.2;
         }
         
-        // Calculate adjusted delays (reduced by half)
-        const baseMin = 15;
+        // Fixed delay: 30-60 seconds (no multipliers)
+        const baseMin = 30;
         const baseMax = 60;
-        const adjustedMin = Math.round(baseMin * timeMultiplier * volumeMultiplier);
-        const adjustedMax = Math.round(baseMax * timeMultiplier * volumeMultiplier);
-        
-        console.log(`🧠 Smart delay: Time=${hour}h, Volume=${emailsSentToday}, Multipliers=${timeMultiplier}x${volumeMultiplier}`);
-        return await this.randomDelay(adjustedMin, adjustedMax);
+
+        console.log(`🧠 Smart delay: Time=${hour}h, Volume=${emailsSentToday} - using fixed 30-60s delay`);
+        return await this.randomDelay(baseMin, baseMax);
     }
 
     /**
