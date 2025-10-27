@@ -387,7 +387,7 @@ class EmailScheduler {
 
                 // Add random delay between emails within batch (skip delay for last email in batch)
                 if (j < leads.length - 1) {
-                    await this.emailDelayUtils.randomDelay(15, 60);
+                    await this.emailDelayUtils.randomDelay(30, 60);
                     console.log(`📧 Email sent to ${lead.Email} (${results.emailsSent} total)`);
                 }
 

@@ -833,7 +833,7 @@ async function sendEmailsToLeads(graphClient, leads, emailContentType, templates
 
             // Add progressive delay between emails (skip delay for last email)
             if (i < leads.length - 1) {
-                const delaySeconds = Math.floor(Math.random() * (60 - 15 + 1)) + 15; // 15-60 seconds
+                const delaySeconds = Math.floor(Math.random() * (60 - 30 + 1)) + 30; // 30-60 seconds
                 await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
             }
 
@@ -1331,8 +1331,8 @@ async function sendEmailsToLeadsWithAttachments(graphClient, leads, emailContent
             }
         },
         getDelay: async (index, total) => {
-            // Progressive delay: 15-60 seconds
-            const delaySeconds = Math.floor(Math.random() * (60 - 15 + 1)) + 15;
+            // Progressive delay: 30-60 seconds
+            const delaySeconds = Math.floor(Math.random() * (60 - 30 + 1)) + 30;
             return delaySeconds * 1000;
         },
         trackReads: false

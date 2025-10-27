@@ -31,19 +31,19 @@ class EmailDelayUtils {
     }
 
     /**
-     * Wait for random delay between 15-60 seconds
-     * @param {number} min - Minimum delay in seconds (default: 15)
+     * Wait for random delay between 30-60 seconds
+     * @param {number} min - Minimum delay in seconds (default: 30)
      * @param {number} max - Maximum delay in seconds (default: 60)
      * @returns {Promise} Promise that resolves after random delay
      */
-    async randomDelay(min = 15, max = 60) {
+    async randomDelay(min = 30, max = 60) {
         const minMs = min * 1000;
         const maxMs = max * 1000;
         const delayMs = this.getRandomDelay(minMs, maxMs);
-        
+
         console.log(`⏳ Waiting ${Math.round(delayMs / 1000)}s before next email...`);
         await this.sleep(delayMs);
-        
+
         return delayMs;
     }
 
@@ -69,7 +69,7 @@ class EmailDelayUtils {
      * @param {number} avgDelay - Average delay in seconds (default: 37.5)
      * @returns {object} Estimation object with total time and completion time
      */
-    estimateBulkSendingTime(emailCount, avgDelay = 37.5) {
+    estimateBulkSendingTime(emailCount, avgDelay = 45) {
         const totalDelaySeconds = (emailCount - 1) * avgDelay; // No delay after last email
         const estimatedProcessingSeconds = emailCount * 5; // ~5 seconds per email processing
         const totalSeconds = totalDelaySeconds + estimatedProcessingSeconds;
@@ -103,15 +103,15 @@ class EmailDelayUtils {
             return 0;
         }
 
-        // Fixed random delay (15-60 seconds) throughout campaign
-        const baseMin = 15;
+        // Fixed random delay (30-60 seconds) throughout campaign
+        const baseMin = 30;
         const baseMax = 60;
 
         return await this.randomDelay(baseMin, baseMax);
     }
 
     /**
-     * Batch delay - adds extra delay between batches of emails
+     * Batch delay - same as regular delay (30-60 seconds)
      * @param {number} batchIndex - Current batch index
      * @param {number} batchSize - Size of each batch
      * @returns {Promise} Promise that resolves after batch delay
@@ -120,12 +120,12 @@ class EmailDelayUtils {
         if (batchIndex === 0) {
             return 0; // No delay for first batch
         }
-        
-        // Add 1-2.5 minutes between batches (reduced by half)
-        const batchDelayMin = 60; // 1 minute
-        const batchDelayMax = 150; // 2.5 minutes
-        
-        console.log(`⏸️ Batch ${batchIndex} completed. Adding extended delay between batches...`);
+
+        // Use same delay as regular emails (30-60 seconds)
+        const batchDelayMin = 30;
+        const batchDelayMax = 60;
+
+        console.log(`⏸️ Batch ${batchIndex} completed. Adding delay...`);
         return await this.randomDelay(batchDelayMin, batchDelayMax);
     }
 
