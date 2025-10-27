@@ -366,22 +366,58 @@ async function removeLeadFromExcel(graphClient, email) {
         }
 
         console.log(`📧 [UNSUBSCRIBE-EXCEL] Email column found at index ${emailColumnIndex}: "${headers[emailColumnIndex]}"`);
+        console.log(`🔍 [UNSUBSCRIBE-EXCEL] Target email (normalized): "${email.toLowerCase().trim()}"`);
+        console.log(`🔍 [UNSUBSCRIBE-EXCEL] Target email length: ${email.toLowerCase().trim().length} characters`);
+
+        // Show first 5 emails from Excel for debugging
+        console.log('📋 [UNSUBSCRIBE-EXCEL] Sample emails from Excel (first 5 rows):');
+        for (let i = 0; i < Math.min(5, rows.length); i++) {
+            const sampleEmail = rows[i][emailColumnIndex];
+            if (sampleEmail) {
+                console.log(`   ${i + 1}. "${sampleEmail}" (normalized: "${sampleEmail.toLowerCase().trim()}")`);
+            }
+        }
 
         // Find target row
         let targetRowIndex = -1;
+        let checkedCount = 0;
         for (let i = 0; i < rows.length; i++) {
             const rowEmail = rows[i][emailColumnIndex];
-            if (rowEmail && rowEmail.toLowerCase().trim() === email.toLowerCase().trim()) {
-                targetRowIndex = i + 2; // +2 for 1-based and header row
-                console.log(`✅ [UNSUBSCRIBE-EXCEL] Step 2.4/5 Complete: Found lead at row ${targetRowIndex}`);
-                console.log(`📍 [UNSUBSCRIBE-EXCEL] Lead data: ${JSON.stringify(rows[i].slice(0, 5))}...`);
-                break;
+            if (rowEmail) {
+                checkedCount++;
+                const normalizedRowEmail = rowEmail.toLowerCase().trim();
+                const normalizedSearchEmail = email.toLowerCase().trim();
+
+                if (normalizedRowEmail === normalizedSearchEmail) {
+                    targetRowIndex = i + 2; // +2 for 1-based and header row
+                    console.log(`✅ [UNSUBSCRIBE-EXCEL] Step 2.4/5 Complete: Found lead at row ${targetRowIndex}`);
+                    console.log(`📍 [UNSUBSCRIBE-EXCEL] Matched email: "${rowEmail}" → "${normalizedRowEmail}"`);
+                    console.log(`📍 [UNSUBSCRIBE-EXCEL] Lead data: ${JSON.stringify(rows[i].slice(0, 5))}...`);
+                    break;
+                }
             }
         }
 
         if (targetRowIndex === -1) {
             console.log(`⚠️ [UNSUBSCRIBE-EXCEL] Lead with email ${email} not found in Excel file`);
-            console.log(`⚠️ [UNSUBSCRIBE-EXCEL] Searched ${rows.length} rows in column "${headers[emailColumnIndex]}"`);
+            console.log(`⚠️ [UNSUBSCRIBE-EXCEL] Searched ${rows.length} total rows, ${checkedCount} had email values`);
+            console.log(`⚠️ [UNSUBSCRIBE-EXCEL] Column searched: "${headers[emailColumnIndex]}" at index ${emailColumnIndex}`);
+
+            // Check for partial matches (for debugging)
+            const partialMatches = rows.filter((row, idx) => {
+                const rowEmail = row[emailColumnIndex];
+                return rowEmail && rowEmail.toLowerCase().includes(email.toLowerCase().substring(0, 10));
+            });
+
+            if (partialMatches.length > 0) {
+                console.log(`🔍 [UNSUBSCRIBE-EXCEL] Found ${partialMatches.length} partial match(es) (similar emails):`);
+                partialMatches.slice(0, 3).forEach((row, idx) => {
+                    console.log(`   ${idx + 1}. "${row[emailColumnIndex]}"`);
+                });
+            } else {
+                console.log(`🔍 [UNSUBSCRIBE-EXCEL] No partial matches found for "${email.substring(0, 20)}..."`);
+            }
+
             return false;
         }
 
