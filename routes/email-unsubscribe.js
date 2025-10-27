@@ -55,16 +55,19 @@ async function getUnsubscribeGraphClient() {
 }
 
 /**
- * Handle unsubscribe request - removes lead from Excel file
+ * Handle unsubscribe request - removes lead from Excel file immediately (one-click unsubscribe)
  * GET /api/email/unsubscribe?email=recipient@example.com
  */
 router.get('/unsubscribe', async (req, res) => {
+    const startTime = Date.now();
+
     try {
         const { email } = req.query;
 
         console.log('═══════════════════════════════════════════════════════════════');
         console.log('📧 [UNSUBSCRIBE] New unsubscribe request received');
         console.log(`📧 [UNSUBSCRIBE] Timestamp: ${new Date().toISOString()}`);
+        console.log(`📧 [UNSUBSCRIBE] Email address: ${email}`);
 
         if (!email) {
             console.error('❌ [UNSUBSCRIBE] No email address provided in request');
@@ -73,200 +76,23 @@ router.get('/unsubscribe', async (req, res) => {
                 <html>
                 <head>
                     <title>Invalid Unsubscribe Request</title>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
                     <style>
-                        body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
+                        body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; background-color: #f8f9fa; }
+                        .container { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
                         .error { color: #dc3545; }
                     </style>
                 </head>
                 <body>
-                    <h1 class="error">Invalid Unsubscribe Request</h1>
-                    <p>No email address was provided in the unsubscribe link.</p>
-                    <p>If you continue to receive emails, please contact us directly.</p>
+                    <div class="container">
+                        <h1 class="error">Invalid Unsubscribe Request</h1>
+                        <p>No email address was provided in the unsubscribe link.</p>
+                        <p>If you continue to receive emails, please contact us directly at BenefitsCare@inspro.com.sg</p>
+                    </div>
                 </body>
                 </html>
             `);
-        }
-
-        console.log(`📧 [UNSUBSCRIBE] Email address: ${email}`);
-        console.log('✅ [UNSUBSCRIBE] Confirmation page loading...');
-        console.log('═══════════════════════════════════════════════════════════════');
-
-        res.send(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Unsubscribe Confirmation</title>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <style>
-                    body {
-                        font-family: Arial, sans-serif;
-                        max-width: 600px;
-                        margin: 50px auto;
-                        padding: 20px;
-                        text-align: center;
-                        background-color: #f8f9fa;
-                    }
-                    .container {
-                        background: white;
-                        padding: 40px;
-                        border-radius: 8px;
-                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                    }
-                    .success { color: #28a745; }
-                    .email {
-                        background-color: #e9ecef;
-                        padding: 10px;
-                        border-radius: 4px;
-                        font-family: monospace;
-                        margin: 20px 0;
-                    }
-                    .button {
-                        display: inline-block;
-                        margin-top: 20px;
-                        padding: 12px 24px;
-                        background-color: #28a745;
-                        color: white !important;
-                        text-decoration: none;
-                        border-radius: 6px;
-                        font-weight: bold;
-                    }
-                    .button:hover {
-                        background-color: #218838;
-                    }
-                    .confirm-button {
-                        background-color: #dc3545;
-                        margin-top: 30px;
-                        padding: 15px 40px;
-                        color: white;
-                        border: none;
-                        border-radius: 6px;
-                        font-size: 16px;
-                        font-weight: bold;
-                        cursor: pointer;
-                    }
-                    .confirm-button:hover {
-                        background-color: #c82333;
-                    }
-                    .info {
-                        color: #666;
-                        font-size: 14px;
-                        margin-top: 20px;
-                    }
-                </style>
-                <script>
-                    // Client-side email variable for JavaScript
-                    const userEmail = '${email}';
-
-                    async function confirmUnsubscribe() {
-                        console.log('🔘 [CLIENT] Confirm button clicked!');
-                        console.log('📧 [CLIENT] Email:', userEmail);
-
-                        const button = document.getElementById('confirmBtn');
-                        button.disabled = true;
-                        button.textContent = 'Processing...';
-
-                        try {
-                            const url = '/api/email/unsubscribe/confirm?email=${encodeURIComponent(email)}';
-                            console.log('📤 [CLIENT] Sending POST request to:', url);
-
-                            const response = await fetch(url, {
-                                method: 'POST'
-                            });
-
-                            console.log('📥 [CLIENT] Response status:', response.status);
-                            const result = await response.json();
-                            console.log('📋 [CLIENT] Response data:', result);
-
-                            if (result.success) {
-                                console.log('✅ [CLIENT] Unsubscribe successful!');
-                                document.getElementById('content').innerHTML =
-                                    '<h1 class="success">✓ Successfully Unsubscribed</h1>' +
-                                    '<p>You have been removed from our mailing list.</p>' +
-                                    '<div class="email">' + userEmail + '</div>' +
-                                    '<p>You will no longer receive emails from us.</p>' +
-                                    '<p class="info">If you unsubscribed by mistake, please contact us at BenefitsCare@inspro.com.sg</p>';
-                            } else {
-                                console.error('❌ [CLIENT] Unsubscribe failed:', result.message);
-                                throw new Error(result.message || 'Failed to unsubscribe');
-                            }
-                        } catch (error) {
-                            console.error('❌ [CLIENT] Error:', error);
-                            alert('Error: ' + error.message + '\\nPlease contact us directly at BenefitsCare@inspro.com.sg');
-                            button.disabled = false;
-                            button.textContent = 'Confirm Unsubscribe';
-                        }
-                    }
-
-                    // Log when page loads
-                    console.log('✅ [CLIENT] Unsubscribe confirmation page loaded');
-                    console.log('📧 [CLIENT] Email address:', userEmail);
-                    console.log('💡 [CLIENT] Click "Confirm Unsubscribe" to proceed');
-                </script>
-            </head>
-            <body>
-                <div class="container" id="content">
-                    <h1>Confirm Unsubscribe</h1>
-                    <p>Are you sure you want to unsubscribe from our mailing list?</p>
-                    <div class="email">${email}</div>
-                    <p class="info">This will remove you from all future email communications.</p>
-                    <button class="confirm-button" id="confirmBtn" onclick="confirmUnsubscribe()">
-                        Confirm Unsubscribe
-                    </button>
-                    <p class="info" style="margin-top: 40px;">
-                        If you didn't request this, you can safely close this page.
-                    </p>
-                </div>
-            </body>
-            </html>
-        `);
-
-    } catch (error) {
-        console.error('❌ [UNSUBSCRIBE] Page loading error:', error.message);
-        console.error('❌ [UNSUBSCRIBE] Stack trace:', error.stack);
-        console.log('═══════════════════════════════════════════════════════════════');
-        res.status(500).send(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Error</title>
-                <style>
-                    body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
-                    .error { color: #dc3545; }
-                </style>
-            </head>
-            <body>
-                <h1 class="error">An Error Occurred</h1>
-                <p>We encountered an error processing your unsubscribe request.</p>
-                <p>Please contact us directly at BenefitsCare@inspro.com.sg</p>
-            </body>
-            </html>
-        `);
-    }
-});
-
-/**
- * Confirm unsubscribe and remove from Excel
- * POST /api/email/unsubscribe/confirm?email=recipient@example.com
- * No user authentication required - uses ROPC service account credentials
- */
-router.post('/unsubscribe/confirm', async (req, res) => {
-    const startTime = Date.now();
-
-    try {
-        const { email } = req.query;
-
-        console.log('═══════════════════════════════════════════════════════════════');
-        console.log('🗑️ [UNSUBSCRIBE] Processing unsubscribe confirmation');
-        console.log(`📧 [UNSUBSCRIBE] Email: ${email}`);
-        console.log(`⏰ [UNSUBSCRIBE] Timestamp: ${new Date().toISOString()}`);
-
-        if (!email) {
-            console.error('❌ [UNSUBSCRIBE] No email address provided');
-            return res.status(400).json({
-                success: false,
-                message: 'Email address is required'
-            });
         }
 
         console.log('🔐 [UNSUBSCRIBE] Step 1/3: Authenticating with service account...');
@@ -303,41 +129,160 @@ router.post('/unsubscribe/confirm', async (req, res) => {
             console.log(`⏱️ [UNSUBSCRIBE] Processing time: ${processingTime}ms`);
             console.log('═══════════════════════════════════════════════════════════════');
 
-            res.json({
-                success: true,
-                message: 'Successfully unsubscribed',
-                email: email,
-                processingTime: processingTime
-            });
+            // Success page
+            return res.send(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Successfully Unsubscribed</title>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <style>
+                        body {
+                            font-family: Arial, sans-serif;
+                            max-width: 600px;
+                            margin: 50px auto;
+                            padding: 20px;
+                            text-align: center;
+                            background-color: #f8f9fa;
+                        }
+                        .container {
+                            background: white;
+                            padding: 40px;
+                            border-radius: 8px;
+                            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                        }
+                        .success { color: #28a745; }
+                        .email {
+                            background-color: #e9ecef;
+                            padding: 10px;
+                            border-radius: 4px;
+                            font-family: monospace;
+                            margin: 20px 0;
+                        }
+                        .info {
+                            color: #666;
+                            font-size: 14px;
+                            margin-top: 20px;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <h1 class="success">✓ Successfully Unsubscribed</h1>
+                        <p>You have been removed from our mailing list.</p>
+                        <div class="email">${email}</div>
+                        <p>You will no longer receive emails from us.</p>
+                        <p class="info">If you unsubscribed by mistake, please contact us at BenefitsCare@inspro.com.sg</p>
+                    </div>
+                </body>
+                </html>
+            `);
         } else {
             console.log(`⚠️ [UNSUBSCRIBE] Email ${email} not found in mailing list`);
             console.log(`⚠️ [UNSUBSCRIBE] Possible reasons: already unsubscribed or never subscribed`);
             console.log(`⏱️ [UNSUBSCRIBE] Processing time: ${processingTime}ms`);
             console.log('═══════════════════════════════════════════════════════════════');
 
-            res.json({
-                success: true,
-                message: 'Email address not found in our records (may already be unsubscribed)',
-                email: email,
-                processingTime: processingTime
-            });
+            // Not found page (still treat as success to avoid information disclosure)
+            return res.send(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Unsubscribed</title>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <style>
+                        body {
+                            font-family: Arial, sans-serif;
+                            max-width: 600px;
+                            margin: 50px auto;
+                            padding: 20px;
+                            text-align: center;
+                            background-color: #f8f9fa;
+                        }
+                        .container {
+                            background: white;
+                            padding: 40px;
+                            border-radius: 8px;
+                            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                        }
+                        .success { color: #28a745; }
+                        .email {
+                            background-color: #e9ecef;
+                            padding: 10px;
+                            border-radius: 4px;
+                            font-family: monospace;
+                            margin: 20px 0;
+                        }
+                        .info {
+                            color: #666;
+                            font-size: 14px;
+                            margin-top: 20px;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <h1 class="success">✓ Unsubscribed</h1>
+                        <p>Your email address is not in our mailing list.</p>
+                        <div class="email">${email}</div>
+                        <p>You may have already unsubscribed or were never subscribed.</p>
+                        <p class="info">If you continue to receive emails, please contact us at BenefitsCare@inspro.com.sg</p>
+                    </div>
+                </body>
+                </html>
+            `);
         }
 
     } catch (error) {
         const processingTime = Date.now() - startTime;
 
-        console.error('❌ [UNSUBSCRIBE] FAILED: Unsubscribe confirmation error');
+        console.error('❌ [UNSUBSCRIBE] FAILED: Unsubscribe error');
         console.error(`❌ [UNSUBSCRIBE] Error: ${error.message}`);
         console.error(`❌ [UNSUBSCRIBE] Stack trace:`, error.stack);
         console.error(`⏱️ [UNSUBSCRIBE] Failed after: ${processingTime}ms`);
         console.log('═══════════════════════════════════════════════════════════════');
 
-        res.status(500).json({
-            success: false,
-            message: 'Failed to process unsubscribe request',
-            error: error.message,
-            processingTime: processingTime
-        });
+        res.status(500).send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Error - Unsubscribe</title>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                        max-width: 600px;
+                        margin: 50px auto;
+                        padding: 20px;
+                        text-align: center;
+                        background-color: #f8f9fa;
+                    }
+                    .container {
+                        background: white;
+                        padding: 40px;
+                        border-radius: 8px;
+                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                    }
+                    .error { color: #dc3545; }
+                    .info {
+                        color: #666;
+                        font-size: 14px;
+                        margin-top: 20px;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1 class="error">An Error Occurred</h1>
+                    <p>We encountered an error processing your unsubscribe request.</p>
+                    <p class="info">Please try again later, or contact us directly at BenefitsCare@inspro.com.sg</p>
+                </div>
+            </body>
+            </html>
+        `);
     }
 });
 
