@@ -62,14 +62,49 @@ router.get('/unsubscribe', async (req, res) => {
     const startTime = Date.now();
 
     try {
-        let { email } = req.query;
+        let { email, token } = req.query;
 
         console.log('═══════════════════════════════════════════════════════════════');
-        console.log(`📧 [UNSUBSCRIBE] Request received for: ${email}`);
+        console.log(`📧 [UNSUBSCRIBE] Request received - Token: ${token ? 'Yes' : 'No'}, Email: ${email || 'N/A'}`);
         console.log(`📧 [UNSUBSCRIBE] Timestamp: ${new Date().toISOString()}`);
 
-        if (!email) {
-            console.error('❌ [UNSUBSCRIBE] No email address provided in request');
+        // NEW: Token-based unsubscribe (secure, prevents corruption)
+        if (token) {
+            console.log(`🔑 [UNSUBSCRIBE] Using token-based unsubscribe: ${token.substring(0, 8)}...`);
+            const tokenManager = require('../utils/unsubscribeTokenManager');
+            email = tokenManager.getEmailFromToken(token);
+
+            if (!email) {
+                console.error(`❌ [UNSUBSCRIBE] Invalid or expired token: ${token.substring(0, 8)}...`);
+                return res.status(400).send(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Invalid Unsubscribe Link</title>
+                        <meta charset="UTF-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <style>
+                            body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; background-color: #f8f9fa; }
+                            .container { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                            .error { color: #dc3545; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <h1 class="error">Invalid or Expired Unsubscribe Link</h1>
+                            <p>This unsubscribe link is invalid or has expired (links expire after 90 days).</p>
+                            <p>If you continue to receive emails, please contact us directly at BenefitsCare@inspro.com.sg</p>
+                        </div>
+                    </body>
+                    </html>
+                `);
+            }
+
+            console.log(`✅ [UNSUBSCRIBE] Token resolved to email: ${email}`);
+        }
+        // OLD: Email-based unsubscribe (for backwards compatibility with old emails)
+        else if (!email) {
+            console.error('❌ [UNSUBSCRIBE] No token or email provided in request');
             return res.status(400).send(`
                 <!DOCTYPE html>
                 <html>
@@ -86,7 +121,7 @@ router.get('/unsubscribe', async (req, res) => {
                 <body>
                     <div class="container">
                         <h1 class="error">Invalid Unsubscribe Request</h1>
-                        <p>No email address was provided in the unsubscribe link.</p>
+                        <p>No email address or token was provided in the unsubscribe link.</p>
                         <p>If you continue to receive emails, please contact us directly at BenefitsCare@inspro.com.sg</p>
                     </div>
                 </body>

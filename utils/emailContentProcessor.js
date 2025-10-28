@@ -523,11 +523,14 @@ ${leadName}`);
             return '';
         }
 
-        const baseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
-        const encodedEmail = encodeURIComponent(leadEmail);
-        const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?email=${encodedEmail}`;
+        // Generate secure token for this email
+        const tokenManager = require('./unsubscribeTokenManager');
+        const token = tokenManager.generateToken(leadEmail);
 
-        console.log(`✅ [UNSUBSCRIBE-LINK-GEN] Generated URL: ${unsubscribeUrl}`);
+        const baseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
+        const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?token=${token}`;
+
+        console.log(`✅ [UNSUBSCRIBE-LINK-GEN] Generated token-based URL: ${unsubscribeUrl.substring(0, 80)}...`);
 
         return `
         <div class="unsubscribe">
