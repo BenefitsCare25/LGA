@@ -68,10 +68,10 @@ requirements.txt
 .claude/
 excel_append.log
 
-# Temporary files
-temp_*
-debug_*
-test_*
+# Temporary files (in root only)
+/temp_*
+/debug_*
+/test_*
 
 # Backup files
 *.bak
