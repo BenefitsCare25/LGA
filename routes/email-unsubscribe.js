@@ -475,19 +475,19 @@ async function removeLeadFromExcel(graphClient, email) {
         // Instead of deleting (which causes table issues), mark as "Unsubscribed"
         console.log(`🔄 [UNSUBSCRIBE-EXCEL] Marking lead as "Unsubscribed" in Excel...`);
 
-        // Update the Status column to "Unsubscribed"
-        const statusColumnIndex = headers.findIndex(h =>
-            h && typeof h === 'string' && h.toLowerCase().trim() === 'status'
+        // Update the Email_Bounce column to "Unsubscribed"
+        const emailBounceColumnIndex = headers.findIndex(h =>
+            h && typeof h === 'string' && h.toLowerCase().replace(/[\s_]/g, '') === 'emailbounce'
         );
 
-        if (statusColumnIndex !== -1) {
-            const statusCell = `${getExcelColumnLetter(statusColumnIndex)}${targetRowIndex}`;
+        if (emailBounceColumnIndex !== -1) {
+            const emailBounceCell = `${getExcelColumnLetter(emailBounceColumnIndex)}${targetRowIndex}`;
             await graphClient
-                .api(`/me/drive/items/${fileId}/workbook/worksheets('${leadsSheet.name}')/range(address='${statusCell}')`)
+                .api(`/me/drive/items/${fileId}/workbook/worksheets('${leadsSheet.name}')/range(address='${emailBounceCell}')`)
                 .patch({
                     values: [['Unsubscribed']]
                 });
-            console.log(`✅ [UNSUBSCRIBE-EXCEL] Updated Status to "Unsubscribed" at ${statusCell}`);
+            console.log(`✅ [UNSUBSCRIBE-EXCEL] Updated Email_Bounce to "Unsubscribed" at ${emailBounceCell}`);
         }
 
         // Update Last Updated column
