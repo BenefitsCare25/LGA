@@ -373,18 +373,30 @@ Joel Lee`;
         // Add professional Inspro signature
         const professionalSignature = this.generateProfessionalSignature();
 
-        // Add unsubscribe link - CRITICAL: Use leadData.Email if leadEmail is null/wrong
-        const emailForUnsubscribe = leadEmail || leadData?.Email;
-        console.log(`🔗 [CONVERT-HTML] Email for unsubscribe link: "${emailForUnsubscribe}"`);
+        // CRITICAL FIX: Use consistent email source for both tracking and unsubscribe
+        // Determine the actual recipient email (prioritize leadEmail, fallback to leadData.Email)
+        const actualRecipientEmail = leadEmail || leadData?.Email;
 
-        const unsubscribeLink = this.generateUnsubscribeLink(emailForUnsubscribe);
+        console.log(`🔗 [CONVERT-HTML] Actual recipient email: "${actualRecipientEmail}"`);
+        console.log(`🔗 [CONVERT-HTML] Email source: ${leadEmail ? 'leadEmail parameter' : 'leadData.Email fallback'}`);
 
-        // Add tracking pixel if email is provided
+        // Validate email before using
+        if (actualRecipientEmail && !actualRecipientEmail.includes('@')) {
+            console.error(`❌ [CONVERT-HTML] Invalid email detected: "${actualRecipientEmail}"`);
+            console.error(`❌ [CONVERT-HTML] leadEmail: "${leadEmail}"`);
+            console.error(`❌ [CONVERT-HTML] leadData: ${JSON.stringify(leadData)}`);
+        }
+
+        // Add unsubscribe link using the validated email
+        const unsubscribeLink = this.generateUnsubscribeLink(actualRecipientEmail);
+
+        // Add tracking pixel using the SAME email
         let trackingPixel = '';
-        if (leadEmail) {
-            const trackingId = `${leadEmail}-${Date.now()}`;
+        if (actualRecipientEmail) {
+            const trackingId = `${actualRecipientEmail}-${Date.now()}`;
             const baseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
             trackingPixel = `<img src="${baseUrl}/api/email/track-read?id=${encodeURIComponent(trackingId)}" width="1" height="1" style="display:none;" alt="" />`;
+            console.log(`📊 [CONVERT-HTML] Tracking pixel created for: "${actualRecipientEmail}"`);
         }
 
         // Wrap in enhanced HTML structure with CTA button and professional signature
