@@ -3,7 +3,7 @@ const { getDelegatedAuthProvider } = require('../middleware/delegatedGraphAuth')
 const router = express.Router();
 
 // Import tracking system for processing stored events after re-authentication
-const { TrackingFallbackManager } = require('../routes/email-tracking');
+const TrackingFallbackManager = require('../utils/trackingFallbackManager');
 
 /**
  * Microsoft 365 Authentication Routes

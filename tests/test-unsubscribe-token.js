@@ -4,7 +4,7 @@
  */
 
 require('dotenv').config();
-const tokenManager = require('./utils/unsubscribeTokenManager');
+const tokenManager = require('../utils/unsubscribeTokenManager');
 
 console.log('═══════════════════════════════════════════════════════════════');
 console.log('🔍 Unsubscribe Token System Diagnostics');
