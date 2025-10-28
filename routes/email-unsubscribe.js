@@ -70,7 +70,11 @@ router.get('/unsubscribe', async (req, res) => {
 
         // NEW: Token-based unsubscribe (secure, prevents corruption)
         if (token) {
-            console.log(`🔑 [UNSUBSCRIBE] Using token-based unsubscribe: ${token.substring(0, 8)}...`);
+            console.log(`🔑 [UNSUBSCRIBE] Full token received: ${token}`);
+            console.log(`📏 [UNSUBSCRIBE] Token length: ${token.length} characters`);
+            console.log(`📋 [UNSUBSCRIBE] Token parts: ${token.split('.').length} (expected: 3)`);
+            console.log(`🔐 [UNSUBSCRIBE] UNSUBSCRIBE_SECRET_KEY configured: ${process.env.UNSUBSCRIBE_SECRET_KEY ? 'Yes' : 'No'}`);
+
             const tokenManager = require('../utils/unsubscribeTokenManager');
             email = tokenManager.getEmailFromToken(token);
 
