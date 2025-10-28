@@ -50,9 +50,6 @@ async function scrapeWithApolloAPI(personTitles, companySizes, maxRecords = 0, i
                 page: currentPage
             };
 
-            // Debug: Log the exact request being sent
-            console.log(`🔍 Apollo API Request Body:`, JSON.stringify(requestBody, null, 2));
-
             const response = await axios.post(
                 `${APOLLO_API_BASE_URL}/mixed_people/search`,
                 requestBody,
@@ -68,20 +65,6 @@ async function scrapeWithApolloAPI(personTitles, companySizes, maxRecords = 0, i
 
             const people = response.data.people || [];
             const pagination = response.data.pagination || {};
-
-            // Debug: Log response details
-            console.log(`📊 Apollo API Response - Page ${currentPage}:`, {
-                peopleCount: people.length,
-                pagination: pagination,
-                totalEntries: pagination.total_entries,
-                totalPages: pagination.total_pages,
-                hasMore: !!people.length
-            });
-
-            // Debug: Log first person to see raw structure
-            if (currentPage === 1 && people.length > 0) {
-                console.log(`🔍 Sample Apollo API person object:`, JSON.stringify(people[0], null, 2));
-            }
 
             console.log(`✅ Page ${currentPage}: ${people.length} leads fetched`);
             allLeads.push(...people);

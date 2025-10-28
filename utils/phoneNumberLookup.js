@@ -12,9 +12,13 @@ class PhoneNumberLookup {
             apiKey: process.env.OPENAI_API_KEY
         });
 
-        // Cache to avoid duplicate lookups
+        // Cache to avoid duplicate lookups with size limit
         this.cache = new Map();
         this.cacheTimeout = 24 * 60 * 60 * 1000; // 24 hours
+        this.maxEntries = 500; // Prevent unbounded memory growth
+
+        // Start periodic cleanup
+        this.startCleanupTimer();
     }
 
     /**
@@ -31,12 +35,9 @@ class PhoneNumberLookup {
             if (this.cache.has(cacheKey)) {
                 const cached = this.cache.get(cacheKey);
                 if (Date.now() - cached.timestamp < this.cacheTimeout) {
-                    console.log(`📞 Using cached phone lookup for ${Name}`);
                     return cached.result;
                 }
             }
-
-            console.log(`🔍 Looking up phone number for ${Name} at ${companyName}...`);
 
             // Build search context
             const searchContext = this.buildSearchContext(lead);
@@ -102,7 +103,6 @@ Return ONLY the phone number in international format (e.g., +65-1234-5678 or +1-
                         const waitTime = apiError.error?.message?.match(/try again in (\d+)ms/)
                             ? parseInt(apiError.error.message.match(/try again in (\d+)ms/)[1])
                             : 1000;
-                        console.log(`⏳ Rate limit hit for ${Name}, waiting ${waitTime}ms before retry...`);
                         await new Promise(resolve => setTimeout(resolve, waitTime));
                         retries--;
                     } else {
@@ -115,6 +115,9 @@ Return ONLY the phone number in international format (e.g., +65-1234-5678 or +1-
 
             // Parse response
             const result = this.parsePhoneResponse(response, lead);
+
+            // Ensure cache size before adding new entry
+            this.ensureCacheSize();
 
             // Cache result
             this.cache.set(cacheKey, {
@@ -138,13 +141,10 @@ Return ONLY the phone number in international format (e.g., +65-1234-5678 or +1-
      * Parse OpenAI response for phone number
      */
     parsePhoneResponse(response, lead) {
-        console.log(`🔍 AI Response for ${lead.Name}: "${response}"`);
-
         // Check if not found
         if (response.toUpperCase().includes('NOT_FOUND') ||
             response.toUpperCase().includes('NOT FOUND') ||
             response.toUpperCase().includes('UNAVAILABLE')) {
-            console.log(`❌ No phone number found for ${lead.Name}`);
             return {
                 found: false,
                 reason: 'Phone number not available publicly',
@@ -156,8 +156,6 @@ Return ONLY the phone number in international format (e.g., +65-1234-5678 or +1-
         // Matches: +65 1234 5678, +65-1234-5678, (65) 1234-5678, 6512345678, etc.
         const phoneRegex = /(\+?\d{1,3}[\s\-\.\(\)]?\d{3,4}[\s\-\.\)]?\d{3,4}[\s\-]?\d{0,4})/g;
         const matches = response.match(phoneRegex);
-
-        console.log(`📱 Extracted matches for ${lead.Name}:`, matches);
 
         if (matches && matches.length > 0) {
             // Collect ALL valid phone numbers
@@ -171,17 +169,13 @@ Return ONLY the phone number in international format (e.g., +65-1234-5678 or +1-
                     // Avoid duplicates
                     if (!validPhoneNumbers.includes(phoneNumber)) {
                         validPhoneNumbers.push(phoneNumber);
-                        console.log(`✅ Found valid phone number for ${lead.Name}: ${phoneNumber}`);
                     }
-                } else {
-                    console.log(`❌ Invalid phone format: ${phoneNumber} (digits: ${phoneNumber.replace(/\D/g, '').length})`);
                 }
             }
 
             // Return all found phone numbers
             if (validPhoneNumbers.length > 0) {
                 const phoneNumberString = validPhoneNumbers.join(', ');
-                console.log(`📞 Total ${validPhoneNumbers.length} phone number(s) found for ${lead.Name}: ${phoneNumberString}`);
                 return {
                     found: true,
                     phoneNumber: phoneNumberString,
@@ -192,7 +186,6 @@ Return ONLY the phone number in international format (e.g., +65-1234-5678 or +1-
             }
         }
 
-        console.log(`⚠️ No valid phone number format found for ${lead.Name}`);
         return {
             found: false,
             reason: 'Invalid phone number format in response',
@@ -245,6 +238,55 @@ Return ONLY the phone number in international format (e.g., +65-1234-5678 or +1-
         const size = this.cache.size;
         this.cache.clear();
         console.log(`🗑️ Cleared ${size} cached phone lookups`);
+    }
+
+    /**
+     * Ensure cache doesn't exceed maximum entries (LRU eviction)
+     */
+    ensureCacheSize() {
+        if (this.cache.size >= this.maxEntries) {
+            // Convert to array and sort by timestamp (oldest first)
+            const entries = Array.from(this.cache.entries())
+                .sort((a, b) => a[1].timestamp - b[1].timestamp);
+
+            // Remove oldest 10%
+            const toRemove = Math.ceil(this.maxEntries * 0.1);
+            for (let i = 0; i < toRemove && i < entries.length; i++) {
+                const [key] = entries[i];
+                this.cache.delete(key);
+            }
+        }
+    }
+
+    /**
+     * Clean up expired cache entries
+     */
+    cleanup() {
+        let cleanedCount = 0;
+        const now = Date.now();
+
+        for (const [key, cached] of this.cache.entries()) {
+            if (now - cached.timestamp >= this.cacheTimeout) {
+                this.cache.delete(key);
+                cleanedCount++;
+            }
+        }
+
+        if (cleanedCount > 0) {
+            console.log(`🧹 Cleaned up ${cleanedCount} expired phone lookup cache entries`);
+        }
+
+        return cleanedCount;
+    }
+
+    /**
+     * Start periodic cleanup timer
+     */
+    startCleanupTimer() {
+        // Run cleanup every hour
+        setInterval(() => {
+            this.cleanup();
+        }, 60 * 60 * 1000);
     }
 
     /**

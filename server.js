@@ -176,6 +176,61 @@ app.use('*', (req, res) => {
     });
 });
 
+/**
+ * Setup periodic cleanup for global Maps to prevent memory leaks
+ * Cleans up old entries from apolloJobs, tempLeads, and authSessions
+ */
+function setupGlobalMapCleanup() {
+    const CLEANUP_INTERVAL = 30 * 60 * 1000; // 30 minutes
+    const MAX_AGE = 2 * 60 * 60 * 1000; // 2 hours
+
+    setInterval(() => {
+        let totalCleaned = 0;
+
+        // Cleanup apolloJobs (jobs older than 2 hours)
+        if (global.apolloJobs) {
+            const now = Date.now();
+            let cleanedJobs = 0;
+            for (const [jobId, job] of global.apolloJobs.entries()) {
+                const jobAge = now - (job.startTime || now);
+                if (jobAge > MAX_AGE || job.status === 'completed' || job.status === 'failed') {
+                    global.apolloJobs.delete(jobId);
+                    cleanedJobs++;
+                }
+            }
+            totalCleaned += cleanedJobs;
+        }
+
+        // Cleanup tempLeads (sessions older than 2 hours)
+        if (global.tempLeads) {
+            const toDelete = [];
+            for (const [sessionId] of global.tempLeads.entries()) {
+                // Since tempLeads doesn't store timestamps, keep it simple
+                // The 30-minute timeout in apollo.js handles most cleanup
+                toDelete.push(sessionId);
+            }
+            // Only keep recent half
+            const keepCount = Math.ceil(toDelete.length / 2);
+            toDelete.slice(keepCount).forEach(id => global.tempLeads.delete(id));
+            totalCleaned += Math.max(0, toDelete.length - keepCount);
+        }
+
+        // Cleanup authSessions (old auth sessions)
+        if (global.authSessions) {
+            const cleanedSessions = global.authSessions.size;
+            // Clear all old auth sessions (they should be short-lived anyway)
+            global.authSessions.clear();
+            totalCleaned += cleanedSessions;
+        }
+
+        if (totalCleaned > 0) {
+            console.log(`🧹 Global Maps cleanup: removed ${totalCleaned} old entries`);
+        }
+    }, CLEANUP_INTERVAL);
+
+    console.log('🧹 Global Maps cleanup scheduled (every 30 minutes)');
+}
+
 // Start server
 app.listen(PORT, async () => {
     // Create singleton lock after successful startup
@@ -195,7 +250,10 @@ app.listen(PORT, async () => {
     } catch (storageError) {
         console.error('❌ Failed to initialize persistent storage:', storageError);
     }
-    
+
+    // Setup periodic cleanup for global Maps to prevent memory leaks
+    setupGlobalMapCleanup();
+
     // Check for required environment variables
     const requiredEnvVars = ['APIFY_API_TOKEN', 'OPENAI_API_KEY'];
     const optionalEnvVars = ['AZURE_TENANT_ID', 'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET'];
