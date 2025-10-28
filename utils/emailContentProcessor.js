@@ -355,11 +355,6 @@ Joel Lee`;
      * Convert email content to HTML format with tracking and professional signature
      */
     convertToHTML(emailContent, leadEmail = null, leadData = null, trackReads = false) {
-        console.log(`📄 [CONVERT-HTML] convertToHTML called`);
-        console.log(`📄 [CONVERT-HTML] leadEmail parameter: "${leadEmail}"`);
-        console.log(`📄 [CONVERT-HTML] leadData.Email: "${leadData?.Email}"`);
-        console.log(`📄 [CONVERT-HTML] leadData.Name: "${leadData?.Name}"`);
-        console.log(`📄 [CONVERT-HTML] trackReads: ${trackReads}`);
 
         let htmlBody = emailContent.body || '';
 
@@ -379,23 +374,8 @@ Joel Lee`;
         // NEVER fall back to leadData.Email which may be corrupted
         const actualRecipientEmail = leadEmail;
 
-        if (!actualRecipientEmail) {
-            console.error(`❌ [CONVERT-HTML] No valid email provided!`);
-            console.error(`❌ [CONVERT-HTML] leadEmail: "${leadEmail}"`);
-            console.error(`❌ [CONVERT-HTML] leadData: ${JSON.stringify(leadData)}`);
-        }
-
-        console.log(`🔗 [CONVERT-HTML] Using email: "${actualRecipientEmail}"`);
-
-        // Validate email before using
-        if (actualRecipientEmail && !actualRecipientEmail.includes('@')) {
-            console.error(`❌ [CONVERT-HTML] Invalid email detected: "${actualRecipientEmail}"`);
-        }
-
         // Add unsubscribe link - ALWAYS uses the actual recipient email
         const unsubscribeLink = this.generateUnsubscribeLink(actualRecipientEmail);
-
-        console.log(`🔗 [CONVERT-HTML] Unsubscribe link HTML:`, unsubscribeLink.substring(0, 200));
 
         // Add tracking pixel ONLY if trackReads is enabled
         let trackingPixel = '';
@@ -403,9 +383,6 @@ Joel Lee`;
             const trackingId = `${actualRecipientEmail}-${Date.now()}`;
             const baseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
             trackingPixel = `<img src="${baseUrl}/api/email/track-read?id=${encodeURIComponent(trackingId)}" width="1" height="1" style="display:none;" alt="" />`;
-            console.log(`📊 [CONVERT-HTML] Tracking pixel created for: "${actualRecipientEmail}"`);
-        } else if (!trackReads) {
-            console.log(`📊 [CONVERT-HTML] Tracking pixel skipped (trackReads: false)`);
         }
 
         // Wrap in enhanced HTML structure with CTA button and professional signature
@@ -535,22 +512,13 @@ ${leadName}`);
      * Generate unsubscribe link
      */
     generateUnsubscribeLink(leadEmail) {
-        console.log(`🔗 [UNSUBSCRIBE-LINK] generateUnsubscribeLink called with: "${leadEmail}"`);
-        console.log(`🔗 [UNSUBSCRIBE-LINK] Email type: ${typeof leadEmail}, length: ${leadEmail ? leadEmail.length : 'N/A'}`);
-        console.log(`🔗 [UNSUBSCRIBE-LINK] Email character codes:`, leadEmail ? [...leadEmail].map(c => `${c}:${c.charCodeAt(0)}`).join(' ') : 'N/A');
-
         if (!leadEmail) {
-            console.warn(`⚠️ [UNSUBSCRIBE-LINK] No email provided, returning empty unsubscribe link`);
             return '';
         }
 
         const baseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
         const encodedEmail = encodeURIComponent(leadEmail);
         const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?email=${encodedEmail}`;
-
-        console.log(`🔗 [UNSUBSCRIBE-LINK] Original email: "${leadEmail}"`);
-        console.log(`🔗 [UNSUBSCRIBE-LINK] Encoded email: "${encodedEmail}"`);
-        console.log(`✅ [UNSUBSCRIBE-LINK] Full unsubscribe URL: ${unsubscribeUrl}`);
 
         return `
         <div class="unsubscribe">
@@ -562,14 +530,8 @@ ${leadName}`);
      * Create email message object for Microsoft Graph API
      */
     createEmailMessage(emailContent, leadEmail, leadData = null, trackReads = false, attachments = []) {
-        console.log(`📧 [CREATE-EMAIL-MESSAGE] Creating email for: "${leadEmail}"`);
-        console.log(`📧 [CREATE-EMAIL-MESSAGE] leadData.Email: "${leadData?.Email}"`);
-        console.log(`📧 [CREATE-EMAIL-MESSAGE] leadData.Name: "${leadData?.Name}"`);
-        console.log(`📧 [CREATE-EMAIL-MESSAGE] trackReads: ${trackReads}`);
-
         // CRITICAL FIX: Always pass leadEmail to convertToHTML for unsubscribe link
         // The trackReads flag should only affect whether tracking pixel is added, NOT which email is used
-        console.log(`📧 [CREATE-EMAIL-MESSAGE] Passing to convertToHTML - leadEmail: "${leadEmail}" (trackReads: ${trackReads})`);
 
         const emailMessage = {
             subject: emailContent.subject,

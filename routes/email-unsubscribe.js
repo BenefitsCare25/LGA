@@ -65,13 +65,8 @@ router.get('/unsubscribe', async (req, res) => {
         let { email } = req.query;
 
         console.log('═══════════════════════════════════════════════════════════════');
-        console.log('📧 [UNSUBSCRIBE] New unsubscribe request received');
+        console.log(`📧 [UNSUBSCRIBE] Request received for: ${email}`);
         console.log(`📧 [UNSUBSCRIBE] Timestamp: ${new Date().toISOString()}`);
-        console.log(`📧 [UNSUBSCRIBE] Full request URL: ${req.url}`);
-        console.log(`📧 [UNSUBSCRIBE] Query params:`, JSON.stringify(req.query));
-        console.log(`📧 [UNSUBSCRIBE] Raw email parameter: "${email}"`);
-        console.log(`📧 [UNSUBSCRIBE] Raw email length: ${email ? email.length : 0} characters`);
-        console.log(`📧 [UNSUBSCRIBE] Raw email as char array: ${email ? [...email].map(c => `${c}:${c.charCodeAt(0)}`).join(' ') : 'N/A'}`);
 
         if (!email) {
             console.error('❌ [UNSUBSCRIBE] No email address provided in request');
@@ -100,7 +95,6 @@ router.get('/unsubscribe', async (req, res) => {
         }
 
         // Comprehensive email sanitization
-        console.log('🧹 [UNSUBSCRIBE] Sanitizing email address...');
 
         // Remove all whitespace (including non-breaking spaces, zero-width spaces, etc.)
         email = email.replace(/\s+/g, '');
@@ -148,8 +142,6 @@ router.get('/unsubscribe', async (req, res) => {
             `);
         }
 
-        console.log(`✅ [UNSUBSCRIBE] Sanitized email: "${email}"`);
-        console.log(`📧 [UNSUBSCRIBE] Sanitized email length: ${email.length} characters`);
 
         console.log('🔐 [UNSUBSCRIBE] Step 1/3: Authenticating with service account...');
 
