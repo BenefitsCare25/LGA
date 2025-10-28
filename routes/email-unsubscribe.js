@@ -67,9 +67,11 @@ router.get('/unsubscribe', async (req, res) => {
         console.log('═══════════════════════════════════════════════════════════════');
         console.log('📧 [UNSUBSCRIBE] New unsubscribe request received');
         console.log(`📧 [UNSUBSCRIBE] Timestamp: ${new Date().toISOString()}`);
+        console.log(`📧 [UNSUBSCRIBE] Full request URL: ${req.url}`);
+        console.log(`📧 [UNSUBSCRIBE] Query params:`, JSON.stringify(req.query));
         console.log(`📧 [UNSUBSCRIBE] Raw email parameter: "${email}"`);
         console.log(`📧 [UNSUBSCRIBE] Raw email length: ${email ? email.length : 0} characters`);
-        console.log(`📧 [UNSUBSCRIBE] Raw email char codes: ${email ? [...email].map(c => c.charCodeAt(0)).join(',') : 'N/A'}`);
+        console.log(`📧 [UNSUBSCRIBE] Raw email as char array: ${email ? [...email].map(c => `${c}:${c.charCodeAt(0)}`).join(' ') : 'N/A'}`);
 
         if (!email) {
             console.error('❌ [UNSUBSCRIBE] No email address provided in request');
@@ -440,19 +442,37 @@ async function removeLeadFromExcel(graphClient, email) {
             return false;
         }
 
-        // Delete the row
-        console.log('🗑️ [UNSUBSCRIBE-EXCEL] Step 2.5/5: Deleting lead row from Excel...');
-        const deleteRange = `A${targetRowIndex}:ZZ${targetRowIndex}`;
-        console.log(`🗑️ [UNSUBSCRIBE-EXCEL] Deleting range: ${deleteRange}`);
+        // Delete the row using Table API (Excel data is in a Table structure)
+        console.log('🗑️ [UNSUBSCRIBE-EXCEL] Step 2.5/5: Deleting lead row from Excel table...');
 
+        // First, get all tables in the worksheet
+        const tables = await graphClient
+            .api(`/me/drive/items/${fileId}/workbook/worksheets('${leadsSheet.name}')/tables`)
+            .get();
+
+        if (!tables.value || tables.value.length === 0) {
+            console.error('❌ [UNSUBSCRIBE-EXCEL] No tables found in worksheet - cannot delete row safely');
+            console.error('❌ [UNSUBSCRIBE-EXCEL] Excel data must be in a Table format for deletion to work');
+            return false;
+        }
+
+        // Use the first table (assuming Leads sheet has one table)
+        const table = tables.value[0];
+        console.log(`📊 [UNSUBSCRIBE-EXCEL] Found table: ${table.name} with ${table.rowCount} rows`);
+
+        // Calculate table row index (targetRowIndex is 1-based worksheet row, need 0-based table row)
+        // Table rows start after the header, so subtract header row and table start position
+        const tableRowIndex = targetRowIndex - 2; // -1 for header, -1 for 0-based index
+
+        console.log(`🗑️ [UNSUBSCRIBE-EXCEL] Deleting table row index: ${tableRowIndex} (worksheet row ${targetRowIndex})`);
+
+        // Delete the row from the table
         await graphClient
-            .api(`/me/drive/items/${fileId}/workbook/worksheets('${leadsSheet.name}')/range(address='${deleteRange}')/delete`)
-            .post({
-                shift: 'Up'
-            });
+            .api(`/me/drive/items/${fileId}/workbook/tables('${table.name}')/rows/itemAt(index=${tableRowIndex})`)
+            .delete();
 
-        console.log(`✅ [UNSUBSCRIBE-EXCEL] Step 2.5/5 Complete: Row ${targetRowIndex} deleted successfully`);
-        console.log(`✅ [UNSUBSCRIBE-EXCEL] Lead ${email} permanently removed from Excel file`);
+        console.log(`✅ [UNSUBSCRIBE-EXCEL] Step 2.5/5 Complete: Row ${targetRowIndex} deleted from table successfully`);
+        console.log(`✅ [UNSUBSCRIBE-EXCEL] Lead ${email} permanently removed from Excel table`);
         return true;
 
     } catch (error) {
