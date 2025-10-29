@@ -78,7 +78,27 @@ router.get('/unsubscribe', async (req, res) => {
             console.log(`🔍 [UNSUBSCRIBE-DEBUG] Last 20 chars: ...${token.substring(token.length - 20)}`);
 
             const tokenManager = require('../utils/unsubscribeTokenManager');
+
+            // Try decrypting the token as-is first
             email = tokenManager.getEmailFromToken(token);
+
+            // If that fails, try manually URL-decoding it
+            if (!email) {
+                console.log(`🔍 [UNSUBSCRIBE-DEBUG] First attempt failed, trying URL decode...`);
+                try {
+                    const decodedToken = decodeURIComponent(token);
+                    console.log(`🔍 [UNSUBSCRIBE-DEBUG] Decoded token: ${decodedToken}`);
+                    console.log(`🔍 [UNSUBSCRIBE-DEBUG] Decoded token length: ${decodedToken.length}`);
+                    email = tokenManager.getEmailFromToken(decodedToken);
+                    if (email) {
+                        console.log(`✅ [UNSUBSCRIBE-DEBUG] Token decryption succeeded after manual URL decode`);
+                    }
+                } catch (decodeError) {
+                    console.log(`❌ [UNSUBSCRIBE-DEBUG] URL decode failed: ${decodeError.message}`);
+                }
+            } else {
+                console.log(`✅ [UNSUBSCRIBE-DEBUG] Token decryption succeeded with raw token`);
+            }
 
             if (!email) {
                 console.error(`❌ [UNSUBSCRIBE] Invalid token`);
