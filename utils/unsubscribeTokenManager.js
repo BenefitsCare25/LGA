@@ -120,13 +120,12 @@ class UnsubscribeTokenManager {
             let decrypted = decipher.update(encrypted, 'base64url', 'utf8');
             decrypted += decipher.final('utf8');
 
-            console.log(`✅ [TOKEN-MGR] Token decrypted successfully: ${decrypted}`);
+            console.log(`✅ [TOKEN-MGR] Token decrypted: ${decrypted}`);
             return decrypted;
 
         } catch (error) {
-            // Decryption failure = invalid/tampered token
-            console.warn(`⚠️ [TOKEN-MGR] Token decryption failed: ${error.message}`);
-            console.warn(`⚠️ [TOKEN-MGR] Token may be invalid, tampered, or encrypted with different key`);
+            // Decryption failure = invalid/tampered token (expected for old/corrupted tokens)
+            console.warn(`⚠️ [TOKEN-MGR] Token decryption failed (invalid or corrupted token)`);
             return null;
         }
     }

@@ -355,9 +355,6 @@ Joel Lee`;
      * Convert email content to HTML format with tracking and professional signature
      */
     convertToHTML(emailContent, leadEmail = null, leadData = null, trackReads = false) {
-        // DEBUGGING: Log all parameters received
-        console.log(`📄 [CONVERT-HTML] Parameters - leadEmail: "${leadEmail}" | leadData.Email: "${leadData?.Email}" | trackReads: ${trackReads}`);
-
         let htmlBody = emailContent.body || '';
 
         // Clean placeholder signatures from body
@@ -375,8 +372,6 @@ Joel Lee`;
         // CRITICAL FIX: ALWAYS use leadEmail parameter (the actual recipient)
         // NEVER fall back to leadData.Email which may be corrupted
         const actualRecipientEmail = leadEmail;
-
-        console.log(`🎯 [CONVERT-HTML] Using actualRecipientEmail: "${actualRecipientEmail}"`);
 
         // Add unsubscribe link - ALWAYS uses the actual recipient email
         const unsubscribeLink = this.generateUnsubscribeLink(actualRecipientEmail);
@@ -516,9 +511,6 @@ ${leadName}`);
      * Generate unsubscribe link
      */
     generateUnsubscribeLink(leadEmail) {
-        // DEBUGGING: Log exact email being used for unsubscribe link
-        console.log(`🔗 [UNSUBSCRIBE-LINK-GEN] Input email: "${leadEmail}" | Type: ${typeof leadEmail} | Char codes: ${leadEmail ? [...leadEmail].map(c => c.charCodeAt(0)).join(',') : 'N/A'}`);
-
         if (!leadEmail) {
             return '';
         }
@@ -528,9 +520,10 @@ ${leadName}`);
         const token = tokenManager.generateToken(leadEmail);
 
         const baseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
-        const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?token=${token}`;
+        // CRITICAL FIX: URL-encode token to prevent Microsoft Graph Quoted-Printable corruption
+        const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?token=${encodeURIComponent(token)}`;
 
-        console.log(`✅ [UNSUBSCRIBE-LINK-GEN] Generated token-based URL: ${unsubscribeUrl.substring(0, 80)}...`);
+        console.log(`🔑 [UNSUBSCRIBE] Generated token for ${leadEmail}: ${token.substring(0, 20)}... (length: ${token.length})`);
 
         return `
         <div class="unsubscribe">
@@ -542,12 +535,6 @@ ${leadName}`);
      * Create email message object for Microsoft Graph API
      */
     createEmailMessage(emailContent, leadEmail, leadData = null, trackReads = false, attachments = []) {
-        // CRITICAL FIX: Always pass leadEmail to convertToHTML for unsubscribe link
-        // The trackReads flag should only affect whether tracking pixel is added, NOT which email is used
-
-        // DEBUGGING: Log createEmailMessage inputs
-        console.log(`📧 [CREATE-EMAIL-MSG] leadEmail: "${leadEmail}" | leadData.Email: "${leadData?.Email}" | trackReads: ${trackReads}`);
-
         const emailMessage = {
             subject: emailContent.subject,
             body: {
