@@ -421,6 +421,9 @@ Joel Lee`;
 </body>
 </html>`;
 
+        // Log unsubscribe link in HTML to debug token transformation
+        console.log(`🔍 [HTML-DEBUG] Unsubscribe link in HTML: ${unsubscribeLink.substring(0, 200)}...`);
+
         return html;
     }
 
@@ -523,7 +526,9 @@ ${leadName}`);
         // CRITICAL FIX: URL-encode token to prevent Microsoft Graph Quoted-Printable corruption
         const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?token=${encodeURIComponent(token)}`;
 
-        console.log(`🔑 [UNSUBSCRIBE] Generated token for ${leadEmail}: ${token.substring(0, 20)}... (length: ${token.length})`);
+        console.log(`🔑 [UNSUBSCRIBE] FULL token for ${leadEmail}: ${token}`);
+        console.log(`🔑 [UNSUBSCRIBE] FULL URL: ${unsubscribeUrl}`);
+        console.log(`🔑 [UNSUBSCRIBE] Token parts: ${token.split('.').map(p => p.length).join(', ')}`);
 
         return `
         <div class="unsubscribe">
