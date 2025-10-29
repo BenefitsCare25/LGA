@@ -540,12 +540,6 @@ ${leadName}`);
      * Create email message object for Microsoft Graph API
      */
     createEmailMessage(emailContent, leadEmail, leadData = null, trackReads = false, attachments = []) {
-        // Generate unsubscribe token for List-Unsubscribe header
-        const tokenManager = require('./unsubscribeTokenManager');
-        const unsubToken = tokenManager.generateToken(leadEmail);
-        const baseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
-        const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?token=${encodeURIComponent(unsubToken)}`;
-
         const emailMessage = {
             subject: emailContent.subject,
             body: {
@@ -560,21 +554,8 @@ ${leadName}`);
                         name: leadData?.Name || leadEmail
                     }
                 }
-            ],
-            // Add RFC 8058 List-Unsubscribe headers for one-click unsubscribe
-            internetMessageHeaders: [
-                {
-                    name: 'List-Unsubscribe',
-                    value: `<${unsubscribeUrl}>`
-                },
-                {
-                    name: 'List-Unsubscribe-Post',
-                    value: 'List-Unsubscribe=One-Click'
-                }
             ]
         };
-
-        console.log(`📧 [EMAIL-HEADERS] Added List-Unsubscribe header: ${unsubscribeUrl}`);
 
         // Add attachments if provided
         if (attachments && attachments.length > 0) {

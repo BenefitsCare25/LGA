@@ -68,12 +68,6 @@ router.get('/unsubscribe', async (req, res) => {
         console.log(`📧 [UNSUBSCRIBE] Request received - Token: ${token ? 'Yes' : 'No'}, Email: ${email || 'N/A'}`);
         console.log(`📧 [UNSUBSCRIBE] Timestamp: ${new Date().toISOString()}`);
 
-        // CRITICAL DEBUG: Log ALL request details to find URL rewriting
-        console.log(`🔍 [UNSUBSCRIBE-DEBUG] Full URL: ${req.protocol}://${req.get('host')}${req.originalUrl}`);
-        console.log(`🔍 [UNSUBSCRIBE-DEBUG] ALL query params: ${JSON.stringify(req.query)}`);
-        console.log(`🔍 [UNSUBSCRIBE-DEBUG] User-Agent: ${req.get('user-agent')}`);
-        console.log(`🔍 [UNSUBSCRIBE-DEBUG] Referer: ${req.get('referer') || 'None'}`);
-
         // NEW: Token-based unsubscribe (secure, prevents corruption)
         if (token) {
             // Diagnostic logging to debug token issues
@@ -557,53 +551,5 @@ async function removeLeadFromExcel(graphClient, email) {
         throw error;
     }
 }
-
-/**
- * Handle one-click unsubscribe via POST (RFC 8058 standard)
- * POST /api/email/unsubscribe?token=xxx
- * Body: List-Unsubscribe=One-Click
- */
-router.post('/unsubscribe', async (req, res) => {
-    console.log('═══════════════════════════════════════════════════════════════');
-    console.log(`📧 [UNSUBSCRIBE-POST] One-click unsubscribe request received`);
-    console.log(`📧 [UNSUBSCRIBE-POST] Timestamp: ${new Date().toISOString()}`);
-    console.log(`🔍 [UNSUBSCRIBE-POST] Query params: ${JSON.stringify(req.query)}`);
-    console.log(`🔍 [UNSUBSCRIBE-POST] Body: ${JSON.stringify(req.body)}`);
-
-    const { token } = req.query;
-
-    if (!token) {
-        console.error(`❌ [UNSUBSCRIBE-POST] No token provided`);
-        return res.status(400).send('Missing token');
-    }
-
-    try {
-        const tokenManager = require('../utils/unsubscribeTokenManager');
-        const email = tokenManager.getEmailFromToken(token);
-
-        if (!email) {
-            console.error(`❌ [UNSUBSCRIBE-POST] Invalid token`);
-            return res.status(400).send('Invalid token');
-        }
-
-        console.log(`✅ [UNSUBSCRIBE-POST] Token resolved to email: ${email}`);
-
-        // Get Graph client and remove from Excel
-        const graphClient = await getUnsubscribeGraphClient();
-        const removed = await removeLeadFromExcel(graphClient, email);
-
-        if (removed) {
-            console.log(`✅ [UNSUBSCRIBE-POST] SUCCESS: ${email} unsubscribed via one-click`);
-            return res.status(200).send('Unsubscribed');
-        } else {
-            console.log(`⚠️ [UNSUBSCRIBE-POST] Email ${email} not found in list`);
-            return res.status(200).send('Not subscribed');
-        }
-
-    } catch (error) {
-        console.error(`❌ [UNSUBSCRIBE-POST] Error:`, error.message);
-        return res.status(500).send('Error processing unsubscribe');
-    }
-});
 
 module.exports = router;
