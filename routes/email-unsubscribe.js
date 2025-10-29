@@ -70,6 +70,13 @@ router.get('/unsubscribe', async (req, res) => {
 
         // NEW: Token-based unsubscribe (secure, prevents corruption)
         if (token) {
+            // Diagnostic logging to debug token issues
+            console.log(`🔍 [UNSUBSCRIBE-DEBUG] Raw token received: ${token}`);
+            console.log(`🔍 [UNSUBSCRIBE-DEBUG] Token length: ${token.length}`);
+            console.log(`🔍 [UNSUBSCRIBE-DEBUG] Token parts: ${token.split('.').length}`);
+            console.log(`🔍 [UNSUBSCRIBE-DEBUG] First 20 chars: ${token.substring(0, 20)}...`);
+            console.log(`🔍 [UNSUBSCRIBE-DEBUG] Last 20 chars: ...${token.substring(token.length - 20)}`);
+
             const tokenManager = require('../utils/unsubscribeTokenManager');
             email = tokenManager.getEmailFromToken(token);
 
