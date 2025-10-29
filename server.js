@@ -17,6 +17,7 @@ const emailUnsubscribeRoutes = require('./routes/email-unsubscribe');
 const authRoutes = require('./routes/auth');
 const githubAuthRoutes = require('./routes/github-auth');
 const campaignStatusRoutes = require('./routes/campaign-status');
+const testTokenSystemRoutes = require('./routes/test-token-system');
 const ProcessSingleton = require('./utils/processSingleton');
 
 // 🔒 PROCESS SINGLETON: Prevent multiple server instances
@@ -113,6 +114,7 @@ app.use('/api/email-scheduler', emailSchedulerRoutes);  // Fixed: Use correct pa
 app.use('/api/email-delay', emailDelayTestRoutes);
 app.use('/api/email-bounce', emailBounceRoutes);
 app.use('/api/campaign-status', campaignStatusRoutes);
+app.use('/api', testTokenSystemRoutes);
 app.use('/auth', authRoutes);
 app.use('/api/github-auth', githubAuthRoutes);
 
