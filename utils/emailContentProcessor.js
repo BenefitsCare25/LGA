@@ -523,11 +523,14 @@ ${leadName}`);
         const token = generateUnsubscribeToken(leadEmail, campaignId);
 
         const baseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
-        // JWT tokens are already URL-safe (base64url encoding), but encode anyway for safety
-        const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?token=${token}`;
+        // CRITICAL: Use encodeURIComponent() to protect against email gateway modifications
+        // Add &source=html to track which link was clicked (HTML link vs List-Unsubscribe header)
+        const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?token=${encodeURIComponent(token)}&source=html`;
 
-        console.log(`🔑 [UNSUBSCRIBE] JWT token generated for ${leadEmail}${campaignId ? ` (campaign: ${campaignId})` : ''}`);
-        console.log(`🔑 [UNSUBSCRIBE] Token length: ${token.length} characters`);
+        console.log(`🔑 [UNSUBSCRIBE-HTML] JWT token generated for ${leadEmail}${campaignId ? ` (campaign: ${campaignId})` : ''}`);
+        console.log(`🔑 [UNSUBSCRIBE-HTML] Token length: ${token.length} characters`);
+        console.log(`🔑 [UNSUBSCRIBE-HTML] Raw token: ${token}`);
+        console.log(`🔑 [UNSUBSCRIBE-HTML] Encoded URL: ${unsubscribeUrl}`);
 
         return `
         <div class="unsubscribe">
@@ -543,7 +546,12 @@ ${leadName}`);
         const { generateUnsubscribeToken } = require('./jwtUnsubscribeManager');
         const token = generateUnsubscribeToken(leadEmail, campaignId);
         const baseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
-        const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?token=${token}`;
+
+        // List-Unsubscribe header: Use RAW token (no encoding, email header not HTML)
+        // This bypasses HTML content modification by email security gateways
+        const listUnsubscribeUrl = `${baseUrl}/api/email/unsubscribe?token=${token}&source=header`;
+
+        console.log(`🔑 [LIST-UNSUBSCRIBE] Token for header (RAW): ${token}`);
 
         const emailMessage = {
             subject: emailContent.subject,
@@ -563,16 +571,17 @@ ${leadName}`);
             // RFC 8058: Add List-Unsubscribe header using singleValueExtendedProperties
             // This prevents email security tools from corrupting the token in HTML links
             // JWT tokens are URL-safe by design and survive gateway rewriting
+            // Using &source=header to track which link was clicked (header vs HTML)
             singleValueExtendedProperties: [
                 {
                     id: 'String 0x1045',  // Property ID for List-Unsubscribe header
-                    value: `<${unsubscribeUrl}>`
+                    value: `<${listUnsubscribeUrl}>`
                 }
             ]
         };
 
         console.log(`🔑 [LIST-UNSUBSCRIBE] JWT header added for ${leadEmail}${campaignId ? ` (campaign: ${campaignId})` : ''}`);
-        console.log(`🔑 [LIST-UNSUBSCRIBE] URL: ${unsubscribeUrl}`);
+        console.log(`🔑 [LIST-UNSUBSCRIBE] Header URL: ${listUnsubscribeUrl}`);
 
         // Add attachments if provided
         if (attachments && attachments.length > 0) {

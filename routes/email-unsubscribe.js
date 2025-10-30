@@ -62,16 +62,35 @@ router.get('/unsubscribe', async (req, res) => {
     const startTime = Date.now();
 
     try {
-        let { email, token } = req.query;
+        let { email, token, source } = req.query;
 
         console.log('═══════════════════════════════════════════════════════════════');
-        console.log(`📧 [UNSUBSCRIBE] Request received - Token: ${token ? 'Yes' : 'No'}, Email: ${email || 'N/A'}`);
-        console.log(`📧 [UNSUBSCRIBE] Timestamp: ${new Date().toISOString()}`);
+        console.log(`📧 [UNSUBSCRIBE] Request received at ${new Date().toISOString()}`);
+        console.log(`📧 [UNSUBSCRIBE] Source: ${source || 'unknown'} (header=List-Unsubscribe button, html=HTML link, unknown=legacy/direct)`);
+        console.log(`📧 [UNSUBSCRIBE] Token present: ${token ? 'Yes' : 'No'}, Email param: ${email || 'N/A'}`);
 
         // JWT Token-based unsubscribe (secure, URL-safe, resilient to gateway rewriting)
         if (token) {
             console.log(`🔍 [UNSUBSCRIBE] JWT token received (length: ${token.length})`);
             console.log(`🔍 [UNSUBSCRIBE] First 50 chars: ${token.substring(0, 50)}...`);
+            console.log(`🔍 [UNSUBSCRIBE] Last 30 chars: ...${token.substring(token.length - 30)}`);
+
+            // Diagnostic: Check if token has been corrupted by email gateway
+            const isValidJWTFormat = token.split('.').length === 3;
+            const startsWithExpectedJWT = token.startsWith('eyJ'); // All JWTs start with 'eyJ' (base64url of {"alg":...)
+
+            if (!isValidJWTFormat) {
+                console.warn(`⚠️  [UNSUBSCRIBE-DIAGNOSTIC] Token does NOT have 3 parts (header.payload.signature)`);
+                console.warn(`⚠️  [UNSUBSCRIBE-DIAGNOSTIC] Parts count: ${token.split('.').length}`);
+            }
+
+            if (!startsWithExpectedJWT) {
+                console.warn(`⚠️  [UNSUBSCRIBE-DIAGNOSTIC] Token does NOT start with 'eyJ' (expected for all JWTs)`);
+                console.warn(`⚠️  [UNSUBSCRIBE-DIAGNOSTIC] Actual start: ${token.substring(0, 10)}`);
+                console.warn(`🚨 [UNSUBSCRIBE-DIAGNOSTIC] ALERT: Token appears to be CORRUPTED by email security gateway!`);
+                console.warn(`🚨 [UNSUBSCRIBE-DIAGNOSTIC] Character transformation detected (possible ROT13-style cipher)`);
+                console.warn(`💡 [UNSUBSCRIBE-DIAGNOSTIC] Recommendation: Implement database-backed proxy ID system`);
+            }
 
             const { verifyUnsubscribeToken } = require('../utils/jwtUnsubscribeManager');
 
