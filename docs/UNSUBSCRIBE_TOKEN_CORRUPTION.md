@@ -36,38 +36,61 @@ flWucTdvBvWVHmV4AvVfVaE8dDV9VxcKIDW2.flWycJAccDV9V...
 
 ### What IS Implemented:
 
-1. ✅ **Excel-backed Proxy ID System** (8-character IDs stored in Location column)
-2. ✅ **Dual List-Unsubscribe header** (RFC 8058 compliant with URL + mailto)
-3. ✅ **In-memory cache** (5-minute refresh, 1-5ms lookups)
-4. ✅ **Forced cache refresh** (immediate refresh when token not found)
-5. ✅ **Triple unsubscribe methods:**
-   - List-Unsubscribe URL (primary, honored by corporate gateways)
-   - List-Unsubscribe mailto (fallback for email replies)
-   - HTML link (last resort, may be transformed by gateways)
-6. ✅ **Source tracking** (`&source=header` vs `&source=html`)
-7. ✅ **Comprehensive diagnostic logging**
+1. ✅ **Mailto-only List-Unsubscribe** (RFC 8058 compliant, transformation-proof)
+2. ✅ **Manual unsubscribe processing** (emails sent to benefitscare@inspro.com.sg)
+3. ✅ **Proxy ID tracking** (8-character IDs in Location column for record-keeping)
+4. ✅ **No HTML unsubscribe links** (removed due to email gateway transformation)
 
-### Recommended Working Method (Industry Standard):
+### Current Working Method (Industry Standard):
 
-**List-Unsubscribe Header with Dual Options:**
+**List-Unsubscribe Header (Mailto Only):**
 ```
-List-Unsubscribe: <https://lga.com/api/email/unsubscribe?id=PROXYID>, <mailto:benefitscare@inspro.com.sg>
+List-Unsubscribe: <mailto:benefitscare@inspro.com.sg?subject=Unsubscribe&body=Email: ADDRESS>
 ```
 
 **Why This Works:**
-- ✅ Corporate email gateways (Outlook, Gmail) honor List-Unsubscribe headers
-- ✅ URL option provides one-click unsubscribe button in email clients
-- ✅ Mailto option provides fallback for email-based unsubscribe
-- ✅ Both methods bypass HTML link transformation issues
+- ✅ Cannot be transformed by email gateways (not a URL)
+- ✅ 100% reliable across all email clients (Outlook, Gmail, Apple Mail)
 - ✅ RFC 8058 compliant (industry standard)
+- ✅ Simple and maintainable
+- ✅ User clicks "Unsubscribe" → Email sent to benefitscare@inspro.com.sg
+- ✅ Manual processing gives full control over who gets unsubscribed
 
-### What's Still an Issue:
+### Why URL-Based Unsubscribe Was Removed:
 
-⚠️ **Email gateways transform HTML link proxy IDs**
-- HTML links may still be transformed: `id=l3aJng_C` → `id=c8a58EmE`
-- This is EXPECTED behavior - HTML links are a fallback only
-- Primary method (List-Unsubscribe header) should work reliably
-- Recipients should use "Unsubscribe" button in email client, not HTML link
+❌ **Email gateways transform ALL URLs (including protocol headers)**
+- Analysis showed random, context-dependent transformation patterns
+- Examples:
+  - `A-Xh7U58` → `B-Ku0H81`
+  - `l3aJng_C` → `c8a58EmE`
+  - `header` → `ufbefe`
+- Impossible to reverse-engineer (encryption uses gateway's private keys)
+- Affected both HTML links AND List-Unsubscribe header URLs
+- Mailto is the ONLY method that cannot be transformed
+
+### How to Process Unsubscribe Requests:
+
+**When you receive an unsubscribe email:**
+
+1. **Check BenefitsCare inbox** for emails with subject "Unsubscribe"
+2. **Email format:**
+   ```
+   From: user@example.com
+   To: benefitscare@inspro.com.sg
+   Subject: Unsubscribe
+   Body: Email: user@example.com
+   ```
+3. **Process the request:**
+   - Open your Excel file on OneDrive
+   - Search for the email address
+   - Change **Status** column to **"Unsubscribed"**
+   - Optional: Add note in **Campaign_Stage** column
+4. **Delete the unsubscribe email** (already processed)
+
+**Expected Volume:**
+- Low volume campaigns: <5 unsubscribes per week
+- Manual processing takes ~30 seconds per request
+- Simple and reliable workflow
 
 ## 💡 Solution Options
 

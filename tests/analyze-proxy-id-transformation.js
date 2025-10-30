@@ -17,6 +17,9 @@ const transformations = [
     // Second case (latest logs)
     { original: 'l3aJng_C', transformed: 'c8a58EmE' },
 
+    // Third case (ankita.sharma29@wipro.com)
+    { original: 'A-Xh7U58', transformed: 'B-Ku0H81' },
+
     // Source parameter transformation
     { original: 'html', transformed: 'ufbefe' },
     { original: 'header', transformed: 'ufbefe' }

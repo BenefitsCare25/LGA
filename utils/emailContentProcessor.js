@@ -354,7 +354,7 @@ Joel Lee`;
     /**
      * Convert email content to HTML format with tracking and professional signature
      */
-    convertToHTML(emailContent, leadEmail = null, leadData = null, trackReads = false, campaignId = null, proxyId = null) {
+    convertToHTML(emailContent, leadEmail = null, leadData = null, trackReads = false, campaignId = null) {
         let htmlBody = emailContent.body || '';
 
         // Clean placeholder signatures from body
@@ -373,9 +373,9 @@ Joel Lee`;
         // NEVER fall back to leadData.Email which may be corrupted
         const actualRecipientEmail = leadEmail;
 
-        // Add unsubscribe link - ALWAYS uses the actual recipient email
-        // Pass proxyId from createEmailMessage so HTML link uses same ID as List-Unsubscribe header
-        const unsubscribeLink = this.generateUnsubscribeLink(actualRecipientEmail, campaignId, proxyId);
+        // HTML unsubscribe link removed - relying on List-Unsubscribe mailto header only
+        // URL-based unsubscribe links get transformed by email gateways (Proofpoint/Mimecast)
+        // Mailto-based unsubscribe is more reliable and cannot be transformed
 
         // Add tracking pixel ONLY if trackReads is enabled
         let trackingPixel = '';
@@ -404,9 +404,6 @@ Joel Lee`;
         .logo { margin-bottom: 10px; }
         .contact-info { font-size: 13px; color: #666; }
         .legal-text { font-size: 11px; color: #999; margin-top: 15px; border-top: 1px solid #f0f0f0; padding-top: 10px; }
-        .unsubscribe { text-align: center; margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-top: 1px solid #e0e0e0; }
-        .unsubscribe a { color: #666; text-decoration: none; font-size: 12px; }
-        .unsubscribe a:hover { color: #dc3545; text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -416,14 +413,10 @@ Joel Lee`;
         </div>
         ${ctaButton}
         ${professionalSignature}
-        ${unsubscribeLink}
         ${trackingPixel}
     </div>
 </body>
 </html>`;
-
-        // Log unsubscribe link in HTML to debug token transformation
-        console.log(`🔍 [HTML-DEBUG] Unsubscribe link in HTML: ${unsubscribeLink.substring(0, 200)}...`);
 
         return html;
     }
@@ -544,27 +537,22 @@ ${leadName}`);
      * Create email message object for Microsoft Graph API
      */
     createEmailMessage(emailContent, leadEmail, leadData = null, trackReads = false, attachments = [], campaignId = null) {
-        // Generate proxy ID for unsubscribe (8-char simple ID, resilient to email gateway corruption)
+        // Generate proxy ID for tracking purposes in Excel Location column
         const { generateProxyId, encodeLocationToken } = require('./proxyIdManager');
         const proxyId = generateProxyId();
-        const baseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
 
-        // Create location token data for Excel storage
+        // Create location token data for Excel storage (for tracking, not for unsubscribe)
         const expiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
         const locationValue = encodeLocationToken(proxyId, expiryDate);
 
-        // List-Unsubscribe header: Simple proxy ID (not JWT - too long and gets corrupted)
-        const listUnsubscribeUrl = `${baseUrl}/api/email/unsubscribe?id=${proxyId}&source=header`;
-
-        console.log(`🔑 [PROXY-ID] Generated for ${leadEmail}: ${proxyId}${campaignId ? ` (campaign: ${campaignId})` : ''}`);
+        console.log(`🔑 [PROXY-ID] Generated for tracking ${leadEmail}: ${proxyId}${campaignId ? ` (campaign: ${campaignId})` : ''}`);
         console.log(`🔑 [PROXY-ID] Location value: ${locationValue}`);
 
         const emailMessage = {
             subject: emailContent.subject,
             body: {
                 contentType: 'HTML',
-                // Pass proxyId to convertToHTML so unsubscribe link uses same ID
-                content: this.convertToHTML(emailContent, leadEmail, leadData, trackReads, campaignId, proxyId)
+                content: this.convertToHTML(emailContent, leadEmail, leadData, trackReads, campaignId)
             },
             toRecipients: [
                 {
@@ -575,20 +563,18 @@ ${leadName}`);
                 }
             ],
             // RFC 8058: Add List-Unsubscribe header using singleValueExtendedProperties
-            // Using simple proxy ID instead of JWT (more resilient to gateway corruption)
-            // Include both URL and mailto for maximum compatibility
-            // Mailto forwards to benefitscare@inspro.com.sg for centralized handling
+            // Mailto-only method (URL-based unsubscribe gets transformed by email gateways)
+            // Email sent to benefitscare@inspro.com.sg for manual processing
             singleValueExtendedProperties: [
                 {
                     id: 'String 0x1045',  // Property ID for List-Unsubscribe header
-                    value: `<${listUnsubscribeUrl}>, <mailto:benefitscare@inspro.com.sg?subject=Unsubscribe&body=Email: ${encodeURIComponent(leadEmail)}>`
+                    value: `<mailto:benefitscare@inspro.com.sg?subject=Unsubscribe&body=Email: ${encodeURIComponent(leadEmail)}>`
                 }
             ]
         };
 
-        console.log(`🔑 [LIST-UNSUBSCRIBE] Header added for ${leadEmail}${campaignId ? ` (campaign: ${campaignId})` : ''}`);
-        console.log(`🔑 [LIST-UNSUBSCRIBE] URL: ${listUnsubscribeUrl}`);
-        console.log(`📧 [LIST-UNSUBSCRIBE] Mailto: benefitscare@inspro.com.sg`);
+        console.log(`📧 [LIST-UNSUBSCRIBE] Mailto header added for ${leadEmail}${campaignId ? ` (campaign: ${campaignId})` : ''}`);
+        console.log(`📧 [LIST-UNSUBSCRIBE] Unsubscribe requests will be sent to: benefitscare@inspro.com.sg`);
 
         // Add attachments if provided
         if (attachments && attachments.length > 0) {
