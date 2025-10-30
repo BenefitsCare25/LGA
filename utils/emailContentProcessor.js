@@ -404,6 +404,8 @@ Joel Lee`;
         .logo { margin-bottom: 10px; }
         .contact-info { font-size: 13px; color: #666; }
         .legal-text { font-size: 11px; color: #999; margin-top: 15px; border-top: 1px solid #f0f0f0; padding-top: 10px; }
+        .unsubscribe-footer { text-align: center; margin-top: 30px; padding: 20px; background-color: #f8f9fa; border-top: 2px solid #e0e0e0; font-size: 12px; color: #666; }
+        .unsubscribe-footer strong { color: #333; }
     </style>
 </head>
 <body>
@@ -413,6 +415,11 @@ Joel Lee`;
         </div>
         ${ctaButton}
         ${professionalSignature}
+        <div class="unsubscribe-footer">
+            <strong>To unsubscribe from our mailing list:</strong><br>
+            Send an email to <a href="mailto:benefitscare@inspro.com.sg?subject=Unsubscribe&body=Email: ${encodeURIComponent(actualRecipientEmail)}" style="color: #007bff; text-decoration: none;">benefitscare@inspro.com.sg</a><br>
+            with subject: <strong>Unsubscribe</strong>
+        </div>
         ${trackingPixel}
     </div>
 </body>
