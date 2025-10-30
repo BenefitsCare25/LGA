@@ -36,18 +36,38 @@ flWucTdvBvWVHmV4AvVfVaE8dDV9VxcKIDW2.flWycJAccDV9V...
 
 ### What IS Implemented:
 
-1. ✅ **JWT tokens with base64url encoding** (URL-safe characters only)
-2. ✅ **List-Unsubscribe header** (RFC 8058 compliant, bypasses HTML modification)
-3. ✅ **encodeURIComponent() on HTML links** (FIXED in latest commit)
-4. ✅ **Dual delivery** (both HTML link and List-Unsubscribe header)
-5. ✅ **Source tracking** (`&source=header` vs `&source=html`)
-6. ✅ **Comprehensive diagnostic logging**
+1. ✅ **Excel-backed Proxy ID System** (8-character IDs stored in Location column)
+2. ✅ **Dual List-Unsubscribe header** (RFC 8058 compliant with URL + mailto)
+3. ✅ **In-memory cache** (5-minute refresh, 1-5ms lookups)
+4. ✅ **Forced cache refresh** (immediate refresh when token not found)
+5. ✅ **Triple unsubscribe methods:**
+   - List-Unsubscribe URL (primary, honored by corporate gateways)
+   - List-Unsubscribe mailto (fallback for email replies)
+   - HTML link (last resort, may be transformed by gateways)
+6. ✅ **Source tracking** (`&source=header` vs `&source=html`)
+7. ✅ **Comprehensive diagnostic logging**
 
-### What's NOT Working:
+### Recommended Working Method (Industry Standard):
 
-❌ **Email gateways are transforming tokens EVEN IN EMAIL HEADERS**
-- This suggests recipients are clicking **HTML links** (not List-Unsubscribe buttons)
-- Or gateways are aggressive enough to modify protocol headers (rare but possible)
+**List-Unsubscribe Header with Dual Options:**
+```
+List-Unsubscribe: <https://lga.com/api/email/unsubscribe?id=PROXYID>, <mailto:unsubscribe@inspro.com.sg>
+```
+
+**Why This Works:**
+- ✅ Corporate email gateways (Outlook, Gmail) honor List-Unsubscribe headers
+- ✅ URL option provides one-click unsubscribe button in email clients
+- ✅ Mailto option provides fallback for email-based unsubscribe
+- ✅ Both methods bypass HTML link transformation issues
+- ✅ RFC 8058 compliant (industry standard)
+
+### What's Still an Issue:
+
+⚠️ **Email gateways transform HTML link proxy IDs**
+- HTML links may still be transformed: `id=l3aJng_C` → `id=c8a58EmE`
+- This is EXPECTED behavior - HTML links are a fallback only
+- Primary method (List-Unsubscribe header) should work reliably
+- Recipients should use "Unsubscribe" button in email client, not HTML link
 
 ## 💡 Solution Options
 

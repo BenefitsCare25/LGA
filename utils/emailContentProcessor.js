@@ -576,16 +576,18 @@ ${leadName}`);
             ],
             // RFC 8058: Add List-Unsubscribe header using singleValueExtendedProperties
             // Using simple proxy ID instead of JWT (more resilient to gateway corruption)
+            // Include both URL and mailto for maximum compatibility
             singleValueExtendedProperties: [
                 {
                     id: 'String 0x1045',  // Property ID for List-Unsubscribe header
-                    value: `<${listUnsubscribeUrl}>`
+                    value: `<${listUnsubscribeUrl}>, <mailto:unsubscribe@inspro.com.sg?subject=Unsubscribe&body=Email: ${encodeURIComponent(leadEmail)}>`
                 }
             ]
         };
 
-        console.log(`🔑 [LIST-UNSUBSCRIBE] Proxy ID header added for ${leadEmail}${campaignId ? ` (campaign: ${campaignId})` : ''}`);
-        console.log(`🔑 [LIST-UNSUBSCRIBE] Header URL: ${listUnsubscribeUrl}`);
+        console.log(`🔑 [LIST-UNSUBSCRIBE] Header added for ${leadEmail}${campaignId ? ` (campaign: ${campaignId})` : ''}`);
+        console.log(`🔑 [LIST-UNSUBSCRIBE] URL: ${listUnsubscribeUrl}`);
+        console.log(`📧 [LIST-UNSUBSCRIBE] Mailto: unsubscribe@inspro.com.sg`);
 
         // Add attachments if provided
         if (attachments && attachments.length > 0) {
