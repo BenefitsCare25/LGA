@@ -1075,8 +1075,8 @@ router.post('/send-email/:email', requireDelegatedAuth, async (req, res) => {
             }
         }
 
-        // Send email using Microsoft Graph with attachment support
-        const emailMessage = emailContentProcessor.createEmailMessage(
+        // Send email using Microsoft Graph with attachment support (returns {message, proxyId, locationValue})
+        const emailResult = emailContentProcessor.createEmailMessage(
             emailContent,
             lead.Email,
             lead,
@@ -1085,15 +1085,15 @@ router.post('/send-email/:email', requireDelegatedAuth, async (req, res) => {
         );
 
         await graphClient.api('/me/sendMail').post({
-            message: emailMessage,
+            message: emailResult.message,
             saveToSentItems: true
         });
 
         // Get sender's email for tracking purposes
         const userInfo = authProvider.getUserInfo(req.sessionId);
         const senderEmail = userInfo?.username || 'unknown@sender.com';
-        
-        // Update lead status in master file
+
+        // Update lead status in master file with proxy ID token in Location column
         const updates = {
             Status: 'Sent',
             Last_Email_Date: new Date().toISOString().split('T')[0],
@@ -1101,7 +1101,8 @@ router.post('/send-email/:email', requireDelegatedAuth, async (req, res) => {
             Template_Used: emailContent.contentType,
             Next_Email_Date: calculateNextEmailDate(new Date(), lead.Follow_Up_Days || 7),
             'Email Bounce': 'No', // Initialize bounce status
-            'Sent By': senderEmail
+            'Sent By': senderEmail,
+            Location: emailResult.locationValue  // Store proxy ID token
         };
 
         // Update lead using Graph API
@@ -1280,8 +1281,8 @@ router.post('/send-campaign-with-attachments', requireDelegatedAuth, uploadAttac
                     templates
                 );
 
-                // Create email message with attachments
-                const emailMessage = emailContentProcessor.createEmailMessage(
+                // Create email message with attachments (returns {message, proxyId, locationValue})
+                const emailResult = emailContentProcessor.createEmailMessage(
                     emailContent,
                     lead.Email,
                     lead,
@@ -1289,17 +1290,18 @@ router.post('/send-campaign-with-attachments', requireDelegatedAuth, uploadAttac
                     processedAttachments
                 );
 
-                // Excel updates with attachment info
+                // Excel updates with attachment info and proxy ID token in Location column
                 const excelUpdates = {
                     Status: 'Sent',
                     Last_Email_Date: new Date().toISOString().split('T')[0],
                     Email_Count: (lead.Email_Count || 0) + 1,
                     Template_Used: emailContent.contentType,
                     'Email Bounce': 'No',
-                    'Attachments_Sent': processedAttachments.length > 0 ? processedAttachments.map(a => a.name).join(', ') : 'None'
+                    'Attachments_Sent': processedAttachments.length > 0 ? processedAttachments.map(a => a.name).join(', ') : 'None',
+                    Location: emailResult.locationValue  // Store proxy ID token
                 };
 
-                return { message: emailMessage, excelUpdates };
+                return { message: emailResult.message, excelUpdates };
             };
 
             // Create filterLead function for duplicate checking
@@ -1504,8 +1506,8 @@ router.post('/send-campaign', requireDelegatedAuth, async (req, res) => {
                     }
                 }
 
-                // Create email message with template attachments
-                const emailMessage = emailContentProcessor.createEmailMessage(
+                // Create email message with template attachments (returns {message, proxyId, locationValue})
+                const emailResult = emailContentProcessor.createEmailMessage(
                     emailContent,
                     lead.Email,
                     lead,
@@ -1513,16 +1515,17 @@ router.post('/send-campaign', requireDelegatedAuth, async (req, res) => {
                     attachments
                 );
 
-                // Excel updates
+                // Excel updates with proxy ID token in Location column
                 const excelUpdates = {
                     Status: 'Sent',
                     Last_Email_Date: new Date().toISOString().split('T')[0],
                     Email_Count: (lead.Email_Count || 0) + 1,
                     Template_Used: emailContent.contentType,
-                    'Email Bounce': 'No'
+                    'Email Bounce': 'No',
+                    Location: emailResult.locationValue  // Store proxy ID token
                 };
 
-                return { message: emailMessage, excelUpdates };
+                return { message: emailResult.message, excelUpdates };
             };
 
             // Create filterLead function for duplicate checking

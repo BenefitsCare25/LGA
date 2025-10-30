@@ -62,54 +62,28 @@ router.get('/unsubscribe', async (req, res) => {
     const startTime = Date.now();
 
     try {
-        let { email, token, source } = req.query;
+        let { email, id, source } = req.query;
 
         console.log('═══════════════════════════════════════════════════════════════');
         console.log(`📧 [UNSUBSCRIBE] Request received at ${new Date().toISOString()}`);
         console.log(`📧 [UNSUBSCRIBE] Source: ${source || 'unknown'} (header=List-Unsubscribe button, html=HTML link, unknown=legacy/direct)`);
-        console.log(`📧 [UNSUBSCRIBE] Token present: ${token ? 'Yes' : 'No'}, Email param: ${email || 'N/A'}`);
+        console.log(`📧 [UNSUBSCRIBE] Proxy ID: ${id || 'N/A'}, Email param: ${email || 'N/A'}`);
 
-        // JWT Token-based unsubscribe (secure, URL-safe, resilient to gateway rewriting)
-        if (token) {
-            console.log(`🔍 [UNSUBSCRIBE] JWT token received (length: ${token.length})`);
-            console.log(`🔍 [UNSUBSCRIBE] First 50 chars: ${token.substring(0, 50)}...`);
-            console.log(`🔍 [UNSUBSCRIBE] Last 30 chars: ...${token.substring(token.length - 30)}`);
+        // Proxy ID-based unsubscribe (simple 8-char IDs, resilient to gateway corruption)
+        if (id) {
+            console.log(`🔍 [UNSUBSCRIBE] Proxy ID received: ${id} (length: ${id.length})`);
 
-            // Diagnostic: Check if token has been corrupted by email gateway
-            const isValidJWTFormat = token.split('.').length === 3;
-            const startsWithExpectedJWT = token.startsWith('eyJ'); // All JWTs start with 'eyJ' (base64url of {"alg":...)
+            // Get Graph client for Excel access
+            const graphClient = await getUnsubscribeGraphClient();
 
-            if (!isValidJWTFormat) {
-                console.warn(`⚠️  [UNSUBSCRIBE-DIAGNOSTIC] Token does NOT have 3 parts (header.payload.signature)`);
-                console.warn(`⚠️  [UNSUBSCRIBE-DIAGNOSTIC] Parts count: ${token.split('.').length}`);
-            }
+            // Look up proxy ID in cache
+            const proxyIdCache = require('../utils/proxyIdCache');
+            const { isTokenValid } = require('../utils/proxyIdManager');
 
-            if (!startsWithExpectedJWT) {
-                console.warn(`⚠️  [UNSUBSCRIBE-DIAGNOSTIC] Token does NOT start with 'eyJ' (expected for all JWTs)`);
-                console.warn(`⚠️  [UNSUBSCRIBE-DIAGNOSTIC] Actual start: ${token.substring(0, 10)}`);
-                console.warn(`🚨 [UNSUBSCRIBE-DIAGNOSTIC] ALERT: Token appears to be CORRUPTED by email security gateway!`);
-                console.warn(`🚨 [UNSUBSCRIBE-DIAGNOSTIC] Character transformation detected (possible ROT13-style cipher)`);
-                console.warn(`💡 [UNSUBSCRIBE-DIAGNOSTIC] Recommendation: Implement database-backed proxy ID system`);
-            }
-
-            const { verifyUnsubscribeToken } = require('../utils/jwtUnsubscribeManager');
-
-            // Verify JWT token (handles URL decoding internally if needed)
-            let tokenData = verifyUnsubscribeToken(token);
-
-            // If verification fails, try URL-decoding first (in case of double encoding)
-            if (!tokenData && token.includes('%')) {
-                console.log(`🔍 [UNSUBSCRIBE] First attempt failed, trying URL decode...`);
-                try {
-                    const decodedToken = decodeURIComponent(token);
-                    tokenData = verifyUnsubscribeToken(decodedToken);
-                } catch (decodeError) {
-                    console.error(`❌ [UNSUBSCRIBE] URL decode failed: ${decodeError.message}`);
-                }
-            }
+            const tokenData = await proxyIdCache.getTokenData(id, graphClient);
 
             if (!tokenData) {
-                console.error(`❌ [UNSUBSCRIBE] Invalid or expired JWT token`);
+                console.error(`❌ [UNSUBSCRIBE] Proxy ID not found in Excel: ${id}`);
                 return res.status(400).send(`
                     <!DOCTYPE html>
                     <html>
@@ -125,8 +99,8 @@ router.get('/unsubscribe', async (req, res) => {
                     </head>
                     <body>
                         <div class="container">
-                            <h1 class="error">⚠️ Invalid or Expired Unsubscribe Link</h1>
-                            <p>This unsubscribe link is invalid or has expired (links expire after 30 days).</p>
+                            <h1 class="error">⚠️ Invalid Unsubscribe Link</h1>
+                            <p>This unsubscribe link is invalid or not found.</p>
                             <p>If you continue to receive emails, please contact us directly at BenefitsCare@inspro.com.sg</p>
                         </div>
                     </body>
@@ -134,17 +108,61 @@ router.get('/unsubscribe', async (req, res) => {
                 `);
             }
 
-            // Extract email and campaignId from verified token
-            email = tokenData.email;
-            const campaignId = tokenData.campaignId;
-
-            console.log(`✅ [UNSUBSCRIBE] Token verified successfully`);
-            console.log(`📧 [UNSUBSCRIBE] Email: ${email}`);
-            if (campaignId) {
-                console.log(`📋 [UNSUBSCRIBE] Campaign: ${campaignId}`);
+            // Check if token is valid (not expired, not used)
+            if (!isTokenValid(tokenData)) {
+                const reason = tokenData.used ? 'already used' : 'expired';
+                console.error(`❌ [UNSUBSCRIBE] Proxy ID ${reason}: ${id}`);
+                return res.status(400).send(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Invalid Unsubscribe Link</title>
+                        <meta charset="UTF-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <style>
+                            body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; background-color: #f8f9fa; }
+                            .container { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                            .error { color: #dc3545; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <h1 class="error">⚠️ ${reason === 'already used' ? 'Already Unsubscribed' : 'Expired Unsubscribe Link'}</h1>
+                            <p>This unsubscribe link has ${reason === 'already used' ? 'already been used' : 'expired (links expire after 30 days)'}.</p>
+                            <p>If you continue to receive emails, please contact us directly at BenefitsCare@inspro.com.sg</p>
+                        </div>
+                    </body>
+                    </html>
+                `);
             }
-            console.log(`📅 [UNSUBSCRIBE] Token issued: ${tokenData.issuedAt.toISOString()}`);
-            console.log(`📅 [UNSUBSCRIBE] Token expires: ${tokenData.expiresAt.toISOString()}`);
+
+            // Extract email from token data
+            email = tokenData.email;
+
+            console.log(`✅ [UNSUBSCRIBE] Proxy ID verified successfully`);
+            console.log(`📧 [UNSUBSCRIBE] Email: ${email}`);
+            console.log(`📅 [UNSUBSCRIBE] Token expires: ${tokenData.expiry.toISOString()}`);
+
+            // Mark token as used in Excel (update Location column)
+            const { updateLeadViaGraphAPI } = require('../utils/excelGraphAPI');
+            const { markTokenAsUsed, parseLocationToken } = require('../utils/proxyIdManager');
+
+            try {
+                // Get current lead data to get Location value
+                const leads = await getLeadsViaGraphAPI(graphClient);
+                const lead = leads.find(l => l.Email && l.Email.toLowerCase() === email.toLowerCase());
+
+                if (lead && lead.Location) {
+                    const updatedLocation = markTokenAsUsed(lead.Location);
+                    await updateLeadViaGraphAPI(graphClient, email, {
+                        Location: updatedLocation
+                    });
+                    console.log(`✅ [UNSUBSCRIBE] Marked token as used in Location column`);
+                }
+            } catch (locationUpdateError) {
+                console.error(`⚠️  [UNSUBSCRIBE] Failed to update Location column:`, locationUpdateError.message);
+                // Continue with unsubscribe even if Location update fails
+            }
         }
         // OLD: Email-based unsubscribe (for backwards compatibility with old emails)
         else if (!email) {

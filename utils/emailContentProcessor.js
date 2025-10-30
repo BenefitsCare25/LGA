@@ -354,7 +354,7 @@ Joel Lee`;
     /**
      * Convert email content to HTML format with tracking and professional signature
      */
-    convertToHTML(emailContent, leadEmail = null, leadData = null, trackReads = false) {
+    convertToHTML(emailContent, leadEmail = null, leadData = null, trackReads = false, campaignId = null, proxyId = null) {
         let htmlBody = emailContent.body || '';
 
         // Clean placeholder signatures from body
@@ -374,7 +374,8 @@ Joel Lee`;
         const actualRecipientEmail = leadEmail;
 
         // Add unsubscribe link - ALWAYS uses the actual recipient email
-        const unsubscribeLink = this.generateUnsubscribeLink(actualRecipientEmail);
+        // Pass proxyId from createEmailMessage so HTML link uses same ID as List-Unsubscribe header
+        const unsubscribeLink = this.generateUnsubscribeLink(actualRecipientEmail, campaignId, proxyId);
 
         // Add tracking pixel ONLY if trackReads is enabled
         let trackingPixel = '';
@@ -513,24 +514,25 @@ ${leadName}`);
     /**
      * Generate unsubscribe link with JWT token
      */
-    generateUnsubscribeLink(leadEmail, campaignId = null) {
+    generateUnsubscribeLink(leadEmail, campaignId = null, proxyId = null) {
         if (!leadEmail) {
             return '';
         }
 
-        // Generate JWT token for this email (URL-safe, 30-day expiration)
-        const { generateUnsubscribeToken } = require('./jwtUnsubscribeManager');
-        const token = generateUnsubscribeToken(leadEmail, campaignId);
+        // Use proxy ID system (simple 8-char IDs that resist email gateway corruption)
+        // If proxyId not provided, caller must generate and store in Excel before sending email
+        if (!proxyId) {
+            console.warn(`⚠️ [UNSUBSCRIBE-HTML] No proxy ID provided for ${leadEmail}, generating temporary one`);
+            const { generateProxyId } = require('./proxyIdManager');
+            proxyId = generateProxyId();
+        }
 
         const baseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
-        // CRITICAL: Use encodeURIComponent() to protect against email gateway modifications
-        // Add &source=html to track which link was clicked (HTML link vs List-Unsubscribe header)
-        const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?token=${encodeURIComponent(token)}&source=html`;
+        // Simple proxy ID URL - much more resilient to email gateway modifications than JWT
+        const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?id=${proxyId}&source=html`;
 
-        console.log(`🔑 [UNSUBSCRIBE-HTML] JWT token generated for ${leadEmail}${campaignId ? ` (campaign: ${campaignId})` : ''}`);
-        console.log(`🔑 [UNSUBSCRIBE-HTML] Token length: ${token.length} characters`);
-        console.log(`🔑 [UNSUBSCRIBE-HTML] Raw token: ${token}`);
-        console.log(`🔑 [UNSUBSCRIBE-HTML] Encoded URL: ${unsubscribeUrl}`);
+        console.log(`🔑 [UNSUBSCRIBE-HTML] Proxy ID for ${leadEmail}: ${proxyId}${campaignId ? ` (campaign: ${campaignId})` : ''}`);
+        console.log(`🔑 [UNSUBSCRIBE-HTML] URL: ${unsubscribeUrl}`);
 
         return `
         <div class="unsubscribe">
@@ -542,23 +544,27 @@ ${leadName}`);
      * Create email message object for Microsoft Graph API
      */
     createEmailMessage(emailContent, leadEmail, leadData = null, trackReads = false, attachments = [], campaignId = null) {
-        // Generate JWT unsubscribe token (URL-safe, 30-day expiration)
-        const { generateUnsubscribeToken } = require('./jwtUnsubscribeManager');
-        const token = generateUnsubscribeToken(leadEmail, campaignId);
+        // Generate proxy ID for unsubscribe (8-char simple ID, resilient to email gateway corruption)
+        const { generateProxyId, encodeLocationToken } = require('./proxyIdManager');
+        const proxyId = generateProxyId();
         const baseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
 
-        // List-Unsubscribe header: Use RAW token (no encoding, email header not HTML)
-        // This bypasses HTML content modification by email security gateways
-        const listUnsubscribeUrl = `${baseUrl}/api/email/unsubscribe?token=${token}&source=header`;
+        // Create location token data for Excel storage
+        const expiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+        const locationValue = encodeLocationToken(proxyId, expiryDate);
 
-        console.log(`🔑 [LIST-UNSUBSCRIBE] Token for header (RAW): ${token}`);
+        // List-Unsubscribe header: Simple proxy ID (not JWT - too long and gets corrupted)
+        const listUnsubscribeUrl = `${baseUrl}/api/email/unsubscribe?id=${proxyId}&source=header`;
+
+        console.log(`🔑 [PROXY-ID] Generated for ${leadEmail}: ${proxyId}${campaignId ? ` (campaign: ${campaignId})` : ''}`);
+        console.log(`🔑 [PROXY-ID] Location value: ${locationValue}`);
 
         const emailMessage = {
             subject: emailContent.subject,
             body: {
                 contentType: 'HTML',
-                // FIXED: Always pass leadEmail, use trackReads flag inside convertToHTML for tracking pixel only
-                content: this.convertToHTML(emailContent, leadEmail, leadData, trackReads)
+                // Pass proxyId to convertToHTML so unsubscribe link uses same ID
+                content: this.convertToHTML(emailContent, leadEmail, leadData, trackReads, campaignId, proxyId)
             },
             toRecipients: [
                 {
@@ -569,9 +575,7 @@ ${leadName}`);
                 }
             ],
             // RFC 8058: Add List-Unsubscribe header using singleValueExtendedProperties
-            // This prevents email security tools from corrupting the token in HTML links
-            // JWT tokens are URL-safe by design and survive gateway rewriting
-            // Using &source=header to track which link was clicked (header vs HTML)
+            // Using simple proxy ID instead of JWT (more resilient to gateway corruption)
             singleValueExtendedProperties: [
                 {
                     id: 'String 0x1045',  // Property ID for List-Unsubscribe header
@@ -580,7 +584,7 @@ ${leadName}`);
             ]
         };
 
-        console.log(`🔑 [LIST-UNSUBSCRIBE] JWT header added for ${leadEmail}${campaignId ? ` (campaign: ${campaignId})` : ''}`);
+        console.log(`🔑 [LIST-UNSUBSCRIBE] Proxy ID header added for ${leadEmail}${campaignId ? ` (campaign: ${campaignId})` : ''}`);
         console.log(`🔑 [LIST-UNSUBSCRIBE] Header URL: ${listUnsubscribeUrl}`);
 
         // Add attachments if provided
@@ -590,7 +594,12 @@ ${leadName}`);
             emailMessage.attachments = alreadyProcessed ? attachments : this.processAttachmentsForGraph(attachments);
         }
 
-        return emailMessage;
+        // Return both email message and location data for Excel update
+        return {
+            message: emailMessage,
+            proxyId: proxyId,
+            locationValue: locationValue
+        };
     }
 
     /**
