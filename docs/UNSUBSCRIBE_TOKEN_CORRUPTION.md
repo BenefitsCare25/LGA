@@ -51,7 +51,7 @@ flWucTdvBvWVHmV4AvVfVaE8dDV9VxcKIDW2.flWycJAccDV9V...
 
 **List-Unsubscribe Header with Dual Options:**
 ```
-List-Unsubscribe: <https://lga.com/api/email/unsubscribe?id=PROXYID>, <mailto:unsubscribe@inspro.com.sg>
+List-Unsubscribe: <https://lga.com/api/email/unsubscribe?id=PROXYID>, <mailto:benefitscare@inspro.com.sg>
 ```
 
 **Why This Works:**
