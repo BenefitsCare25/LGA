@@ -68,40 +68,29 @@ router.get('/unsubscribe', async (req, res) => {
         console.log(`📧 [UNSUBSCRIBE] Request received - Token: ${token ? 'Yes' : 'No'}, Email: ${email || 'N/A'}`);
         console.log(`📧 [UNSUBSCRIBE] Timestamp: ${new Date().toISOString()}`);
 
-        // NEW: Token-based unsubscribe (secure, prevents corruption)
+        // JWT Token-based unsubscribe (secure, URL-safe, resilient to gateway rewriting)
         if (token) {
-            // Diagnostic logging to debug token issues
-            console.log(`🔍 [UNSUBSCRIBE-DEBUG] Raw token received: ${token}`);
-            console.log(`🔍 [UNSUBSCRIBE-DEBUG] Token length: ${token.length}`);
-            console.log(`🔍 [UNSUBSCRIBE-DEBUG] Token parts: ${token.split('.').length}`);
-            console.log(`🔍 [UNSUBSCRIBE-DEBUG] First 20 chars: ${token.substring(0, 20)}...`);
-            console.log(`🔍 [UNSUBSCRIBE-DEBUG] Last 20 chars: ...${token.substring(token.length - 20)}`);
+            console.log(`🔍 [UNSUBSCRIBE] JWT token received (length: ${token.length})`);
+            console.log(`🔍 [UNSUBSCRIBE] First 50 chars: ${token.substring(0, 50)}...`);
 
-            const tokenManager = require('../utils/unsubscribeTokenManager');
+            const { verifyUnsubscribeToken } = require('../utils/jwtUnsubscribeManager');
 
-            // Try decrypting the token as-is first
-            email = tokenManager.getEmailFromToken(token);
+            // Verify JWT token (handles URL decoding internally if needed)
+            let tokenData = verifyUnsubscribeToken(token);
 
-            // If that fails, try manually URL-decoding it
-            if (!email) {
-                console.log(`🔍 [UNSUBSCRIBE-DEBUG] First attempt failed, trying URL decode...`);
+            // If verification fails, try URL-decoding first (in case of double encoding)
+            if (!tokenData && token.includes('%')) {
+                console.log(`🔍 [UNSUBSCRIBE] First attempt failed, trying URL decode...`);
                 try {
                     const decodedToken = decodeURIComponent(token);
-                    console.log(`🔍 [UNSUBSCRIBE-DEBUG] Decoded token: ${decodedToken}`);
-                    console.log(`🔍 [UNSUBSCRIBE-DEBUG] Decoded token length: ${decodedToken.length}`);
-                    email = tokenManager.getEmailFromToken(decodedToken);
-                    if (email) {
-                        console.log(`✅ [UNSUBSCRIBE-DEBUG] Token decryption succeeded after manual URL decode`);
-                    }
+                    tokenData = verifyUnsubscribeToken(decodedToken);
                 } catch (decodeError) {
-                    console.log(`❌ [UNSUBSCRIBE-DEBUG] URL decode failed: ${decodeError.message}`);
+                    console.error(`❌ [UNSUBSCRIBE] URL decode failed: ${decodeError.message}`);
                 }
-            } else {
-                console.log(`✅ [UNSUBSCRIBE-DEBUG] Token decryption succeeded with raw token`);
             }
 
-            if (!email) {
-                console.error(`❌ [UNSUBSCRIBE] Invalid token`);
+            if (!tokenData) {
+                console.error(`❌ [UNSUBSCRIBE] Invalid or expired JWT token`);
                 return res.status(400).send(`
                     <!DOCTYPE html>
                     <html>
@@ -117,8 +106,8 @@ router.get('/unsubscribe', async (req, res) => {
                     </head>
                     <body>
                         <div class="container">
-                            <h1 class="error">Invalid or Expired Unsubscribe Link</h1>
-                            <p>This unsubscribe link is invalid or has expired (links expire after 90 days).</p>
+                            <h1 class="error">⚠️ Invalid or Expired Unsubscribe Link</h1>
+                            <p>This unsubscribe link is invalid or has expired (links expire after 30 days).</p>
                             <p>If you continue to receive emails, please contact us directly at BenefitsCare@inspro.com.sg</p>
                         </div>
                     </body>
@@ -126,7 +115,17 @@ router.get('/unsubscribe', async (req, res) => {
                 `);
             }
 
-            console.log(`✅ [UNSUBSCRIBE] Token resolved to email: ${email}`);
+            // Extract email and campaignId from verified token
+            email = tokenData.email;
+            const campaignId = tokenData.campaignId;
+
+            console.log(`✅ [UNSUBSCRIBE] Token verified successfully`);
+            console.log(`📧 [UNSUBSCRIBE] Email: ${email}`);
+            if (campaignId) {
+                console.log(`📋 [UNSUBSCRIBE] Campaign: ${campaignId}`);
+            }
+            console.log(`📅 [UNSUBSCRIBE] Token issued: ${tokenData.issuedAt.toISOString()}`);
+            console.log(`📅 [UNSUBSCRIBE] Token expires: ${tokenData.expiresAt.toISOString()}`);
         }
         // OLD: Email-based unsubscribe (for backwards compatibility with old emails)
         else if (!email) {

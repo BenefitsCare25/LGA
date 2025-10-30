@@ -511,24 +511,23 @@ ${leadName}`);
     }
 
     /**
-     * Generate unsubscribe link
+     * Generate unsubscribe link with JWT token
      */
-    generateUnsubscribeLink(leadEmail) {
+    generateUnsubscribeLink(leadEmail, campaignId = null) {
         if (!leadEmail) {
             return '';
         }
 
-        // Generate secure token for this email
-        const tokenManager = require('./unsubscribeTokenManager');
-        const token = tokenManager.generateToken(leadEmail);
+        // Generate JWT token for this email (URL-safe, 30-day expiration)
+        const { generateUnsubscribeToken } = require('./jwtUnsubscribeManager');
+        const token = generateUnsubscribeToken(leadEmail, campaignId);
 
         const baseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
-        // CRITICAL FIX: URL-encode token to prevent Microsoft Graph Quoted-Printable corruption
-        const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?token=${encodeURIComponent(token)}`;
+        // JWT tokens are already URL-safe (base64url encoding), but encode anyway for safety
+        const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?token=${token}`;
 
-        console.log(`🔑 [UNSUBSCRIBE] FULL token for ${leadEmail}: ${token}`);
-        console.log(`🔑 [UNSUBSCRIBE] FULL URL: ${unsubscribeUrl}`);
-        console.log(`🔑 [UNSUBSCRIBE] Token parts: ${token.split('.').map(p => p.length).join(', ')}`);
+        console.log(`🔑 [UNSUBSCRIBE] JWT token generated for ${leadEmail}${campaignId ? ` (campaign: ${campaignId})` : ''}`);
+        console.log(`🔑 [UNSUBSCRIBE] Token length: ${token.length} characters`);
 
         return `
         <div class="unsubscribe">
@@ -539,12 +538,12 @@ ${leadName}`);
     /**
      * Create email message object for Microsoft Graph API
      */
-    createEmailMessage(emailContent, leadEmail, leadData = null, trackReads = false, attachments = []) {
-        // Generate unsubscribe URL and token
-        const tokenManager = require('./unsubscribeTokenManager');
-        const token = tokenManager.generateToken(leadEmail);
+    createEmailMessage(emailContent, leadEmail, leadData = null, trackReads = false, attachments = [], campaignId = null) {
+        // Generate JWT unsubscribe token (URL-safe, 30-day expiration)
+        const { generateUnsubscribeToken } = require('./jwtUnsubscribeManager');
+        const token = generateUnsubscribeToken(leadEmail, campaignId);
         const baseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
-        const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?token=${encodeURIComponent(token)}`;
+        const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?token=${token}`;
 
         const emailMessage = {
             subject: emailContent.subject,
@@ -563,6 +562,7 @@ ${leadName}`);
             ],
             // RFC 8058: Add List-Unsubscribe header using singleValueExtendedProperties
             // This prevents email security tools from corrupting the token in HTML links
+            // JWT tokens are URL-safe by design and survive gateway rewriting
             singleValueExtendedProperties: [
                 {
                     id: 'String 0x1045',  // Property ID for List-Unsubscribe header
@@ -571,7 +571,8 @@ ${leadName}`);
             ]
         };
 
-        console.log(`🔑 [LIST-UNSUBSCRIBE] Header added for ${leadEmail}: <${unsubscribeUrl}>`);
+        console.log(`🔑 [LIST-UNSUBSCRIBE] JWT header added for ${leadEmail}${campaignId ? ` (campaign: ${campaignId})` : ''}`);
+        console.log(`🔑 [LIST-UNSUBSCRIBE] URL: ${unsubscribeUrl}`);
 
         // Add attachments if provided
         if (attachments && attachments.length > 0) {
