@@ -80,10 +80,30 @@ router.get('/unsubscribe', async (req, res) => {
             const proxyIdCache = require('../utils/proxyIdCache');
             const { isTokenValid } = require('../utils/proxyIdManager');
 
-            const tokenData = await proxyIdCache.getTokenData(id, graphClient);
+            let tokenData = await proxyIdCache.getTokenData(id, graphClient);
+
+            // If not found, force immediate cache refresh and try again
+            if (!tokenData) {
+                console.log(`🔄 [UNSUBSCRIBE] Proxy ID not in cache, forcing immediate refresh...`);
+                await proxyIdCache.refreshCache(graphClient);
+
+                tokenData = await proxyIdCache.getTokenData(id, graphClient);
+
+                if (tokenData) {
+                    console.log(`✅ [UNSUBSCRIBE] Found after cache refresh: ${id}`);
+                }
+            }
 
             if (!tokenData) {
                 console.error(`❌ [UNSUBSCRIBE] Proxy ID not found in Excel: ${id}`);
+
+                // Get cache stats for diagnostics
+                const cacheStats = proxyIdCache.getStats();
+                console.log(`📊 [UNSUBSCRIBE-DEBUG] Cache stats:`, cacheStats);
+                console.log(`🔍 [UNSUBSCRIBE-DEBUG] Cache entries:`, Array.from(proxyIdCache.cache.keys()));
+                console.log(`⚠️  [UNSUBSCRIBE-DEBUG] This may be caused by email gateway URL transformation`);
+                console.log(`⚠️  [UNSUBSCRIBE-DEBUG] Original ID may have been modified by Proofpoint/Mimecast`);
+
                 return res.status(400).send(`
                     <!DOCTYPE html>
                     <html>
