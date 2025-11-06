@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const DomainDuplicateChecker = require('../utils/domainDuplicateChecker');
-const { getDelegatedGraphClient } = require('../middleware/delegatedGraphAuth');
+const { requireDelegatedAuth, getDelegatedAuthProvider } = require('../middleware/delegatedGraphAuth');
 
 // Configure multer for file uploads (in-memory)
 const upload = multer({
@@ -19,7 +19,7 @@ const upload = multer({
  * POST /api/domain-check/compare
  * Upload local Excel file and compare domains with OneDrive
  */
-router.post('/compare', upload.single('domainFile'), async (req, res) => {
+router.post('/compare', requireDelegatedAuth, upload.single('domainFile'), async (req, res) => {
     try {
         console.log('🔍 Domain duplicate check request received');
 
@@ -33,8 +33,8 @@ router.post('/compare', upload.single('domainFile'), async (req, res) => {
 
         console.log(`📂 File uploaded: ${req.file.originalname} (${(req.file.size / 1024).toFixed(2)} KB)`);
 
-        // Get Microsoft Graph client
-        const graphClient = await getDelegatedGraphClient();
+        // Get Microsoft Graph client using session authentication
+        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
 
         if (!graphClient) {
             return res.status(401).json({
@@ -87,7 +87,7 @@ router.post('/compare', upload.single('domainFile'), async (req, res) => {
  * POST /api/domain-check/check-local-file
  * Check a specific local file path for domain duplicates
  */
-router.post('/check-local-file', async (req, res) => {
+router.post('/check-local-file', requireDelegatedAuth, async (req, res) => {
     try {
         const { filePath } = req.body;
 
@@ -109,8 +109,8 @@ router.post('/check-local-file', async (req, res) => {
             });
         }
 
-        // Get Microsoft Graph client
-        const graphClient = await getDelegatedGraphClient();
+        // Get Microsoft Graph client using session authentication
+        const graphClient = await req.delegatedAuth.getGraphClient(req.sessionId);
 
         if (!graphClient) {
             return res.status(401).json({
