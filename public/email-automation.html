@@ -328,6 +328,49 @@
                 </div>
             </div>
 
+            <!-- Domain Duplicate Checker -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Domain Duplicate Checker</h3>
+                    <div class="auth-status-container">
+                        <span class="auth-indicator">Check for duplicates</span>
+                    </div>
+                </div>
+                <div class="card-content">
+                    <p style="margin-bottom: 15px; color: #6b7280;">Upload your Domain Contact List to check for duplicate domains against the OneDrive master file.</p>
+
+                    <div class="upload-area" onclick="document.getElementById('domainFileInput').click()" style="margin-bottom: 15px;">
+                        <div class="upload-icon"></div>
+                        <div class="upload-text">Click or drag Domain Contact List here</div>
+                        <div class="upload-subtext">Supports .xlsx files up to 10MB</div>
+                        <input type="file" id="domainFileInput" accept=".xlsx,.xls" style="display: none;" />
+                    </div>
+
+                    <div id="domainFileName" style="display: none; margin-bottom: 15px; padding: 10px; background: #f3f4f6; border-radius: 5px; font-size: 14px;"></div>
+
+                    <button class="btn btn-success" id="checkDuplicatesBtn" onclick="checkDomainDuplicates()" disabled style="width: 100%;">
+                        Check for Duplicates
+                    </button>
+
+                    <div id="domainCheckProgress" class="hidden" style="margin-top: 15px;">
+                        <div class="upload-loading">
+                            <div class="spinner"></div>
+                            <div class="loading-text">
+                                <div id="domainCheckStatus">Checking for duplicate domains...</div>
+                                <div class="loading-subtext">Please wait while we compare domains</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="domainCheckResults" class="hidden" style="margin-top: 15px;">
+                        <div class="mb-lg">
+                            <h4>Domain Check Results</h4>
+                        </div>
+                        <div id="domainCheckSummary"></div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Template Management -->
             <div class="card">
                 <div class="card-header">
@@ -2974,6 +3017,141 @@
                     default: return false;
                 }
             });
+        }
+
+        // ==========================================
+        // Domain Duplicate Checker Functions
+        // ==========================================
+
+        let domainFileToCheck = null;
+
+        // Handle domain file selection
+        document.getElementById('domainFileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                domainFileToCheck = file;
+                document.getElementById('domainFileName').textContent = `📄 Selected: ${file.name}`;
+                document.getElementById('domainFileName').style.display = 'block';
+                document.getElementById('checkDuplicatesBtn').disabled = false;
+            }
+        });
+
+        async function checkDomainDuplicates() {
+            if (!domainFileToCheck) {
+                alert('Please select a Domain Contact List file first');
+                return;
+            }
+
+            // Hide previous results
+            document.getElementById('domainCheckResults').classList.add('hidden');
+
+            // Show progress
+            document.getElementById('domainCheckProgress').classList.remove('hidden');
+            document.getElementById('checkDuplicatesBtn').disabled = true;
+
+            try {
+                // Create FormData to send file
+                const formData = new FormData();
+                formData.append('domainFile', domainFileToCheck);
+
+                // Send request to API
+                const response = await fetch('/api/domain-check/compare', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                // Hide progress
+                document.getElementById('domainCheckProgress').classList.add('hidden');
+
+                if (result.success) {
+                    displayDomainCheckResults(result.report);
+                } else {
+                    throw new Error(result.message || 'Failed to check domain duplicates');
+                }
+
+            } catch (error) {
+                console.error('Domain check error:', error);
+                document.getElementById('domainCheckProgress').classList.add('hidden');
+                alert('Error checking domain duplicates: ' + error.message);
+            } finally {
+                document.getElementById('checkDuplicatesBtn').disabled = false;
+            }
+        }
+
+        function displayDomainCheckResults(report) {
+            const summaryDiv = document.getElementById('domainCheckSummary');
+
+            let html = `
+                <div style="background: #f9fafb; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+                        <div>
+                            <div style="font-size: 24px; font-weight: 600; color: #1f2937;">${report.totalLocalDomains}</div>
+                            <div style="font-size: 14px; color: #6b7280;">Local Domains</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 24px; font-weight: 600; color: #1f2937;">${report.totalOneDriveDomains}</div>
+                            <div style="font-size: 14px; color: #6b7280;">OneDrive Domains</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 24px; font-weight: 600; color: ${report.duplicateCount > 0 ? '#ef4444' : '#10b981'};">${report.duplicateCount}</div>
+                            <div style="font-size: 14px; color: #6b7280;">Duplicates Found</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 24px; font-weight: 600; color: #3b82f6;">${report.uniqueToLocalCount}</div>
+                            <div style="font-size: 14px; color: #6b7280;">Unique to Local</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            if (report.duplicateCount > 0) {
+                html += `
+                    <div style="margin-top: 15px;">
+                        <h4 style="color: #ef4444; margin-bottom: 10px;">⚠️ Duplicate Domains (${report.duplicateCount})</h4>
+                        <div style="max-height: 300px; overflow-y: auto; background: white; border: 1px solid #e5e7eb; border-radius: 5px; padding: 10px;">
+                `;
+
+                report.duplicates.forEach((domain, index) => {
+                    html += `<div style="padding: 5px; border-bottom: 1px solid #f3f4f6; font-size: 14px;">${index + 1}. ${domain}</div>`;
+                });
+
+                html += `
+                        </div>
+                    </div>
+                `;
+            } else {
+                html += `
+                    <div style="margin-top: 15px; padding: 15px; background: #d1fae5; border: 1px solid #10b981; border-radius: 5px; color: #065f46;">
+                        <strong>✅ No Duplicates Found!</strong> All domains in your local file are unique.
+                    </div>
+                `;
+            }
+
+            if (report.uniqueToLocalCount > 0) {
+                html += `
+                    <div style="margin-top: 15px;">
+                        <h4 style="color: #3b82f6; margin-bottom: 10px;">📋 Domains Unique to Local File (${report.uniqueToLocalCount})</h4>
+                        <div style="max-height: 200px; overflow-y: auto; background: white; border: 1px solid #e5e7eb; border-radius: 5px; padding: 10px;">
+                `;
+
+                report.uniqueToLocal.slice(0, 50).forEach((domain, index) => {
+                    html += `<div style="padding: 5px; border-bottom: 1px solid #f3f4f6; font-size: 14px;">${index + 1}. ${domain}</div>`;
+                });
+
+                if (report.uniqueToLocalCount > 50) {
+                    html += `<div style="padding: 10px; text-align: center; color: #6b7280;">... and ${report.uniqueToLocalCount - 50} more</div>`;
+                }
+
+                html += `
+                        </div>
+                    </div>
+                `;
+            }
+
+            summaryDiv.innerHTML = html;
+            document.getElementById('domainCheckResults').classList.remove('hidden');
         }
     </script>
 </body>
