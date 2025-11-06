@@ -653,6 +653,13 @@ body {
 .template-actions {
     display: flex;
     gap: var(--space-xs);
+    flex-wrap: nowrap;
+    align-items: center;
+}
+
+.template-actions .btn {
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .template-meta {
@@ -969,13 +976,24 @@ body {
         width: 100%;
         min-width: auto;
     }
-    
+
     .header-email-actions {
         flex-direction: column;
         align-items: stretch;
         gap: var(--space-sm);
     }
-    
+
+    .template-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-sm);
+    }
+
+    .template-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
     .template-selector-wrapper {
         min-width: auto;
     }

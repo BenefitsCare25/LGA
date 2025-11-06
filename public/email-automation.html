@@ -339,7 +339,7 @@
                 <div class="card-content">
                     <p style="margin-bottom: 15px; color: #6b7280;">Upload your Domain Contact List to check for duplicate domains against the OneDrive master file.</p>
 
-                    <div class="upload-area" onclick="document.getElementById('domainFileInput').click()" style="margin-bottom: 15px;">
+                    <div class="upload-area" id="domainUploadArea" style="margin-bottom: 15px;">
                         <div class="upload-icon"></div>
                         <div class="upload-text">Click or drag Domain Contact List here</div>
                         <div class="upload-subtext">Supports .xlsx files up to 10MB</div>
@@ -3026,13 +3026,55 @@
         let domainFileToCheck = null;
 
         // Handle domain file selection
-        document.getElementById('domainFileInput').addEventListener('change', function(e) {
+        const domainFileInput = document.getElementById('domainFileInput');
+        const domainUploadArea = document.getElementById('domainUploadArea');
+
+        // Click to upload
+        domainUploadArea.addEventListener('click', function() {
+            domainFileInput.click();
+        });
+
+        // File selection handler
+        domainFileInput.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
                 domainFileToCheck = file;
                 document.getElementById('domainFileName').textContent = `📄 Selected: ${file.name}`;
                 document.getElementById('domainFileName').style.display = 'block';
                 document.getElementById('checkDuplicatesBtn').disabled = false;
+            }
+        });
+
+        // Drag and drop for domain file input
+        domainUploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            domainUploadArea.classList.add('dragover');
+        });
+
+        domainUploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            domainUploadArea.classList.remove('dragover');
+        });
+
+        domainUploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            domainUploadArea.classList.remove('dragover');
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                // Check if it's an Excel file
+                if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                    domainFileToCheck = file;
+                    document.getElementById('domainFileName').textContent = `📄 Selected: ${file.name}`;
+                    document.getElementById('domainFileName').style.display = 'block';
+                    document.getElementById('checkDuplicatesBtn').disabled = false;
+                } else {
+                    alert('Please upload an Excel file (.xlsx or .xls)');
+                }
             }
         });
 
