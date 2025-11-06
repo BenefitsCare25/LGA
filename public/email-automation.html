@@ -3042,6 +3042,12 @@
                 return;
             }
 
+            // Check if authenticated
+            if (!sessionId) {
+                alert('Please authenticate first by uploading a lead list or refreshing the page');
+                return;
+            }
+
             // Hide previous results
             document.getElementById('domainCheckResults').classList.add('hidden');
 
@@ -3054,9 +3060,12 @@
                 const formData = new FormData();
                 formData.append('domainFile', domainFileToCheck);
 
-                // Send request to API
+                // Send request to API with session authentication
                 const response = await fetch('/api/domain-check/compare', {
                     method: 'POST',
+                    headers: {
+                        'X-Session-Id': sessionId
+                    },
                     body: formData
                 });
 
