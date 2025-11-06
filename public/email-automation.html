@@ -230,6 +230,8 @@
             align-items: center;
         }
     </style>
+    <!-- SheetJS library for client-side Excel validation -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
     <!-- Navigation -->
@@ -305,12 +307,57 @@
                         </button>
                     </div>
                 </div>
+                <!-- Educational Content: Required Excel Columns -->
+                <div class="card-content" style="padding: 15px; margin-bottom: 15px; background-color: #f8f9fa; border-radius: 8px; border-left: 4px solid #3b82f6;">
+                    <h4 style="margin: 0 0 10px 0; font-size: 14px; font-weight: 600; color: #1f2937;">Required Excel Columns</h4>
+                    <p style="margin: 0 0 10px 0; font-size: 13px; color: #6b7280;">Your Excel file must include these column names (case-insensitive):</p>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+                        <div style="font-size: 13px;">
+                            <strong style="color: #ef4444;">• Email</strong> (required)
+                        </div>
+                        <div style="font-size: 13px;">
+                            <strong style="color: #10b981;">• Name</strong> (recommended)
+                        </div>
+                        <div style="font-size: 13px;">
+                            <strong style="color: #10b981;">• Company Name</strong>
+                        </div>
+                        <div style="font-size: 13px;">
+                            <strong style="color: #10b981;">• Title</strong>
+                        </div>
+                        <div style="font-size: 13px;">• Phone</div>
+                        <div style="font-size: 13px;">• LinkedIn URL</div>
+                        <div style="font-size: 13px;">• Company Website</div>
+                        <div style="font-size: 13px;">• Location</div>
+                    </div>
+                    <details style="margin-top: 10px;">
+                        <summary style="cursor: pointer; font-size: 12px; color: #3b82f6; font-weight: 500;">Show accepted column name variations</summary>
+                        <div style="margin-top: 8px; padding: 8px; background: white; border-radius: 4px; font-size: 12px; color: #6b7280;">
+                            <p style="margin: 5px 0;"><strong>Email:</strong> "Email", "email", "Email Address"</p>
+                            <p style="margin: 5px 0;"><strong>Name:</strong> "Name", "Full Name", "First Name + Last Name"</p>
+                            <p style="margin: 5px 0;"><strong>Company:</strong> "Company Name", "Company", "organization_name"</p>
+                            <p style="margin: 5px 0;"><strong>Phone:</strong> "Phone", "Phone Number", "Contact Number"</p>
+                        </div>
+                    </details>
+                </div>
+
                 <div class="upload-area" onclick="document.getElementById('fileInput').click()">
                     <div class="upload-icon"></div>
                     <div class="upload-text">Click or drag Excel file here</div>
                     <div class="upload-subtext">Supports .xlsx files up to 10MB</div>
                     <input type="file" id="fileInput" accept=".xlsx,.xls" />
                 </div>
+
+                <!-- Column Validation Alert -->
+                <div id="columnValidationAlert" class="hidden" style="margin-top: 15px; padding: 12px; border-radius: 6px; background-color: #fef2f2; border-left: 4px solid #ef4444;">
+                    <div style="display: flex; align-items: start; gap: 8px;">
+                        <span style="font-size: 18px;">⚠️</span>
+                        <div>
+                            <h4 style="margin: 0 0 5px 0; font-size: 14px; font-weight: 600; color: #dc2626;">Missing Required Columns</h4>
+                            <div id="columnValidationMessage" style="font-size: 13px; color: #7f1d1d;"></div>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="uploadProgress" class="hidden">
                     <div class="upload-loading">
                         <div class="spinner"></div>
@@ -370,31 +417,30 @@
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Template Management -->
-            <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title">Email Templates</h3>
-                    <div class="flex gap-sm">
-                        <button class="btn btn-success" onclick="openTemplateModal()" title="Create New Template">
-                            New Template
-                        </button>
-                    </div>
+        <!-- Template Management (Moved Below 2-Column Grid) -->
+        <div class="card full-width">
+            <div class="card-header">
+                <h3 class="card-title">Email Templates</h3>
+                <div class="flex gap-sm">
+                    <button class="btn btn-success" onclick="openTemplateModal()" title="Create New Template">
+                        New Template
+                    </button>
                 </div>
-                <div id="templatesList">
-                    <div class="flex-center">
-                        <div class="spinner"></div>
-                        <span class="ml-md">Loading templates...</span>
-                    </div>
+            </div>
+            <div id="templatesList">
+                <div class="flex-center">
+                    <div class="spinner"></div>
+                    <span class="ml-md">Loading templates...</span>
                 </div>
-                <div class="mt-lg">
-                    <div class="template-stats" id="templateStats">
-                        <span class="text-muted">0 templates</span>
-                    </div>
+            </div>
+            <div class="mt-lg">
+                <div class="template-stats" id="templateStats">
+                    <span class="text-muted">0 templates</span>
                 </div>
             </div>
         </div>
-
 
         <!-- Master List Table -->
         <div class="card full-width">
@@ -899,11 +945,11 @@
         function showAuthStatus(message, type) {
             const statusDiv = document.getElementById('authStatus');
             const messageDiv = document.getElementById('authMessage');
-            
+
             statusDiv.className = `auth-status auth-${type}`;
             messageDiv.textContent = message;
             statusDiv.classList.remove('hidden');
-            
+
             // Update upload auth status indicator
             const uploadAuthStatus = document.getElementById('uploadAuthStatus');
             if (uploadAuthStatus) {
@@ -920,13 +966,149 @@
             }
         }
 
+        // Validate Excel columns before upload
+        async function validateExcelColumns(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+
+                        // Get first sheet
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+
+                        // Get column headers (first row)
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                        if (jsonData.length === 0) {
+                            resolve({
+                                isValid: false,
+                                message: 'The Excel file appears to be empty. Please upload a file with data.'
+                            });
+                            return;
+                        }
+
+                        const headers = jsonData[0].map(h => String(h).toLowerCase().trim());
+                        console.log('📊 Detected columns:', headers);
+
+                        // Define required and accepted column variations
+                        const requiredColumns = {
+                            email: ['email', 'email address', 'email_address', 'emailaddress']
+                        };
+
+                        const recommendedColumns = {
+                            name: ['name', 'full name', 'fullname', 'first name', 'last name'],
+                            company: ['company name', 'company', 'organization_name', 'organization name', 'organisation name'],
+                            title: ['title', 'job title', 'jobtitle', 'position']
+                        };
+
+                        // Check required columns
+                        const missingRequired = [];
+                        for (const [columnName, variations] of Object.entries(requiredColumns)) {
+                            const found = variations.some(variation => headers.includes(variation));
+                            if (!found) {
+                                missingRequired.push(columnName.charAt(0).toUpperCase() + columnName.slice(1));
+                            }
+                        }
+
+                        // Check recommended columns
+                        const missingRecommended = [];
+                        for (const [columnName, variations] of Object.entries(recommendedColumns)) {
+                            const found = variations.some(variation => headers.includes(variation));
+                            if (!found) {
+                                missingRecommended.push(columnName.charAt(0).toUpperCase() + columnName.slice(1));
+                            }
+                        }
+
+                        if (missingRequired.length > 0) {
+                            resolve({
+                                isValid: false,
+                                message: `Missing required column(s): <strong>${missingRequired.join(', ')}</strong>. Your file must have an "Email" column to proceed.`,
+                                missingRequired,
+                                missingRecommended
+                            });
+                        } else if (missingRecommended.length > 0) {
+                            // Show warning but allow upload
+                            resolve({
+                                isValid: true,
+                                hasWarnings: true,
+                                message: `Warning: Missing recommended column(s): <strong>${missingRecommended.join(', ')}</strong>. The system will still process your file, but these columns improve data quality.`,
+                                missingRecommended
+                            });
+                        } else {
+                            resolve({
+                                isValid: true,
+                                hasWarnings: false,
+                                message: 'All required and recommended columns found!'
+                            });
+                        }
+
+                    } catch (error) {
+                        console.error('❌ Column validation error:', error);
+                        reject({
+                            isValid: false,
+                            message: `Error reading Excel file: ${error.message}. Please ensure the file is a valid Excel format.`
+                        });
+                    }
+                };
+
+                reader.onerror = function() {
+                    reject({
+                        isValid: false,
+                        message: 'Failed to read the Excel file. Please try again.'
+                    });
+                };
+
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // Show column validation message
+        function showColumnValidation(validation) {
+            const alertDiv = document.getElementById('columnValidationAlert');
+            const messageDiv = document.getElementById('columnValidationMessage');
+
+            if (validation.isValid && !validation.hasWarnings) {
+                // Hide alert for valid files
+                alertDiv.classList.add('hidden');
+                return true;
+            } else if (validation.isValid && validation.hasWarnings) {
+                // Show warning but allow upload
+                alertDiv.style.backgroundColor = '#fef3c7';
+                alertDiv.style.borderLeftColor = '#f59e0b';
+                alertDiv.querySelector('h4').textContent = 'Column Warning';
+                alertDiv.querySelector('h4').style.color = '#d97706';
+                messageDiv.innerHTML = validation.message;
+                alertDiv.classList.remove('hidden');
+
+                // Scroll to alert
+                alertDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return true; // Allow upload with warning
+            } else {
+                // Show error and prevent upload
+                alertDiv.style.backgroundColor = '#fef2f2';
+                alertDiv.style.borderLeftColor = '#ef4444';
+                alertDiv.querySelector('h4').textContent = 'Missing Required Columns';
+                alertDiv.querySelector('h4').style.color = '#dc2626';
+                messageDiv.innerHTML = validation.message;
+                alertDiv.classList.remove('hidden');
+
+                // Scroll to alert
+                alertDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false; // Prevent upload
+            }
+        }
+
         // Handle file upload
         async function handleFileUpload() {
             const fileInput = document.getElementById('fileInput');
             const file = fileInput.files[0];
-            
+
             if (!file) return;
-            
+
             // Check authentication first
             if (!sessionId) {
                 document.getElementById('uploadSummary').innerHTML = `
@@ -937,12 +1119,39 @@
                 document.getElementById('uploadResults').classList.remove('hidden');
                 return;
             }
-            
-            console.log('📤 Uploading file:', file.name);
-            
+
+            console.log('📤 Validating and uploading file:', file.name);
+
+            // Validate Excel columns before upload
+            try {
+                console.log('🔍 Validating Excel columns...');
+                const validation = await validateExcelColumns(file);
+                const canProceed = showColumnValidation(validation);
+
+                if (!canProceed) {
+                    console.log('❌ Upload blocked: Missing required columns');
+                    // Reset file input
+                    fileInput.value = '';
+                    return;
+                }
+
+                if (validation.hasWarnings) {
+                    console.log('⚠️ Upload proceeding with warnings');
+                }
+
+                console.log('✅ Column validation passed');
+            } catch (error) {
+                console.error('❌ Validation error:', error);
+                showColumnValidation(error);
+                // Reset file input
+                fileInput.value = '';
+                return;
+            }
+
             // Show progress
             document.getElementById('uploadProgress').classList.remove('hidden');
             document.getElementById('uploadResults').classList.add('hidden');
+            document.getElementById('columnValidationAlert').classList.add('hidden'); // Hide validation alert during upload
             
             const formData = new FormData();
             formData.append('excelFile', file);
