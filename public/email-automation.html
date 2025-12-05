@@ -555,6 +555,13 @@
                             </div>
                         </div>
                     </div>
+                    <select id="filterEmailCount" class="form-select filter-select">
+                        <option value="">All Email Counts</option>
+                        <option value="0">0 (No emails sent)</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3+">3+</option>
+                    </select>
                 </div>
             </div>
             
@@ -935,6 +942,10 @@
             });
 
             document.getElementById('filterLastEmail').addEventListener('change', function() {
+                filterMasterList();
+            });
+
+            document.getElementById('filterEmailCount').addEventListener('change', function() {
                 filterMasterList();
             });
 
@@ -2189,32 +2200,33 @@
             const statusFilter = document.getElementById('filterStatus').value.toLowerCase();
             const templateFilter = document.getElementById('filterTemplate').value;
             const lastEmailFilter = document.getElementById('filterLastEmail').value;
+            const emailCountFilter = document.getElementById('filterEmailCount').value;
             const companySizeFilters = getSelectedCompanySizes();
-            
+
             // Get all leads that match current filters
             if (!window.originalMasterListData) {
                 window.originalMasterListData = [...masterListData];
             }
-            
+
             const filteredData = window.originalMasterListData.filter(lead => {
                 // Same filter logic as in sendFilteredEmails
-                const matchesSearch = !searchTerm || 
+                const matchesSearch = !searchTerm ||
                     (lead.Name && lead.Name.toLowerCase().includes(searchTerm)) ||
                     (lead.Email && lead.Email.toLowerCase().includes(searchTerm)) ||
                     (lead['Company Name'] && lead['Company Name'].toLowerCase().includes(searchTerm));
-                
-                const matchesStatus = !statusFilter || 
+
+                const matchesStatus = !statusFilter ||
                     (lead.Status && lead.Status.toLowerCase() === statusFilter);
-                
-                const matchesTemplate = !templateFilter || 
+
+                const matchesTemplate = !templateFilter ||
                     (lead.Template_Used && lead.Template_Used === templateFilter);
-                
+
                 let matchesLastEmail = true;
                 if (lastEmailFilter && lead.Last_Email_Date) {
                     const lastEmailDate = parseExcelDateForDisplay(lead.Last_Email_Date);
                     const currentDate = new Date();
                     const daysDifference = Math.floor((currentDate - lastEmailDate) / (1000 * 60 * 60 * 24));
-                    
+
                     if (lastEmailFilter === '7-13') {
                         matchesLastEmail = daysDifference >= 7 && daysDifference <= 13;
                     } else if (lastEmailFilter === '14-20') {
@@ -2226,11 +2238,26 @@
                     matchesLastEmail = false;
                 }
 
+                // Email Count filter
+                let matchesEmailCount = true;
+                if (emailCountFilter) {
+                    const emailCount = parseInt(lead.Email_Count) || 0;
+                    if (emailCountFilter === '0') {
+                        matchesEmailCount = emailCount === 0;
+                    } else if (emailCountFilter === '1') {
+                        matchesEmailCount = emailCount === 1;
+                    } else if (emailCountFilter === '2') {
+                        matchesEmailCount = emailCount === 2;
+                    } else if (emailCountFilter === '3+') {
+                        matchesEmailCount = emailCount >= 3;
+                    }
+                }
+
                 // Company size filter
                 const matchesCompanySize = companySizeFilters.length === 0 ||
                     (lead['Size'] && checkCompanySizeInRange(lead['Size'], companySizeFilters));
 
-                return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail && matchesCompanySize;
+                return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail && matchesEmailCount && matchesCompanySize;
             });
 
             // Store the selected emails globally so sendFilteredEmails can access them
@@ -2559,41 +2586,42 @@
             }
         };
 
-        // Filter master list based on search, status, template, and last email sent
+        // Filter master list based on search, status, template, last email sent, and email count
         function filterMasterList() {
             const searchTerm = document.getElementById('searchLeads').value.toLowerCase();
             const statusFilter = document.getElementById('filterStatus').value.toLowerCase();
             const templateFilter = document.getElementById('filterTemplate').value;
             const lastEmailFilter = document.getElementById('filterLastEmail').value;
+            const emailCountFilter = document.getElementById('filterEmailCount').value;
             const companySizeFilters = getSelectedCompanySizes();
-            
+
             // If no original data stored, store it
             if (!window.originalMasterListData) {
                 window.originalMasterListData = [...masterListData];
             }
-            
+
             let filteredData = window.originalMasterListData.filter(lead => {
                 // Search filter
-                const matchesSearch = !searchTerm || 
+                const matchesSearch = !searchTerm ||
                     (lead.Name && lead.Name.toLowerCase().includes(searchTerm)) ||
                     (lead.Email && lead.Email.toLowerCase().includes(searchTerm)) ||
                     (lead['Company Name'] && lead['Company Name'].toLowerCase().includes(searchTerm));
-                
+
                 // Status filter
-                const matchesStatus = !statusFilter || 
+                const matchesStatus = !statusFilter ||
                     (lead.Status && lead.Status.toLowerCase() === statusFilter);
-                
+
                 // Template filter (check Template_Used field)
-                const matchesTemplate = !templateFilter || 
+                const matchesTemplate = !templateFilter ||
                     (lead.Template_Used && lead.Template_Used === templateFilter);
-                
+
                 // Last Email Sent filter - shows leads based on when their last email was sent
                 let matchesLastEmail = true;
                 if (lastEmailFilter && lead.Last_Email_Date) {
                     const lastEmailDate = parseExcelDateForDisplay(lead.Last_Email_Date);
                     const currentDate = new Date();
                     const daysDifference = Math.floor((currentDate - lastEmailDate) / (1000 * 60 * 60 * 24));
-                    
+
                     if (lastEmailFilter === '7-13') {
                         // Show leads with last email sent 7-13 days ago
                         matchesLastEmail = daysDifference >= 7 && daysDifference <= 13;
@@ -2609,11 +2637,26 @@
                     matchesLastEmail = false;
                 }
 
+                // Email Count filter
+                let matchesEmailCount = true;
+                if (emailCountFilter) {
+                    const emailCount = parseInt(lead.Email_Count) || 0;
+                    if (emailCountFilter === '0') {
+                        matchesEmailCount = emailCount === 0;
+                    } else if (emailCountFilter === '1') {
+                        matchesEmailCount = emailCount === 1;
+                    } else if (emailCountFilter === '2') {
+                        matchesEmailCount = emailCount === 2;
+                    } else if (emailCountFilter === '3+') {
+                        matchesEmailCount = emailCount >= 3;
+                    }
+                }
+
                 // Company size filter
                 const matchesCompanySize = companySizeFilters.length === 0 ||
                     (lead['Size'] && checkCompanySizeInRange(lead['Size'], companySizeFilters));
 
-                return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail && matchesCompanySize;
+                return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail && matchesEmailCount && matchesCompanySize;
             });
 
             // Reset to first page when filters change
@@ -2622,7 +2665,7 @@
             // Update display with pagination
             displayMasterListWithPagination(filteredData);
             
-            console.log(`Filtered ${filteredData.length} leads from ${window.originalMasterListData.length} total (Search: "${searchTerm}", Status: "${statusFilter}", Template: "${templateFilter}", Last Email: "${lastEmailFilter || 'none'}", Company Size: ${companySizeFilters.length > 0 ? companySizeFilters.join(',') : 'none'})`);
+            console.log(`Filtered ${filteredData.length} leads from ${window.originalMasterListData.length} total (Search: "${searchTerm}", Status: "${statusFilter}", Template: "${templateFilter}", Last Email: "${lastEmailFilter || 'none'}", Email Count: "${emailCountFilter || 'all'}", Company Size: ${companySizeFilters.length > 0 ? companySizeFilters.join(',') : 'none'})`);
         }
 
         // Validate email template content
@@ -2781,35 +2824,36 @@
             const statusFilter = document.getElementById('filterStatus').value.toLowerCase();
             const templateFilter = document.getElementById('filterTemplate').value;
             const lastEmailFilter = document.getElementById('filterLastEmail').value;
+            const emailCountFilter = document.getElementById('filterEmailCount').value;
             const companySizeFilters = getSelectedCompanySizes();
-            
+
             // Get currently filtered data
             if (!window.originalMasterListData) {
                 window.originalMasterListData = [...masterListData];
             }
-            
+
             let filteredData = window.originalMasterListData.filter(lead => {
                 // Search filter
-                const matchesSearch = !searchTerm || 
+                const matchesSearch = !searchTerm ||
                     (lead.Name && lead.Name.toLowerCase().includes(searchTerm)) ||
                     (lead.Email && lead.Email.toLowerCase().includes(searchTerm)) ||
                     (lead['Company Name'] && lead['Company Name'].toLowerCase().includes(searchTerm));
-                
+
                 // Status filter
-                const matchesStatus = !statusFilter || 
+                const matchesStatus = !statusFilter ||
                     (lead.Status && lead.Status.toLowerCase() === statusFilter);
-                
+
                 // Template filter
-                const matchesTemplate = !templateFilter || 
+                const matchesTemplate = !templateFilter ||
                     (lead.Template_Used && lead.Template_Used === templateFilter);
-                
+
                 // Last Email Sent filter - shows leads based on when their last email was sent
                 let matchesLastEmail = true;
                 if (lastEmailFilter && lead.Last_Email_Date) {
                     const lastEmailDate = parseExcelDateForDisplay(lead.Last_Email_Date);
                     const currentDate = new Date();
                     const daysDifference = Math.floor((currentDate - lastEmailDate) / (1000 * 60 * 60 * 24));
-                    
+
                     if (lastEmailFilter === '7-13') {
                         // Show leads with last email sent 7-13 days ago
                         matchesLastEmail = daysDifference >= 7 && daysDifference <= 13;
@@ -2825,11 +2869,26 @@
                     matchesLastEmail = false;
                 }
 
+                // Email Count filter
+                let matchesEmailCount = true;
+                if (emailCountFilter) {
+                    const emailCount = parseInt(lead.Email_Count) || 0;
+                    if (emailCountFilter === '0') {
+                        matchesEmailCount = emailCount === 0;
+                    } else if (emailCountFilter === '1') {
+                        matchesEmailCount = emailCount === 1;
+                    } else if (emailCountFilter === '2') {
+                        matchesEmailCount = emailCount === 2;
+                    } else if (emailCountFilter === '3+') {
+                        matchesEmailCount = emailCount >= 3;
+                    }
+                }
+
                 // Company size filter
                 const matchesCompanySize = companySizeFilters.length === 0 ||
                     (lead['Size'] && checkCompanySizeInRange(lead['Size'], companySizeFilters));
 
-                return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail && matchesCompanySize;
+                return matchesSearch && matchesStatus && matchesTemplate && matchesLastEmail && matchesEmailCount && matchesCompanySize;
             });
 
             // Determine which leads to send emails to: selected leads take priority
@@ -2847,7 +2906,7 @@
                 emailMode = isGlobalSelection ? 'global_selected' : 'selected';
             } else if (filteredData.length > 0) {
                 // Priority 2: Use filtered leads if no manual selection
-                const hasActiveFilters = searchTerm || statusFilter || templateFilter || lastEmailFilter;
+                const hasActiveFilters = searchTerm || statusFilter || templateFilter || lastEmailFilter || emailCountFilter;
                 
                 if (hasActiveFilters) {
                     // User has applied filters, send to filtered results
