@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SharePoint Document Automation - CBRE</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: #00d4aa;
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #888;
+            font-size: 0.95rem;
+        }
+
+        .nav-links {
+            margin-top: 15px;
+        }
+
+        .nav-links a {
+            color: #00d4aa;
+            text-decoration: none;
+            margin: 0 15px;
+            font-size: 0.9rem;
+        }
+
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .card h2 {
+            color: #00d4aa;
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .status-ready { background: #00d4aa22; color: #00d4aa; }
+        .status-error { background: #ff444422; color: #ff4444; }
+        .status-pending { background: #ffa50022; color: #ffa500; }
+
+        .auth-section {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .btn {
+            background: #00d4aa;
+            color: #1a1a2e;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: #00b894;
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            background: #555;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #e0e0e0;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .folder-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .folder-item {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .folder-icon {
+            font-size: 1.5rem;
+        }
+
+        .folder-info h4 {
+            font-size: 0.9rem;
+            margin-bottom: 4px;
+        }
+
+        .folder-info p {
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        .mapping-card {
+            background: rgba(0, 212, 170, 0.1);
+            border: 1px solid rgba(0, 212, 170, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+
+        .mapping-card h4 {
+            color: #00d4aa;
+            margin-bottom: 10px;
+        }
+
+        .mapping-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .mapping-row:last-child {
+            border-bottom: none;
+        }
+
+        .mapping-source, .mapping-target {
+            font-size: 0.85rem;
+        }
+
+        .mapping-source {
+            color: #ffa500;
+        }
+
+        .mapping-target {
+            color: #00d4aa;
+        }
+
+        .arrow {
+            color: #888;
+        }
+
+        .file-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+
+        .file-item:hover {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .file-name {
+            font-size: 0.9rem;
+        }
+
+        .file-date {
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        .log-container {
+            background: #0a0a15;
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Consolas', monospace;
+            font-size: 0.85rem;
+        }
+
+        .log-entry {
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .log-time {
+            color: #888;
+            margin-right: 10px;
+        }
+
+        .log-success { color: #00d4aa; }
+        .log-error { color: #ff4444; }
+        .log-info { color: #4a9eff; }
+
+        .upload-zone {
+            border: 2px dashed rgba(0, 212, 170, 0.3);
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .upload-zone:hover {
+            border-color: #00d4aa;
+            background: rgba(0, 212, 170, 0.05);
+        }
+
+        .upload-zone.dragover {
+            border-color: #00d4aa;
+            background: rgba(0, 212, 170, 0.1);
+        }
+
+        .upload-zone input {
+            display: none;
+        }
+
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .result-box {
+            background: rgba(0, 212, 170, 0.1);
+            border: 1px solid rgba(0, 212, 170, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .result-box.show {
+            display: block;
+        }
+
+        .result-box.error {
+            background: rgba(255, 68, 68, 0.1);
+            border-color: rgba(255, 68, 68, 0.3);
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #00d4aa;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SharePoint Document Automation</h1>
+            <p class="subtitle">Automated PowerPoint updates from Excel Placement Slips</p>
+            <div class="nav-links">
+                <a href="/">Lead Generator</a>
+                <a href="/email-automation">Email Automation</a>
+                <a href="/prompt-editor">Prompt Editor</a>
+            </div>
+        </header>
+
+        <!-- Authentication Section -->
+        <div class="card">
+            <h2>Authentication Status</h2>
+            <div class="auth-section">
+                <div>
+                    <span id="auth-status" class="status-badge status-pending">Checking...</span>
+                    <span id="auth-user" style="margin-left: 15px; color: #888;"></span>
+                </div>
+                <button id="btn-login" class="btn" onclick="login()">Sign in with Microsoft</button>
+            </div>
+        </div>
+
+        <!-- Folder Status Section -->
+        <div class="card">
+            <h2>Folder Structure</h2>
+            <div class="folder-grid" id="folder-status">
+                <div class="folder-item">
+                    <span class="folder-icon">📂</span>
+                    <div class="folder-info">
+                        <h4>Placement-Slips</h4>
+                        <p id="folder-placement">Checking...</p>
+                    </div>
+                </div>
+                <div class="folder-item">
+                    <span class="folder-icon">📋</span>
+                    <div class="folder-info">
+                        <h4>Templates</h4>
+                        <p id="folder-templates">Checking...</p>
+                    </div>
+                </div>
+                <div class="folder-item">
+                    <span class="folder-icon">📊</span>
+                    <div class="folder-info">
+                        <h4>Generated</h4>
+                        <p id="folder-generated">Checking...</p>
+                    </div>
+                </div>
+                <div class="folder-item">
+                    <span class="folder-icon">📦</span>
+                    <div class="folder-info">
+                        <h4>Archive</h4>
+                        <p id="folder-archive">Checking...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="actions-grid">
+                <button class="btn btn-secondary" onclick="initializeFolders()">Initialize Folders</button>
+                <button class="btn btn-secondary" onclick="checkStatus()">Refresh Status</button>
+            </div>
+        </div>
+
+        <!-- Template Management -->
+        <div class="card">
+            <h2>Template Management</h2>
+            <div id="template-status" style="margin-bottom: 15px;">
+                <span class="status-badge status-pending">No template uploaded</span>
+            </div>
+            <div class="upload-zone" id="template-upload-zone">
+                <input type="file" id="template-file" accept=".pptx">
+                <p>📤 Click or drag PowerPoint template here</p>
+                <p style="font-size: 0.8rem; color: #888; margin-top: 10px;">Upload: CBRE Staff Communication 2025.pptx</p>
+            </div>
+        </div>
+
+        <!-- Slide Mappings -->
+        <div class="card">
+            <h2>Slide Mappings (Phase 1)</h2>
+            <div class="mapping-card">
+                <h4>Slide 1: Title & Period of Insurance</h4>
+                <div class="mapping-row">
+                    <span class="mapping-source">Excel: GTL Sheet, Row 9, Col B</span>
+                    <span class="arrow">→</span>
+                    <span class="mapping-target">PPT: Shape 20, Date Text</span>
+                </div>
+                <div class="mapping-row">
+                    <span class="mapping-source">01/07/2024 - 30/06/2026</span>
+                    <span class="arrow">→</span>
+                    <span class="mapping-target">1 July 2024 to 30 June 2026</span>
+                </div>
+            </div>
+            <p style="color: #888; font-size: 0.85rem; margin-top: 15px;">
+                Future phases will add mappings for slides 6-35 covering all insurance details.
+            </p>
+        </div>
+
+        <!-- Processing Controls -->
+        <div class="card">
+            <h2>Processing Controls</h2>
+            <div id="pending-files" style="margin-bottom: 15px;">
+                <p style="color: #888;">No files pending</p>
+            </div>
+            <div class="actions-grid">
+                <button class="btn" id="btn-check-files" onclick="checkPendingFiles()">
+                    Check for New Files
+                </button>
+                <button class="btn" id="btn-process" onclick="processLatest()">
+                    Process Latest Excel
+                </button>
+            </div>
+            <div id="process-result" class="result-box"></div>
+        </div>
+
+        <!-- Generated Files -->
+        <div class="card">
+            <h2>Generated Files</h2>
+            <div id="generated-files" class="file-list">
+                <p style="color: #888;">No generated files yet</p>
+            </div>
+            <button class="btn btn-secondary" onclick="loadGeneratedFiles()" style="margin-top: 15px;">
+                Refresh List
+            </button>
+        </div>
+
+        <!-- Activity Log -->
+        <div class="card">
+            <h2>Activity Log</h2>
+            <div id="activity-log" class="log-container">
+                <div class="log-entry">
+                    <span class="log-time">[--:--:--]</span>
+                    <span class="log-info">System ready. Waiting for authentication...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Session management
+        let sessionId = localStorage.getItem('msSessionId');
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            checkAuthStatus();
+            setupUploadZone();
+        });
+
+        // Logging utility
+        function log(message, type = 'info') {
+            const logContainer = document.getElementById('activity-log');
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">[${time}]</span><span class="log-${type}">${message}</span>`;
+            logContainer.insertBefore(entry, logContainer.firstChild);
+        }
+
+        // Check authentication status
+        async function checkAuthStatus() {
+            try {
+                const response = await fetch('/auth/check-session', {
+                    headers: sessionId ? { 'X-Session-ID': sessionId } : {}
+                });
+                const data = await response.json();
+
+                const statusEl = document.getElementById('auth-status');
+                const userEl = document.getElementById('auth-user');
+                const loginBtn = document.getElementById('btn-login');
+
+                if (data.authenticated) {
+                    sessionId = data.sessionId;
+                    localStorage.setItem('msSessionId', sessionId);
+                    statusEl.className = 'status-badge status-ready';
+                    statusEl.textContent = 'Authenticated';
+                    userEl.textContent = data.user || '';
+                    loginBtn.textContent = 'Re-authenticate';
+                    log('Authenticated as ' + (data.user || 'user'), 'success');
+                    checkStatus();
+                } else {
+                    statusEl.className = 'status-badge status-error';
+                    statusEl.textContent = 'Not Authenticated';
+                    userEl.textContent = '';
+                    loginBtn.textContent = 'Sign in with Microsoft';
+                    log('Please sign in to continue', 'info');
+                }
+            } catch (error) {
+                log('Auth check failed: ' + error.message, 'error');
+            }
+        }
+
+        // Login with Microsoft
+        function login() {
+            window.location.href = '/auth/login?redirect=' + encodeURIComponent(window.location.pathname);
+        }
+
+        // Check system status
+        async function checkStatus() {
+            if (!sessionId) {
+                log('Please authenticate first', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/sharepoint-automation/status', {
+                    headers: { 'X-Session-ID': sessionId }
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    updateFolderStatus(data.folders);
+                    updateTemplateStatus(data.template);
+                    log('Status check complete', 'success');
+                } else {
+                    log('Status check failed: ' + data.error, 'error');
+                }
+            } catch (error) {
+                log('Status check error: ' + error.message, 'error');
+            }
+        }
+
+        // Update folder status display
+        function updateFolderStatus(folders) {
+            const paths = {
+                '/CBRE-Document-Automation/Placement-Slips': 'folder-placement',
+                '/CBRE-Document-Automation/Templates': 'folder-templates',
+                '/CBRE-Document-Automation/Generated': 'folder-generated',
+                '/CBRE-Document-Automation/Archive': 'folder-archive'
+            };
+
+            for (const [path, elementId] of Object.entries(paths)) {
+                const el = document.getElementById(elementId);
+                if (folders[path] && folders[path].exists) {
+                    el.textContent = 'Ready';
+                    el.style.color = '#00d4aa';
+                } else {
+                    el.textContent = 'Not found';
+                    el.style.color = '#ff4444';
+                }
+            }
+        }
+
+        // Update template status
+        function updateTemplateStatus(template) {
+            const statusEl = document.getElementById('template-status');
+            if (template.exists) {
+                statusEl.innerHTML = `
+                    <span class="status-badge status-ready">Template Ready</span>
+                    <span style="margin-left: 10px; color: #888;">${template.name} (${formatBytes(template.size)})</span>
+                `;
+            } else {
+                statusEl.innerHTML = '<span class="status-badge status-error">No template - please upload</span>';
+            }
+        }
+
+        // Initialize folder structure
+        async function initializeFolders() {
+            if (!sessionId) {
+                log('Please authenticate first', 'error');
+                return;
+            }
+
+            log('Initializing folder structure...', 'info');
+
+            try {
+                const response = await fetch('/api/sharepoint-automation/initialize', {
+                    method: 'POST',
+                    headers: {
+                        'X-Session-ID': sessionId,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    log('Folder structure initialized', 'success');
+                    checkStatus();
+                } else {
+                    log('Initialize failed: ' + data.error, 'error');
+                }
+            } catch (error) {
+                log('Initialize error: ' + error.message, 'error');
+            }
+        }
+
+        // Setup template upload zone
+        function setupUploadZone() {
+            const zone = document.getElementById('template-upload-zone');
+            const input = document.getElementById('template-file');
+
+            zone.addEventListener('click', () => input.click());
+
+            zone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                zone.classList.add('dragover');
+            });
+
+            zone.addEventListener('dragleave', () => {
+                zone.classList.remove('dragover');
+            });
+
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                zone.classList.remove('dragover');
+                if (e.dataTransfer.files.length) {
+                    uploadTemplate(e.dataTransfer.files[0]);
+                }
+            });
+
+            input.addEventListener('change', () => {
+                if (input.files.length) {
+                    uploadTemplate(input.files[0]);
+                }
+            });
+        }
+
+        // Upload template file
+        async function uploadTemplate(file) {
+            if (!sessionId) {
+                log('Please authenticate first', 'error');
+                return;
+            }
+
+            if (!file.name.endsWith('.pptx')) {
+                log('Please upload a PowerPoint file (.pptx)', 'error');
+                return;
+            }
+
+            log('Uploading template: ' + file.name, 'info');
+
+            const formData = new FormData();
+            formData.append('template', file);
+
+            try {
+                const response = await fetch('/api/sharepoint-automation/upload-template', {
+                    method: 'POST',
+                    headers: { 'X-Session-ID': sessionId },
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    log(`Template uploaded: ${data.template.totalSlides} slides`, 'success');
+                    checkStatus();
+                } else {
+                    log('Upload failed: ' + data.error, 'error');
+                }
+            } catch (error) {
+                log('Upload error: ' + error.message, 'error');
+            }
+        }
+
+        // Check for pending files
+        async function checkPendingFiles() {
+            if (!sessionId) {
+                log('Please authenticate first', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('btn-check-files');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>Checking...';
+
+            try {
+                const response = await fetch('/api/sharepoint-automation/check-folder', {
+                    headers: { 'X-Session-ID': sessionId }
+                });
+                const data = await response.json();
+
+                const container = document.getElementById('pending-files');
+
+                if (data.success && data.files.length > 0) {
+                    container.innerHTML = data.files.map(f => `
+                        <div class="file-item">
+                            <div>
+                                <div class="file-name">${f.name}</div>
+                                <div class="file-date">${new Date(f.modified).toLocaleString()}</div>
+                            </div>
+                            <button class="btn btn-secondary" onclick="processFile('${f.id}', '${f.name}')">Process</button>
+                        </div>
+                    `).join('');
+                    log(`Found ${data.files.length} Excel file(s)`, 'success');
+                } else {
+                    container.innerHTML = '<p style="color: #888;">No pending Excel files</p>';
+                    log('No pending files found', 'info');
+                }
+            } catch (error) {
+                log('Check files error: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Check for New Files';
+            }
+        }
+
+        // Process specific file
+        async function processFile(fileId, fileName) {
+            if (!sessionId) {
+                log('Please authenticate first', 'error');
+                return;
+            }
+
+            log(`Processing: ${fileName}`, 'info');
+
+            try {
+                const response = await fetch('/api/sharepoint-automation/process-slip', {
+                    method: 'POST',
+                    headers: {
+                        'X-Session-ID': sessionId,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ fileId, fileName })
+                });
+                const data = await response.json();
+
+                showResult(data);
+
+                if (data.success) {
+                    log(`Processed successfully: ${data.output.filename}`, 'success');
+                    checkPendingFiles();
+                    loadGeneratedFiles();
+                } else {
+                    log('Processing failed: ' + data.error, 'error');
+                }
+            } catch (error) {
+                log('Processing error: ' + error.message, 'error');
+            }
+        }
+
+        // Process latest file
+        async function processLatest() {
+            if (!sessionId) {
+                log('Please authenticate first', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('btn-process');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>Processing...';
+
+            log('Processing latest Excel file...', 'info');
+
+            try {
+                const response = await fetch('/api/sharepoint-automation/manual-trigger', {
+                    method: 'POST',
+                    headers: {
+                        'X-Session-ID': sessionId,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await response.json();
+
+                showResult(data);
+
+                if (data.success) {
+                    log(`Success! Generated: ${data.output.filename}`, 'success');
+                    log(`Period of Insurance: ${data.input.periodOfInsurance}`, 'info');
+                    checkPendingFiles();
+                    loadGeneratedFiles();
+                } else {
+                    log('Processing failed: ' + (data.message || data.error), 'error');
+                }
+            } catch (error) {
+                log('Processing error: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Process Latest Excel';
+            }
+        }
+
+        // Show result box
+        function showResult(data) {
+            const resultBox = document.getElementById('process-result');
+            resultBox.classList.add('show');
+
+            if (data.success) {
+                resultBox.classList.remove('error');
+                resultBox.innerHTML = `
+                    <h4 style="color: #00d4aa; margin-bottom: 10px;">Processing Complete</h4>
+                    <p><strong>Input:</strong> ${data.input.file || data.input.fileName}</p>
+                    <p><strong>Period of Insurance:</strong> ${data.input.periodOfInsurance}</p>
+                    <p><strong>Output:</strong> ${data.output.filename}</p>
+                    <p><strong>Updated Slides:</strong> ${data.output.updatedSlides?.length || 0}</p>
+                `;
+            } else {
+                resultBox.classList.add('error');
+                resultBox.innerHTML = `
+                    <h4 style="color: #ff4444; margin-bottom: 10px;">Processing Failed</h4>
+                    <p>${data.error || data.message}</p>
+                `;
+            }
+        }
+
+        // Load generated files
+        async function loadGeneratedFiles() {
+            if (!sessionId) return;
+
+            try {
+                const response = await fetch('/api/sharepoint-automation/generated-files', {
+                    headers: { 'X-Session-ID': sessionId }
+                });
+                const data = await response.json();
+
+                const container = document.getElementById('generated-files');
+
+                if (data.success && data.files.length > 0) {
+                    container.innerHTML = data.files.map(f => `
+                        <div class="file-item">
+                            <div>
+                                <div class="file-name">${f.name}</div>
+                                <div class="file-date">${new Date(f.modified).toLocaleString()}</div>
+                            </div>
+                            <a href="${f.webUrl}" target="_blank" class="btn btn-secondary" style="text-decoration: none;">Open</a>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<p style="color: #888;">No generated files yet</p>';
+                }
+            } catch (error) {
+                console.error('Load generated files error:', error);
+            }
+        }
+
+        // Format bytes
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+    </script>
+</body>
+</html>

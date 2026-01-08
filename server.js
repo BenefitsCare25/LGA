@@ -19,6 +19,7 @@ const githubAuthRoutes = require('./routes/github-auth');
 const campaignStatusRoutes = require('./routes/campaign-status');
 const testTokenSystemRoutes = require('./routes/test-token-system');
 const domainCheckRoutes = require('./routes/domain-check');
+const sharepointAutomationRoutes = require('./routes/sharepoint-automation');
 const ProcessSingleton = require('./utils/processSingleton');
 
 // 🔒 PROCESS SINGLETON: Prevent multiple server instances
@@ -116,6 +117,7 @@ app.use('/api/email-delay', emailDelayTestRoutes);
 app.use('/api/email-bounce', emailBounceRoutes);
 app.use('/api/campaign-status', campaignStatusRoutes);
 app.use('/api/domain-check', domainCheckRoutes);
+app.use('/api/sharepoint-automation', sharepointAutomationRoutes);
 app.use('/api', testTokenSystemRoutes);
 app.use('/auth', authRoutes);
 app.use('/api/github-auth', githubAuthRoutes);
@@ -138,6 +140,11 @@ app.get('/prompt-editor', (req, res) => {
 // Serve GitHub authentication test page
 app.get('/github-auth-test', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'github-auth-test.html'));
+});
+
+// Serve SharePoint Document Automation page
+app.get('/sharepoint-automation', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'sharepoint-automation.html'));
 });
 
 // Favicon route to prevent 404 errors
