@@ -503,8 +503,18 @@
         }
 
         // Login with Microsoft
-        function login() {
-            window.location.href = '/auth/login?redirect=' + encodeURIComponent(window.location.pathname);
+        async function login() {
+            try {
+                const response = await fetch('/auth/login?redirect=' + encodeURIComponent(window.location.pathname));
+                const data = await response.json();
+                if (data.success && data.authUrl) {
+                    window.location.href = data.authUrl;
+                } else {
+                    log('Login failed: ' + (data.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                log('Login error: ' + error.message, 'error');
+            }
         }
 
         // Check system status
