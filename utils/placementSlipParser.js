@@ -162,6 +162,137 @@ function formatDateRange(rawValue) {
 }
 
 /**
+ * Extract a field value by searching for a label in column A
+ * @param {Array} data - Sheet data as 2D array
+ * @param {string} labelPattern - Text pattern to search for in column A
+ * @param {number} valueCol - Column index for the value (default: 2)
+ * @returns {string|null} Extracted value or null
+ */
+function extractFieldByLabel(data, labelPattern, valueCol = 2) {
+    const pattern = labelPattern.toLowerCase();
+
+    for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        if (!row || !row[0]) continue;
+
+        const cellA = String(row[0]).toLowerCase().trim();
+        if (cellA.includes(pattern)) {
+            const value = row[valueCol] ? String(row[valueCol]).trim() : null;
+            if (value) {
+                console.log(`  ✅ Found "${labelPattern}" at row ${i}: "${value.substring(0, 50)}..."`);
+                return value;
+            }
+        }
+    }
+
+    console.log(`  ⚠️ "${labelPattern}" not found`);
+    return null;
+}
+
+/**
+ * Extract Basis of Cover table data from GTL sheet
+ * Looks for rows with Category (col 3) and Basis (col 6) after "Basis of Cover" header
+ * @param {Array} data - Sheet data as 2D array
+ * @returns {Array} Array of {category, basis} objects
+ */
+function extractBasisOfCover(data) {
+    const basisOfCover = [];
+    let foundHeader = false;
+    let headerRowPassed = false;
+
+    console.log('  🔍 Searching for Basis of Cover table...');
+
+    for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        if (!row) continue;
+
+        // Look for "Basis of Cover" header row
+        const cellA = String(row[0] || '').toLowerCase().trim();
+        if (cellA.includes('basis of cover')) {
+            foundHeader = true;
+            console.log(`  ✅ Found "Basis of Cover" header at row ${i}`);
+            continue;
+        }
+
+        // After finding header, look for data rows with Category and Basis
+        if (foundHeader) {
+            const category = row[3] ? String(row[3]).trim() : '';
+            const basis = row[6] ? String(row[6]).trim() : '';
+
+            // Skip the column header row (Category, Basis, etc.)
+            if (category.toLowerCase() === 'category' || category.toLowerCase() === 'insured') {
+                headerRowPassed = true;
+                console.log(`  📋 Skipping header row ${i}`);
+                continue;
+            }
+
+            // Stop if we hit the Rate section or another major section
+            if (cellA.includes('rate') || cellA.includes('annual premium') || cellA.includes('non evidence')) {
+                console.log(`  🛑 Stopping at row ${i} (found: "${cellA.substring(0, 30)}")`);
+                break;
+            }
+
+            // Stop if we hit a note row with * in column 1
+            if (String(row[1] || '').trim().startsWith('* FIGURES')) {
+                console.log(`  🛑 Stopping at note row ${i}`);
+                break;
+            }
+
+            // Valid data row: has category and some basis value, and we've passed the header
+            if (category && category.length > 0 && !category.startsWith('*') && !category.toLowerCase().includes('category')) {
+                // Clean up category - remove line breaks
+                const cleanCategory = category.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+
+                // Clean up basis - keep as-is if it's a description
+                let cleanBasis = basis;
+
+                // Only format as currency if it's a pure number (like 100000)
+                if (basis && /^\d+$/.test(basis.replace(/,/g, ''))) {
+                    const numValue = parseFloat(basis.replace(/,/g, ''));
+                    cleanBasis = `$${numValue.toLocaleString()}`;
+                }
+
+                basisOfCover.push({
+                    category: cleanCategory,
+                    basis: cleanBasis
+                });
+                console.log(`  📊 Category: "${cleanCategory.substring(0, 40)}..." → Basis: "${String(cleanBasis).substring(0, 50)}..."`);
+            }
+        }
+    }
+
+    console.log(`  ✅ Extracted ${basisOfCover.length} basis of cover entries`);
+    return basisOfCover;
+}
+
+/**
+ * Extract GTL (Group Term Life) specific data from the GTL sheet
+ * @param {Object} sheet - XLSX sheet object
+ * @returns {Object} GTL data including eligibility, last entry age, basis of cover, non-evidence limit
+ */
+function extractGTLData(sheet) {
+    if (!sheet) return null;
+
+    const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    console.log('📋 Extracting GTL data...');
+
+    // Extract individual fields
+    const eligibility = extractFieldByLabel(data, 'eligibility :', 2);
+    const lastEntryAge = extractFieldByLabel(data, 'last entry age', 2);
+    const nonEvidenceLimit = extractFieldByLabel(data, 'non evidence limit', 2);
+
+    // Extract Basis of Cover table
+    const basisOfCover = extractBasisOfCover(data);
+
+    return {
+        eligibility: eligibility,
+        lastEntryAge: lastEntryAge,
+        basisOfCover: basisOfCover,
+        nonEvidenceLimit: nonEvidenceLimit
+    };
+}
+
+/**
  * Extract all sheet data from workbook for future phases
  * @param {Object} workbook - XLSX workbook object
  * @returns {Object} Object with data from each sheet
@@ -213,13 +344,32 @@ function processPlacementSlip(buffer) {
     // Extract data from all sheets for comprehensive processing
     const allSheetData = extractAllSheetData(workbook);
 
+    // Extract GTL-specific data for Slide 8
+    const gtlSheet = workbook.Sheets['GTL'];
+    const gtlData = extractGTLData(gtlSheet);
+
+    if (gtlData) {
+        console.log('✅ GTL Data extracted successfully');
+        console.log(`   - Eligibility: ${gtlData.eligibility ? 'Found' : 'Not found'}`);
+        console.log(`   - Last Entry Age: ${gtlData.lastEntryAge ? 'Found' : 'Not found'}`);
+        console.log(`   - Basis of Cover: ${gtlData.basisOfCover?.length || 0} entries`);
+        console.log(`   - Non-Evidence Limit: ${gtlData.nonEvidenceLimit ? 'Found' : 'Not found'}`);
+    }
+
     return {
         success: true,
         periodOfInsurance: periodOfInsurance,
         sheets: workbook.SheetNames,
         sheetData: allSheetData,
+        gtlData: gtlData,
         slide1Data: {
             periodOfInsurance: periodOfInsurance
+        },
+        slide8Data: {
+            eligibility: gtlData?.eligibility,
+            lastEntryAge: gtlData?.lastEntryAge,
+            basisOfCover: gtlData?.basisOfCover,
+            nonEvidenceLimit: gtlData?.nonEvidenceLimit
         }
     };
 }
@@ -243,6 +393,9 @@ module.exports = {
     extractPeriodOfInsurance,
     formatDateRange,
     extractAllSheetData,
+    extractGTLData,
+    extractFieldByLabel,
+    extractBasisOfCover,
     processPlacementSlip,
     isValidExcelBuffer,
     SHEET_NAMES
