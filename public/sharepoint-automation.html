@@ -469,42 +469,85 @@
             logContainer.insertBefore(entry, logContainer.firstChild);
         }
 
-        // Check authentication status
+        // Check authentication status and auto-login if needed
         async function checkAuthStatus() {
+            const statusEl = document.getElementById('auth-status');
+            const userEl = document.getElementById('auth-user');
+            const loginBtn = document.getElementById('btn-login');
+
             try {
-                const response = await fetch('/auth/check-session', {
-                    headers: sessionId ? { 'X-Session-ID': sessionId } : {}
-                });
-                const data = await response.json();
+                // Check if we have a sessionId from URL parameters (after auth callback)
+                const urlParams = new URLSearchParams(window.location.search);
+                const urlSessionId = urlParams.get('sessionId');
 
-                const statusEl = document.getElementById('auth-status');
-                const userEl = document.getElementById('auth-user');
-                const loginBtn = document.getElementById('btn-login');
+                if (urlSessionId) {
+                    sessionId = urlSessionId;
+                    localStorage.setItem('msSessionId', sessionId);
+                    // Remove sessionId from URL
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
 
-                if (data.authenticated) {
-                    sessionId = data.sessionId;
+                // Check for existing session in localStorage
+                if (!sessionId) {
+                    sessionId = localStorage.getItem('msSessionId');
+                }
+
+                // Check authentication status with server
+                const authUrl = sessionId ? `/auth/status?sessionId=${sessionId}` : '/auth/status';
+                const authResponse = await fetch(authUrl);
+                const authData = await authResponse.json();
+
+                if (authData.authenticated) {
+                    sessionId = authData.sessionId;
                     localStorage.setItem('msSessionId', sessionId);
                     statusEl.className = 'status-badge status-ready';
                     statusEl.textContent = 'Authenticated';
-                    userEl.textContent = data.user || '';
+                    userEl.textContent = authData.user || '';
                     loginBtn.textContent = 'Re-authenticate';
-                    log('Authenticated as ' + (data.user || 'user'), 'success');
+                    log('Connected to Microsoft 365 as ' + (authData.user || 'user'), 'success');
                     checkStatus();
+                    loadGeneratedFiles();
                 } else {
-                    statusEl.className = 'status-badge status-error';
-                    statusEl.textContent = 'Not Authenticated';
-                    userEl.textContent = '';
-                    loginBtn.textContent = 'Sign in with Microsoft';
-                    log('Please sign in to continue', 'info');
+                    // Not authenticated - auto-initiate Microsoft 365 login
+                    statusEl.className = 'status-badge status-pending';
+                    statusEl.textContent = 'Connecting...';
+                    log('Connecting to Microsoft 365...', 'info');
+
+                    // Initiate authentication automatically
+                    console.log('🔍 Initiating Microsoft 365 login...');
+                    const loginResponse = await fetch('/auth/login?redirect=/sharepoint-automation');
+
+                    if (!loginResponse.ok) {
+                        statusEl.className = 'status-badge status-error';
+                        statusEl.textContent = 'Login Unavailable';
+                        log('Login service unavailable', 'error');
+                        return;
+                    }
+
+                    const loginData = await loginResponse.json();
+                    console.log('Login response:', loginData);
+
+                    if (loginData.success && loginData.authUrl) {
+                        log('Redirecting to Microsoft 365 login...', 'info');
+                        sessionStorage.setItem('pendingSessionId', loginData.sessionId);
+                        window.location.href = loginData.authUrl;
+                    } else {
+                        statusEl.className = 'status-badge status-error';
+                        statusEl.textContent = 'Login Failed';
+                        log('Login failed: ' + (loginData.message || 'Unknown error'), 'error');
+                    }
                 }
             } catch (error) {
+                console.error('Auth check error:', error);
+                statusEl.className = 'status-badge status-error';
+                statusEl.textContent = 'Connection Error';
                 log('Auth check failed: ' + error.message, 'error');
             }
         }
 
-        // Login with Microsoft
+        // Manual login (re-authenticate)
         async function login() {
-            log('Initiating Microsoft 365 login...', 'info');
+            log('Re-initiating Microsoft 365 login...', 'info');
             try {
                 const loginResponse = await fetch('/auth/login?redirect=/sharepoint-automation');
 
@@ -514,18 +557,14 @@
                 }
 
                 const loginData = await loginResponse.json();
-                console.log('Login response:', loginData);
 
                 if (loginData.success && loginData.authUrl) {
-                    log('Redirecting to Microsoft 365...', 'info');
-                    // Store sessionId and redirect to Microsoft auth
                     sessionStorage.setItem('pendingSessionId', loginData.sessionId);
                     window.location.href = loginData.authUrl;
                 } else {
                     log('Login failed: ' + (loginData.message || 'Unknown error'), 'error');
                 }
             } catch (error) {
-                console.error('Login error:', error);
                 log('Login error: ' + error.message, 'error');
             }
         }
