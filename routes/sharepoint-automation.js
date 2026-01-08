@@ -44,11 +44,11 @@ const upload = multer({
 
 /**
  * Convert Graph API response to Buffer
- * Graph API may return ArrayBuffer, Buffer, or other formats depending on environment
+ * Graph API may return ArrayBuffer, Buffer, ReadableStream, or other formats
  * @param {*} data - Response data from Graph API
- * @returns {Buffer} Proper Node.js Buffer
+ * @returns {Promise<Buffer>} Proper Node.js Buffer
  */
-function ensureBuffer(data) {
+async function ensureBuffer(data) {
     if (Buffer.isBuffer(data)) {
         return data;
     }
@@ -58,9 +58,40 @@ function ensureBuffer(data) {
     if (data instanceof Uint8Array) {
         return Buffer.from(data);
     }
+
+    // Handle ReadableStream (Node.js stream)
+    if (data && typeof data.pipe === 'function') {
+        console.log('📥 Converting ReadableStream to Buffer...');
+        return new Promise((resolve, reject) => {
+            const chunks = [];
+            data.on('data', chunk => chunks.push(chunk));
+            data.on('end', () => {
+                const buffer = Buffer.concat(chunks);
+                console.log(`📦 Stream converted: ${buffer.length} bytes`);
+                resolve(buffer);
+            });
+            data.on('error', reject);
+        });
+    }
+
+    // Handle Web ReadableStream (fetch API style)
+    if (data && typeof data.getReader === 'function') {
+        console.log('📥 Converting Web ReadableStream to Buffer...');
+        const reader = data.getReader();
+        const chunks = [];
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+        }
+        const buffer = Buffer.concat(chunks);
+        console.log(`📦 Web stream converted: ${buffer.length} bytes`);
+        return buffer;
+    }
+
     if (typeof data === 'object' && data !== null) {
         // Handle case where Graph API returns a response object with body
-        if (data.body && (Buffer.isBuffer(data.body) || data.body instanceof ArrayBuffer)) {
+        if (data.body) {
             return ensureBuffer(data.body);
         }
         // Handle case where it's an ArrayBuffer-like object
@@ -291,7 +322,7 @@ router.post('/process-slip', requireDelegatedAuth, async (req, res) => {
         const excelResponse = await graphClient
             .api(`/me/drive/items/${fileId}/content`)
             .get();
-        const excelBuffer = ensureBuffer(excelResponse);
+        const excelBuffer = await ensureBuffer(excelResponse);
 
         // Parse Excel and extract data
         const placementData = placementSlipParser.processPlacementSlip(excelBuffer);
@@ -311,7 +342,7 @@ router.post('/process-slip', requireDelegatedAuth, async (req, res) => {
             const templateResponse = await graphClient
                 .api(`/me/drive/root:${templatePath}:/content`)
                 .get();
-            templateBuffer = ensureBuffer(templateResponse);
+            templateBuffer = await ensureBuffer(templateResponse);
             console.log(`📄 Downloaded template PPTX: ${templateBuffer.length} bytes`);
         } catch (error) {
             return res.status(400).json({
@@ -417,7 +448,7 @@ router.post('/manual-trigger', requireDelegatedAuth, async (req, res) => {
         const excelResponse = await graphClient
             .api(`/me/drive/items/${latestFile.id}/content`)
             .get();
-        const excelBuffer = ensureBuffer(excelResponse);
+        const excelBuffer = await ensureBuffer(excelResponse);
 
         const placementData = placementSlipParser.processPlacementSlip(excelBuffer);
 
@@ -437,7 +468,7 @@ router.post('/manual-trigger', requireDelegatedAuth, async (req, res) => {
             const templateResponse = await graphClient
                 .api(`/me/drive/root:${templatePath}:/content`)
                 .get();
-            templateBuffer = ensureBuffer(templateResponse);
+            templateBuffer = await ensureBuffer(templateResponse);
             console.log(`📄 Downloaded template PPTX: ${templateBuffer.length} bytes`);
         } catch (error) {
             return res.status(400).json({
