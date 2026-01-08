@@ -197,7 +197,10 @@ function generateBasisOfCoverCellContent(basisOfCover) {
         generateBasisOfCoverParagraph(item.category, item.basis)
     ).join('');
 
-    return paragraphs;
+    // Add required empty ending paragraph for valid PPTX table cell structure
+    const emptyEndParagraph = '<a:p><a:pPr marL="285750" indent="-285750"><a:lnSpc><a:spcPct val="107000"/></a:lnSpc><a:spcAft><a:spcPts val="0"/></a:spcAft><a:buFont typeface="Arial" panose="020B0604020202020204" pitchFamily="34" charset="0"/><a:buChar char="•"/></a:pPr><a:endParaRPr lang="en-US" sz="2000" dirty="0"><a:effectLst/><a:latin typeface="Arial" panose="020B0604020202020204" pitchFamily="34" charset="0"/><a:ea typeface="Calibri" panose="020F0502020204030204" pitchFamily="34" charset="0"/><a:cs typeface="Arial" panose="020B0604020202020204" pitchFamily="34" charset="0"/></a:endParaRPr></a:p>';
+
+    return paragraphs + emptyEndParagraph;
 }
 
 /**
@@ -271,67 +274,89 @@ function updateSlide8GTLTable(zip, slide8Data) {
             }
         }
 
-        // 3. Update Basis of Cover - Replace entire cell content with dynamic bullets
+        // 3. Update Basis of Cover - Replace bullet point content individually
         if (slide8Data.basisOfCover && slide8Data.basisOfCover.length > 0) {
-            const newBasisContent = generateBasisOfCoverCellContent(slide8Data.basisOfCover);
+            console.log(`  🔄 Updating Basis of Cover with ${slide8Data.basisOfCover.length} entries...`);
+            let basisUpdated = false;
 
-            // Find the Basis of Cover cell content - look for the cell after "Basis of Cover" label
-            // The cell contains bullet paragraphs with categories
-            const basisCellPattern = /(<a:tc><a:txBody><a:bodyPr\/><a:lstStyle\/>)(<a:p><a:pPr marL="285750"[^]*?<a:buChar char="•"\/>.*?)(<\/a:txBody><a:tcPr[^>]*><a:lnL[^>]*>[^]*?<\/a:tcPr><\/a:tc><a:extLst><a:ext uri="\{0D108BD9-81ED-4DB2-BD59-A6C34878D82A\}"[^>]*><a16:rowId[^>]*val="625189383")/;
+            // Strategy: Find and replace bullet point text content directly
+            // Look for bullet paragraphs with bold category followed by ": basis"
+            const bulletContentPattern = /(<a:buChar char="•"[^>]*\/><\/a:pPr><a:r><a:rPr[^>]*b="1"[^>]*>(?:[^<]*<\/[^>]+>)*<a:t>)([^<]+)(<\/a:t><\/a:r><a:r><a:rPr[^>]*>(?:[^<]*<\/[^>]+>)*<a:t>: )([^<]+)(<\/a:t>)/g;
 
-            if (slideXml.match(basisCellPattern)) {
-                slideXml = slideXml.replace(basisCellPattern, `$1${newBasisContent}$3`);
-                console.log(`  ✅ Updated Basis of Cover with ${slide8Data.basisOfCover.length} entries`);
+            // Collect all matches first
+            const matches = [];
+            let match;
+            const tempXml = slideXml;
+            while ((match = bulletContentPattern.exec(tempXml)) !== null) {
+                matches.push({
+                    fullMatch: match[0],
+                    prefix: match[1],
+                    category: match[2],
+                    separator: match[3],
+                    basis: match[4],
+                    suffix: match[5],
+                    index: match.index
+                });
+            }
+
+            console.log(`  📊 Found ${matches.length} bullet points in template`);
+
+            // Replace each bullet with corresponding data
+            if (matches.length > 0) {
+                for (let i = 0; i < Math.min(matches.length, slide8Data.basisOfCover.length); i++) {
+                    const matchInfo = matches[i];
+                    const newData = slide8Data.basisOfCover[i];
+                    const newCategory = escapeXml(newData.category);
+                    const newBasis = escapeXml(newData.basis);
+
+                    // Create replacement string
+                    const oldText = matchInfo.fullMatch;
+                    const newText = `${matchInfo.prefix}${newCategory}${matchInfo.separator}${newBasis}${matchInfo.suffix}`;
+
+                    slideXml = slideXml.replace(oldText, newText);
+                    console.log(`    ✅ Bullet ${i + 1}: "${newData.category.substring(0, 30)}..."`);
+                    basisUpdated = true;
+                }
                 results.updated.push({ field: 'Basis of Cover', value: `${slide8Data.basisOfCover.length} categories` });
-            } else {
-                // Alternative: Replace individual bullet items
-                console.log(`  🔄 Trying individual bullet replacement...`);
-                let basisUpdated = false;
+            }
 
-                // Replace each existing bullet with new content if categories match
-                for (const item of slide8Data.basisOfCover) {
-                    const categoryPattern = new RegExp(`(<a:rPr[^>]*b="1"[^>]*>[^<]*<\\/a:rPr><a:t>)([^<]+)(<\\/a:t><\\/a:r><a:r><a:rPr[^>]*>[^<]*<\\/a:rPr><a:t>: )([^<]+)(<\\/a:t>)`, 'g');
+            // Fallback: Try direct text replacement if pattern didn't match
+            if (!basisUpdated) {
+                console.log(`  🔄 Trying direct text replacement fallback...`);
 
-                    // Try to match and replace by looking for bullet patterns
-                    const bulletPattern = /(<a:buChar char="•"[^>]*><\/a:pPr><a:r><a:rPr[^>]*b="1"[^>]*>[^<]*<\/a:rPr><a:t>)([^<]+)(<\/a:t><\/a:r><a:r><a:rPr[^>]*>[^<]*<\/a:rPr><a:t>: )([^<]+)(<\/a:t>)/g;
+                // Common template text patterns to replace
+                const replacements = [
+                    { oldCat: 'All employees', oldBasis: '24 x last drawn basic monthly salary , with minimum $40,000' },
+                    { oldCat: 'Grandfathered GWS Plan 1 staff', oldBasis: '36 x last drawn basic monthly salary , with minimum $40,000' },
+                    { oldCat: 'Sales Associates, Advisor', oldBasis: '$100,000' }
+                ];
 
-                    let match;
-                    while ((match = bulletPattern.exec(slideXml)) !== null) {
+                for (let i = 0; i < Math.min(replacements.length, slide8Data.basisOfCover.length); i++) {
+                    const repl = replacements[i];
+                    const newData = slide8Data.basisOfCover[i];
+                    const newCat = escapeXml(newData.category);
+                    const newBasis = escapeXml(newData.basis);
+
+                    // Replace category
+                    const catPattern = new RegExp(`>${repl.oldCat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</a:t>`, 'g');
+                    if (slideXml.match(catPattern)) {
+                        slideXml = slideXml.replace(catPattern, `>${newCat}</a:t>`);
                         basisUpdated = true;
+                    }
+
+                    // Replace basis (escape $ for regex)
+                    const basisPattern = new RegExp(`>: ${repl.oldBasis.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</a:t>`, 'g');
+                    if (slideXml.match(basisPattern)) {
+                        slideXml = slideXml.replace(basisPattern, `>: ${newBasis}</a:t>`);
                     }
                 }
 
-                if (!basisUpdated) {
-                    console.log(`  ⚠️ Basis of Cover cell pattern not found - trying direct replacement`);
-
-                    // Direct approach: find and replace each line
-                    const lines = [
-                        { old: 'All employees', new: slide8Data.basisOfCover[0]?.category || 'All employees' },
-                        { old: '24 x last drawn basic monthly salary , with minimum $40,000', new: slide8Data.basisOfCover[0]?.basis || '' }
-                    ];
-
-                    // Replace bullet content individually
-                    if (slide8Data.basisOfCover[0]) {
-                        const cat0 = escapeXml(slide8Data.basisOfCover[0].category);
-                        const basis0 = escapeXml(slide8Data.basisOfCover[0].basis);
-                        slideXml = slideXml.replace(/>All employees<\/a:t>/g, `>${cat0}</a:t>`);
-                        slideXml = slideXml.replace(/>: 24 x last drawn basic monthly salary , with minimum \$40,000<\/a:t>/g, `>: ${basis0}</a:t>`);
-                    }
-                    if (slide8Data.basisOfCover[1]) {
-                        const cat1 = escapeXml(slide8Data.basisOfCover[1].category);
-                        const basis1 = escapeXml(slide8Data.basisOfCover[1].basis);
-                        slideXml = slideXml.replace(/>Grandfathered GWS Plan 1 staff<\/a:t>/g, `>${cat1}</a:t>`);
-                        slideXml = slideXml.replace(/>: 36 x last drawn basic monthly salary , with minimum \$40,000<\/a:t>/g, `>: ${basis1}</a:t>`);
-                    }
-                    if (slide8Data.basisOfCover[2]) {
-                        const cat2 = escapeXml(slide8Data.basisOfCover[2].category);
-                        const basis2 = escapeXml(slide8Data.basisOfCover[2].basis);
-                        slideXml = slideXml.replace(/>Sales Associates, Advisor<\/a:t>/g, `>${cat2}</a:t>`);
-                        slideXml = slideXml.replace(/>: \$100,000<\/a:t>/g, `>: ${basis2}</a:t>`);
-                    }
-
+                if (basisUpdated) {
                     console.log(`  ✅ Updated Basis of Cover via direct replacement`);
                     results.updated.push({ field: 'Basis of Cover', value: `${slide8Data.basisOfCover.length} categories (direct)` });
+                } else {
+                    console.log(`  ⚠️ Could not find Basis of Cover patterns to replace`);
+                    results.errors.push({ field: 'Basis of Cover', error: 'Pattern not found in template' });
                 }
             }
         }
