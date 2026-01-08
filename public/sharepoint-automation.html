@@ -504,15 +504,28 @@
 
         // Login with Microsoft
         async function login() {
+            log('Initiating Microsoft 365 login...', 'info');
             try {
-                const response = await fetch('/auth/login?redirect=' + encodeURIComponent(window.location.pathname));
-                const data = await response.json();
-                if (data.success && data.authUrl) {
-                    window.location.href = data.authUrl;
+                const loginResponse = await fetch('/auth/login?redirect=/sharepoint-automation');
+
+                if (!loginResponse.ok) {
+                    log('Login service unavailable', 'error');
+                    return;
+                }
+
+                const loginData = await loginResponse.json();
+                console.log('Login response:', loginData);
+
+                if (loginData.success && loginData.authUrl) {
+                    log('Redirecting to Microsoft 365...', 'info');
+                    // Store sessionId and redirect to Microsoft auth
+                    sessionStorage.setItem('pendingSessionId', loginData.sessionId);
+                    window.location.href = loginData.authUrl;
                 } else {
-                    log('Login failed: ' + (data.message || 'Unknown error'), 'error');
+                    log('Login failed: ' + (loginData.message || 'Unknown error'), 'error');
                 }
             } catch (error) {
+                console.error('Login error:', error);
                 log('Login error: ' + error.message, 'error');
             }
         }
