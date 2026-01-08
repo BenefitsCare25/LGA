@@ -36,31 +36,57 @@ function extractPeriodOfInsurance(sheet) {
 
     const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
-    // Search for "Period of Insurance" in the first 15 rows
+    console.log(`🔍 Searching for Period of Insurance in ${data.length} rows...`);
+
+    // Log first 15 rows for debugging
     for (let i = 0; i < Math.min(15, data.length); i++) {
         const row = data[i];
-        if (row && row[0]) {
-            const cellA = String(row[0]).trim().toLowerCase();
-            if (cellA.includes('period of insurance')) {
-                // Try columns 1, 2, 3 (handles merged cells and different layouts)
-                for (let col = 1; col <= 3; col++) {
-                    const cellValue = row[col] ? String(row[col]).trim() : '';
-                    // Check if this looks like a date range
-                    if (cellValue && cellValue.match(/\d{2}\/\d{2}\/\d{4}/)) {
-                        return cellValue;
+        if (row && row.length > 0) {
+            const preview = row.slice(0, 5).map((c, idx) => `[${idx}]="${String(c).substring(0, 30)}"`).join(' | ');
+            console.log(`  Row ${i}: ${preview}`);
+        }
+    }
+
+    // Search for "Period of Insurance" in the first 20 rows, all columns
+    for (let i = 0; i < Math.min(20, data.length); i++) {
+        const row = data[i];
+        if (!row) continue;
+
+        // Check ALL columns for "Period of Insurance" text
+        for (let searchCol = 0; searchCol < Math.min(10, row.length); searchCol++) {
+            const cellValue = String(row[searchCol] || '').trim().toLowerCase();
+
+            if (cellValue.includes('period of insurance') || cellValue.includes('period  of insurance')) {
+                console.log(`✅ Found "Period of Insurance" at row ${i}, col ${searchCol}`);
+
+                // Look for date in same row, columns after the label
+                for (let col = searchCol + 1; col < Math.min(searchCol + 5, row.length); col++) {
+                    const dateValue = row[col] ? String(row[col]).trim() : '';
+                    console.log(`   Checking col ${col}: "${dateValue}"`);
+
+                    // Check if this looks like a date range (various formats)
+                    if (dateValue && (
+                        dateValue.match(/\d{1,2}\/\d{1,2}\/\d{4}/) ||  // DD/MM/YYYY
+                        dateValue.match(/\d{4}-\d{2}-\d{2}/)           // YYYY-MM-DD
+                    )) {
+                        console.log(`   ✅ Found date value: "${dateValue}"`);
+                        return dateValue;
                     }
                 }
-                // If no date pattern found, just return first non-empty cell
-                for (let col = 1; col <= 3; col++) {
-                    const cellValue = row[col] ? String(row[col]).trim() : '';
-                    if (cellValue) {
-                        return cellValue;
+
+                // If no date pattern found in same row, return first non-empty cell after label
+                for (let col = searchCol + 1; col < Math.min(searchCol + 5, row.length); col++) {
+                    const cellVal = row[col] ? String(row[col]).trim() : '';
+                    if (cellVal && cellVal.length > 0) {
+                        console.log(`   📝 Using non-date value: "${cellVal}"`);
+                        return cellVal;
                     }
                 }
             }
         }
     }
 
+    console.log('❌ Period of Insurance not found in any cell');
     return null;
 }
 
