@@ -206,19 +206,21 @@ router.get('/check-folder', requireDelegatedAuth, async (req, res) => {
 
         const result = await graphClient
             .api(`/me/drive/root:${CONFIG.PLACEMENT_FOLDER}:/children`)
-            .filter("file ne null")
-            .select('id,name,size,createdDateTime,lastModifiedDateTime')
+            .select('id,name,size,createdDateTime,lastModifiedDateTime,file,folder')
             .orderby('lastModifiedDateTime desc')
             .get();
 
+        // Filter for Excel files only (exclude folders)
         const excelFiles = result.value.filter(f =>
-            f.name.toLowerCase().endsWith('.xlsx') ||
-            f.name.toLowerCase().endsWith('.xls')
+            f.file && (  // Must be a file, not a folder
+                f.name.toLowerCase().endsWith('.xlsx') ||
+                f.name.toLowerCase().endsWith('.xls')
+            )
         );
 
         res.json({
             success: true,
-            totalFiles: result.value.length,
+            totalFiles: result.value.filter(f => f.file).length,
             excelFiles: excelFiles.length,
             files: excelFiles.map(f => ({
                 id: f.id,
@@ -353,14 +355,16 @@ router.post('/manual-trigger', requireDelegatedAuth, async (req, res) => {
         // Get latest Excel file from placement folder
         const result = await graphClient
             .api(`/me/drive/root:${CONFIG.PLACEMENT_FOLDER}:/children`)
-            .filter("file ne null")
+            .select('id,name,size,createdDateTime,lastModifiedDateTime,file,folder')
             .orderby('lastModifiedDateTime desc')
-            .top(1)
             .get();
 
+        // Filter for Excel files only (exclude folders)
         const excelFiles = result.value.filter(f =>
-            f.name.toLowerCase().endsWith('.xlsx') ||
-            f.name.toLowerCase().endsWith('.xls')
+            f.file && (
+                f.name.toLowerCase().endsWith('.xlsx') ||
+                f.name.toLowerCase().endsWith('.xls')
+            )
         );
 
         if (excelFiles.length === 0) {
@@ -370,6 +374,7 @@ router.post('/manual-trigger', requireDelegatedAuth, async (req, res) => {
             });
         }
 
+        // Get the latest file (already sorted by lastModifiedDateTime desc)
         const latestFile = excelFiles[0];
         console.log(`📊 Processing latest file: ${latestFile.name}`);
 
