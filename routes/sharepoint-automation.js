@@ -43,6 +43,35 @@ const upload = multer({
 });
 
 /**
+ * Convert Graph API response to Buffer
+ * Graph API may return ArrayBuffer, Buffer, or other formats depending on environment
+ * @param {*} data - Response data from Graph API
+ * @returns {Buffer} Proper Node.js Buffer
+ */
+function ensureBuffer(data) {
+    if (Buffer.isBuffer(data)) {
+        return data;
+    }
+    if (data instanceof ArrayBuffer) {
+        return Buffer.from(data);
+    }
+    if (data instanceof Uint8Array) {
+        return Buffer.from(data);
+    }
+    if (typeof data === 'object' && data !== null) {
+        // Handle case where Graph API returns a response object with body
+        if (data.body && (Buffer.isBuffer(data.body) || data.body instanceof ArrayBuffer)) {
+            return ensureBuffer(data.body);
+        }
+        // Handle case where it's an ArrayBuffer-like object
+        if (data.byteLength !== undefined) {
+            return Buffer.from(data);
+        }
+    }
+    throw new Error(`Unsupported data type received from Graph API: ${typeof data} (${data?.constructor?.name || 'unknown'})`);
+}
+
+/**
  * Generate timestamped filename for output
  * @param {string} baseName - Original filename
  * @returns {string} Timestamped filename
@@ -259,9 +288,10 @@ router.post('/process-slip', requireDelegatedAuth, async (req, res) => {
         console.log(`📊 Processing placement slip: ${fileName || fileId}`);
 
         // Download Excel file
-        const excelBuffer = await graphClient
+        const excelResponse = await graphClient
             .api(`/me/drive/items/${fileId}/content`)
             .get();
+        const excelBuffer = ensureBuffer(excelResponse);
 
         // Parse Excel and extract data
         const placementData = placementSlipParser.processPlacementSlip(excelBuffer);
@@ -278,9 +308,11 @@ router.post('/process-slip', requireDelegatedAuth, async (req, res) => {
         let templateBuffer;
 
         try {
-            templateBuffer = await graphClient
+            const templateResponse = await graphClient
                 .api(`/me/drive/root:${templatePath}:/content`)
                 .get();
+            templateBuffer = ensureBuffer(templateResponse);
+            console.log(`📄 Downloaded template PPTX: ${templateBuffer.length} bytes`);
         } catch (error) {
             return res.status(400).json({
                 success: false,
@@ -382,9 +414,10 @@ router.post('/manual-trigger', requireDelegatedAuth, async (req, res) => {
         req.body = { fileId: latestFile.id, fileName: latestFile.name };
 
         // Call the process-slip logic directly
-        const excelBuffer = await graphClient
+        const excelResponse = await graphClient
             .api(`/me/drive/items/${latestFile.id}/content`)
             .get();
+        const excelBuffer = ensureBuffer(excelResponse);
 
         const placementData = placementSlipParser.processPlacementSlip(excelBuffer);
 
@@ -401,9 +434,11 @@ router.post('/manual-trigger', requireDelegatedAuth, async (req, res) => {
         let templateBuffer;
 
         try {
-            templateBuffer = await graphClient
+            const templateResponse = await graphClient
                 .api(`/me/drive/root:${templatePath}:/content`)
                 .get();
+            templateBuffer = ensureBuffer(templateResponse);
+            console.log(`📄 Downloaded template PPTX: ${templateBuffer.length} bytes`);
         } catch (error) {
             return res.status(400).json({
                 success: false,

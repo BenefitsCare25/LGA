@@ -13,6 +13,16 @@ const PizZip = require('pizzip');
  */
 function readPPTX(buffer) {
     try {
+        // Validate input type
+        if (!buffer) {
+            throw new Error('No buffer provided');
+        }
+        if (!Buffer.isBuffer(buffer) && !(buffer instanceof Uint8Array) && !(buffer instanceof ArrayBuffer)) {
+            const dataType = typeof buffer;
+            const constructorName = buffer?.constructor?.name || 'unknown';
+            throw new Error(`Expected Buffer but received ${dataType} (${constructorName}). Buffer length: ${buffer?.length || buffer?.byteLength || 'N/A'}`);
+        }
+        console.log(`📦 Reading PPTX buffer: ${buffer.length || buffer.byteLength} bytes, type: ${buffer.constructor.name}`);
         const zip = new PizZip(buffer);
         return zip;
     } catch (error) {
