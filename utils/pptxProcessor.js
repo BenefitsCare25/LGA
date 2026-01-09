@@ -362,6 +362,89 @@ function generateBasisOfCoverCellContent(basisOfCover) {
 }
 
 /**
+ * Replace the entire Basis of Cover cell content in a slide
+ * Finds the row with "Basis of Cover" label and replaces the value cell's txBody
+ * @param {string} xml - Slide XML content
+ * @param {Array} basisOfCover - Array of {category, basis} objects
+ * @returns {Object} { xml: updatedXml, success: boolean }
+ */
+function replaceBasisOfCoverCell(xml, basisOfCover) {
+    if (!basisOfCover || basisOfCover.length === 0) {
+        return { xml, success: false };
+    }
+
+    console.log(`    🔄 Replacing Basis of Cover cell content with ${basisOfCover.length} entries...`);
+
+    // Find the row containing "Basis of Cover"
+    const rowPattern = /<a:tr\b[^>]*>([\s\S]*?)<\/a:tr>/g;
+    let rowMatch;
+    let updatedXml = xml;
+    let success = false;
+
+    while ((rowMatch = rowPattern.exec(xml)) !== null) {
+        const rowContent = rowMatch[1];
+        const fullRow = rowMatch[0];
+
+        // Check if this row contains "Basis of Cover" label
+        if (rowContent.includes('>Basis of Cover<')) {
+            console.log(`    📍 Found Basis of Cover row`);
+
+            // Extract cells from this row
+            const cellPattern = /<a:tc\b[^>]*>([\s\S]*?)<\/a:tc>/g;
+            const cells = [];
+            let cellMatch;
+
+            while ((cellMatch = cellPattern.exec(rowContent)) !== null) {
+                cells.push({
+                    full: cellMatch[0],
+                    content: cellMatch[1]
+                });
+            }
+
+            if (cells.length >= 2) {
+                const valueCell = cells[1];
+
+                // Find and replace the txBody content
+                const txBodyPattern = /<a:txBody>([\s\S]*?)<\/a:txBody>/;
+                const txBodyMatch = valueCell.content.match(txBodyPattern);
+
+                if (txBodyMatch) {
+                    // Generate new content
+                    const newParagraphs = generateBasisOfCoverCellContent(basisOfCover);
+                    const newTxBody = `<a:txBody><a:bodyPr/><a:lstStyle/>${newParagraphs}</a:txBody>`;
+
+                    // Replace in value cell
+                    const newValueCellContent = valueCell.content.replace(txBodyMatch[0], newTxBody);
+                    const newValueCell = valueCell.full.replace(valueCell.content, newValueCellContent);
+
+                    // Replace in row
+                    const newRowContent = rowContent.replace(valueCell.full, newValueCell);
+                    const newFullRow = fullRow.replace(rowContent, newRowContent);
+
+                    // Replace in XML
+                    updatedXml = updatedXml.replace(fullRow, newFullRow);
+                    success = true;
+
+                    console.log(`    ✅ Replaced Basis of Cover cell with ${basisOfCover.length} bullet points`);
+                    basisOfCover.forEach((item, i) => {
+                        console.log(`       ${i + 1}. ${item.category}: ${item.basis.substring(0, 30)}...`);
+                    });
+                } else {
+                    console.log(`    ⚠️ Could not find txBody in value cell`);
+                }
+            }
+            break;
+        }
+    }
+
+    if (!success) {
+        console.log(`    ⚠️ Basis of Cover row not found in table`);
+    }
+
+    return { xml: updatedXml, success };
+}
+
+/**
  * Update Slide 8 GTL table with data from placement slip
  * @param {Object} zip - PizZip instance
  * @param {Object} slide8Data - Data for slide 8 (eligibility, lastEntryAge, basisOfCover, nonEvidenceLimit)
@@ -674,49 +757,18 @@ function updateSlide9GDDTable(zip, slide9Data) {
             }
         }
 
-        // 2. Update Basis of Cover
+        // 2. Update Basis of Cover - Use cell replacement approach
         if (slide9Data.basisOfCover && slide9Data.basisOfCover.length > 0) {
             console.log(`  🔄 Updating Basis of Cover with ${slide9Data.basisOfCover.length} entries...`);
-            let basisUpdated = false;
 
-            const bulletContentPattern = /(<a:buChar char="•"[^>]*\/><\/a:pPr><a:r><a:rPr[^>]*b="1"[^>]*>(?:[^<]*<\/[^>]+>)*<a:t>)([^<]+)(<\/a:t><\/a:r><a:r><a:rPr[^>]*>(?:[^<]*<\/[^>]+>)*<a:t>: )([^<]+)(<\/a:t>)/g;
+            const basisResult = replaceBasisOfCoverCell(slideXml, slide9Data.basisOfCover);
 
-            const matches = [];
-            let match;
-            const tempXml = slideXml;
-            while ((match = bulletContentPattern.exec(tempXml)) !== null) {
-                matches.push({
-                    fullMatch: match[0],
-                    prefix: match[1],
-                    category: match[2],
-                    separator: match[3],
-                    basis: match[4],
-                    suffix: match[5]
-                });
-            }
-
-            console.log(`  📊 Found ${matches.length} bullet points in template`);
-
-            if (matches.length > 0) {
-                for (let i = 0; i < Math.min(matches.length, slide9Data.basisOfCover.length); i++) {
-                    const matchInfo = matches[i];
-                    const newData = slide9Data.basisOfCover[i];
-                    const newCategory = escapeXml(newData.category);
-                    const newBasis = escapeXml(newData.basis);
-
-                    const oldText = matchInfo.fullMatch;
-                    const newText = `${matchInfo.prefix}${newCategory}${matchInfo.separator}${newBasis}${matchInfo.suffix}`;
-
-                    slideXml = slideXml.replace(oldText, newText);
-                    console.log(`    ✅ Bullet ${i + 1}: "${newData.category.substring(0, 30)}..."`);
-                    basisUpdated = true;
-                }
+            if (basisResult.success) {
+                slideXml = basisResult.xml;
                 results.updated.push({ field: 'Basis of Cover', value: `${slide9Data.basisOfCover.length} categories` });
-            }
-
-            if (!basisUpdated) {
-                console.log(`  ⚠️ Could not find Basis of Cover patterns in Slide 9`);
-                results.errors.push({ field: 'Basis of Cover', error: 'Pattern not found in template' });
+            } else {
+                console.log(`  ⚠️ Could not update Basis of Cover in Slide 9`);
+                results.errors.push({ field: 'Basis of Cover', error: 'Cell not found in table' });
             }
         }
 
@@ -822,49 +874,18 @@ function updateSlide10GHSTable(zip, slide10Data) {
             }
         }
 
-        // 2. Update Basis of Cover - GHS may have more complex multi-tier structure
+        // 2. Update Basis of Cover - Use cell replacement approach
         if (slide10Data.basisOfCover && slide10Data.basisOfCover.length > 0) {
             console.log(`  🔄 Updating Basis of Cover with ${slide10Data.basisOfCover.length} entries...`);
-            let basisUpdated = false;
 
-            const bulletContentPattern = /(<a:buChar char="•"[^>]*\/><\/a:pPr><a:r><a:rPr[^>]*b="1"[^>]*>(?:[^<]*<\/[^>]+>)*<a:t>)([^<]+)(<\/a:t><\/a:r><a:r><a:rPr[^>]*>(?:[^<]*<\/[^>]+>)*<a:t>: )([^<]+)(<\/a:t>)/g;
+            const basisResult = replaceBasisOfCoverCell(slideXml, slide10Data.basisOfCover);
 
-            const matches = [];
-            let match;
-            const tempXml = slideXml;
-            while ((match = bulletContentPattern.exec(tempXml)) !== null) {
-                matches.push({
-                    fullMatch: match[0],
-                    prefix: match[1],
-                    category: match[2],
-                    separator: match[3],
-                    basis: match[4],
-                    suffix: match[5]
-                });
-            }
-
-            console.log(`  📊 Found ${matches.length} bullet points in template`);
-
-            if (matches.length > 0) {
-                for (let i = 0; i < Math.min(matches.length, slide10Data.basisOfCover.length); i++) {
-                    const matchInfo = matches[i];
-                    const newData = slide10Data.basisOfCover[i];
-                    const newCategory = escapeXml(newData.category);
-                    const newBasis = escapeXml(newData.basis);
-
-                    const oldText = matchInfo.fullMatch;
-                    const newText = `${matchInfo.prefix}${newCategory}${matchInfo.separator}${newBasis}${matchInfo.suffix}`;
-
-                    slideXml = slideXml.replace(oldText, newText);
-                    console.log(`    ✅ Bullet ${i + 1}: "${newData.category.substring(0, 30)}..."`);
-                    basisUpdated = true;
-                }
+            if (basisResult.success) {
+                slideXml = basisResult.xml;
                 results.updated.push({ field: 'Basis of Cover', value: `${slide10Data.basisOfCover.length} categories` });
-            }
-
-            if (!basisUpdated) {
-                console.log(`  ⚠️ Could not find Basis of Cover patterns in Slide 10`);
-                results.errors.push({ field: 'Basis of Cover', error: 'Pattern not found in template' });
+            } else {
+                console.log(`  ⚠️ Could not update Basis of Cover in Slide 10`);
+                results.errors.push({ field: 'Basis of Cover', error: 'Cell not found in table' });
             }
         }
 
