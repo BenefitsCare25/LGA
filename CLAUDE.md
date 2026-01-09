@@ -211,11 +211,23 @@ Row 4: "Non-evidence Limit" → Insurance limit value
 **Template Structure**: Same 4-row table format as Slides 8-9
 **Note**: GHS is on Slide 12, not Slide 10 (Slide 10 is GPA)
 
+### Template Slide Mapping
+| Slide | Product | Excel Sheet | Status |
+|-------|---------|-------------|--------|
+| 1 | Period of Insurance | GTL | ✅ Done |
+| 6-7 | GTL Overview | - | N/A (static) |
+| 8 | GTL (Group Term Life) | GTL | ✅ Done |
+| 9 | GDD (Group Dread Disease) | GDD | ✅ Done |
+| 10-11 | GPA (Group Personal Accident) | GPA | ⏳ Pending |
+| 12-15 | GHS (Group Hospital & Surgical) | GHS | ✅ Done (Slide 12) |
+
 ### API Endpoints
 - `POST /api/sharepoint-automation/process` - Process Excel and generate PowerPoint
 - `GET /api/sharepoint-automation/check-new-files` - Check for pending Excel files
 - `GET /api/sharepoint-automation/inspect-slide8-tables` - Debug endpoint for template inspection
 
 ### Future Phases
-- Slide 11: Additional insurance product details (GMM, GP, SP, Dental, GPA)
-- Webhook integration for automatic processing when new files uploaded
+- Slide 10: GPA (Group Personal Accident)
+- Slides 13-15: Additional GHS details
+- GMM, GP, SP, Dental sheets (if applicable slides exist)
+- Webhook integration for automatic processing
