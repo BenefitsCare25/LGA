@@ -395,7 +395,8 @@ router.post('/process-slip', requireDelegatedAuth, async (req, res) => {
                 filename: outputFilename,
                 fileId: uploadResult.id,
                 size: pptxResult.bufferSize,
-                updatedSlides: pptxResult.updatedSlides
+                updatedSlides: pptxResult.updatedSlides,
+                errors: pptxResult.errors || []
             }
         });
 
@@ -506,7 +507,8 @@ router.post('/manual-trigger', requireDelegatedAuth, async (req, res) => {
             output: {
                 filename: outputFilename,
                 fileId: uploadResult.id,
-                updatedSlides: pptxResult.updatedSlides
+                updatedSlides: pptxResult.updatedSlides,
+                errors: pptxResult.errors || []
             }
         });
 
