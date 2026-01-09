@@ -1874,7 +1874,9 @@ function updateSlide18RoomAndBoard(zip, slide18Data) {
         // Update the table header to reflect the bedded type
         const headerPattern = />Room\s*&amp;\s*Board\s*\d*\s*Bedded</gi;
         if (headerPattern.test(slideXml)) {
-            const newHeader = `>Room &amp; Board ${firstEntitlement.beddedType}<`;
+            // Escape the beddedType to handle ampersands like "1 & 2 Bedded"
+            const escapedBeddedType = escapeXml(firstEntitlement.beddedType);
+            const newHeader = `>Room &amp; Board ${escapedBeddedType}<`;
             slideXml = slideXml.replace(headerPattern, newHeader);
             results.updated.push({ field: 'Table Header', value: firstEntitlement.beddedType });
             console.log(`  ✅ Updated table header to: Room & Board ${firstEntitlement.beddedType}`);
