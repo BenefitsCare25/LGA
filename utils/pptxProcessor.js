@@ -228,25 +228,35 @@ function updateSlide8GTLTable(zip, slide8Data) {
         // 1. Update Eligibility value
         if (slide8Data.eligibility) {
             const eligibilityValue = escapeXml(slide8Data.eligibility);
-            // Find and replace the eligibility content in the table cell
-            // Pattern: ": All full-time, permanent, part-time and contract staff up to age 75 next birthday"
-            const eligibilityPattern = /(<a:t>: <\/a:t><\/a:r><a:r><a:rPr[^>]*><a:effectLst\/><a:highlight><a:srgbClr val="FFFF00"\/><\/a:highlight>[^<]*<\/a:rPr><a:t>)([^<]+)(<\/a:t>)/;
+            console.log(`  🔍 Looking for Eligibility pattern to replace with: "${eligibilityValue.substring(0, 50)}..."`);
 
-            if (slideXml.match(eligibilityPattern)) {
-                slideXml = slideXml.replace(eligibilityPattern, `$1${eligibilityValue}$3`);
-                console.log(`  ✅ Updated Eligibility`);
-                results.updated.push({ field: 'Eligibility', value: slide8Data.eligibility.substring(0, 50) + '...' });
-            } else {
-                // Try alternative pattern - direct text replacement
-                const altPattern = /(: )(All full-time, permanent, part-time and contract staff[^<]*)/gi;
-                if (slideXml.match(altPattern)) {
-                    slideXml = slideXml.replace(altPattern, `$1${eligibilityValue}`);
-                    console.log(`  ✅ Updated Eligibility (alt pattern)`);
+            // Strategy: Find text containing "full-time" and "staff" in an <a:t> element (common eligibility text)
+            // More flexible pattern that matches various eligibility text formats
+            const eligibilityPatterns = [
+                // Pattern 1: Text with "All full-time" and "staff" and "birthday"
+                /(<a:t>)(All full-time[^<]*staff[^<]*birthday[^<]*)(<\/a:t>)/gi,
+                // Pattern 2: Text with "All full-time" and "staff"
+                /(<a:t>)(All full-time[^<]*staff[^<]*)(<\/a:t>)/gi,
+                // Pattern 3: Any text after ": " that contains "staff" and "birthday"
+                /(<a:t>: )(All [^<]*staff[^<]*birthday[^<]*)(<\/a:t>)/gi,
+                // Pattern 4: Highlighted text after colon
+                /(<a:t>)(All [^<]*permanent[^<]*staff[^<]*)(<\/a:t>)/gi
+            ];
+
+            let eligibilityUpdated = false;
+            for (const pattern of eligibilityPatterns) {
+                if (slideXml.match(pattern)) {
+                    slideXml = slideXml.replace(pattern, `$1${eligibilityValue}$3`);
+                    console.log(`  ✅ Updated Eligibility`);
                     results.updated.push({ field: 'Eligibility', value: slide8Data.eligibility.substring(0, 50) + '...' });
-                } else {
-                    console.log(`  ⚠️ Eligibility pattern not found`);
-                    results.errors.push({ field: 'Eligibility', error: 'Pattern not found' });
+                    eligibilityUpdated = true;
+                    break;
                 }
+            }
+
+            if (!eligibilityUpdated) {
+                console.log(`  ⚠️ Eligibility pattern not found in template`);
+                results.errors.push({ field: 'Eligibility', error: 'Pattern not found' });
             }
         }
 
@@ -364,15 +374,33 @@ function updateSlide8GTLTable(zip, slide8Data) {
         // 4. Update Non-evidence Limit value
         if (slide8Data.nonEvidenceLimit) {
             const nonEvidenceValue = escapeXml(slide8Data.nonEvidenceLimit);
-            // Pattern: ": Sum insured exceeding 1,000,000 or age 71 next birthday and above requires underwriting"
-            const nonEvidencePattern = /(: )(Sum insured exceeding[^<]*)/gi;
+            console.log(`  🔍 Looking for Non-evidence Limit pattern to replace with: "${nonEvidenceValue.substring(0, 50)}..."`);
 
-            if (slideXml.match(nonEvidencePattern)) {
-                slideXml = slideXml.replace(nonEvidencePattern, `$1${nonEvidenceValue}`);
-                console.log(`  ✅ Updated Non-evidence Limit`);
-                results.updated.push({ field: 'Non-evidence Limit', value: slide8Data.nonEvidenceLimit.substring(0, 50) + '...' });
-            } else {
-                console.log(`  ⚠️ Non-evidence Limit pattern not found`);
+            // Strategy: Find text containing "Sum insured" or "underwriting" in an <a:t> element
+            const nonEvidencePatterns = [
+                // Pattern 1: Text starting with "Sum insured exceeding"
+                /(<a:t>)(Sum insured exceeding[^<]*underwriting[^<]*)(<\/a:t>)/gi,
+                // Pattern 2: Text with "Sum insured exceeding" (simpler)
+                /(<a:t>)(Sum insured exceeding[^<]*)(<\/a:t>)/gi,
+                // Pattern 3: After colon with Sum insured
+                /(<a:t>: )(Sum insured[^<]*)(<\/a:t>)/gi,
+                // Pattern 4: Any text containing "requires underwriting"
+                /(<a:t>)([^<]*requires underwriting[^<]*)(<\/a:t>)/gi
+            ];
+
+            let nonEvidenceUpdated = false;
+            for (const pattern of nonEvidencePatterns) {
+                if (slideXml.match(pattern)) {
+                    slideXml = slideXml.replace(pattern, `$1${nonEvidenceValue}$3`);
+                    console.log(`  ✅ Updated Non-evidence Limit`);
+                    results.updated.push({ field: 'Non-evidence Limit', value: slide8Data.nonEvidenceLimit.substring(0, 50) + '...' });
+                    nonEvidenceUpdated = true;
+                    break;
+                }
+            }
+
+            if (!nonEvidenceUpdated) {
+                console.log(`  ⚠️ Non-evidence Limit pattern not found in template`);
                 results.errors.push({ field: 'Non-evidence Limit', error: 'Pattern not found' });
             }
         }
