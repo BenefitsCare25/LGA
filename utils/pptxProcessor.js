@@ -801,46 +801,47 @@ function updateSlide9GDDTable(zip, slide9Data) {
 }
 
 /**
- * Update Slide 10 GHS table with data from placement slip
+ * Update Slide 12 GHS table with data from placement slip
+ * Note: GHS is on Slide 12, not Slide 10 (Slide 10 is GPA)
  * Structure is identical to Slides 8-9: EligibilityLast Entry Age, Basis of Cover, Non-evidence Limit
  * @param {Object} zip - PizZip instance
- * @param {Object} slide10Data - Data for slide 10 (eligibility, lastEntryAge, basisOfCover, nonEvidenceLimit)
+ * @param {Object} slide12Data - Data for slide 12 (eligibility, lastEntryAge, basisOfCover, nonEvidenceLimit)
  * @returns {Object} Results of the update operation
  */
-function updateSlide10GHSTable(zip, slide10Data) {
-    console.log('📝 Updating Slide 10 GHS Table...');
+function updateSlide12GHSTable(zip, slide12Data) {
+    console.log('📝 Updating Slide 12 GHS Table...');
 
     const results = {
         updated: [],
         errors: []
     };
 
-    if (!slide10Data) {
+    if (!slide12Data) {
         console.log('⚠️ No slide 10 data provided');
         return results;
     }
 
     // Debug: Log all incoming data
-    console.log('📋 Slide 10 Data received:');
-    console.log(`   - eligibility: "${slide10Data.eligibility?.substring(0, 60) || 'null'}..."`);
-    console.log(`   - lastEntryAge: "${slide10Data.lastEntryAge || 'null'}"`);
-    console.log(`   - basisOfCover: ${slide10Data.basisOfCover?.length || 0} items`);
-    console.log(`   - nonEvidenceLimit: "${slide10Data.nonEvidenceLimit?.substring(0, 60) || 'null'}..."`);
+    console.log('📋 Slide 12 Data received:');
+    console.log(`   - eligibility: "${slide12Data.eligibility?.substring(0, 60) || 'null'}..."`);
+    console.log(`   - lastEntryAge: "${slide12Data.lastEntryAge || 'null'}"`);
+    console.log(`   - basisOfCover: ${slide12Data.basisOfCover?.length || 0} items`);
+    console.log(`   - nonEvidenceLimit: "${slide12Data.nonEvidenceLimit?.substring(0, 60) || 'null'}..."`);
 
     try {
-        let slideXml = getSlideXML(zip, 10);
+        let slideXml = getSlideXML(zip, 12);
 
         // 1. Update Eligibility & Last Entry Age - Template has combined row "EligibilityLast Entry Age"
-        if (slide10Data.eligibility || slide10Data.lastEntryAge) {
+        if (slide12Data.eligibility || slide12Data.lastEntryAge) {
             console.log(`  🔍 Updating Eligibility/Last Entry Age combined row...`);
 
             let combinedValue = '';
-            if (slide10Data.eligibility) {
-                combinedValue = escapeXml(slide10Data.eligibility);
+            if (slide12Data.eligibility) {
+                combinedValue = escapeXml(slide12Data.eligibility);
             }
-            if (slide10Data.lastEntryAge) {
+            if (slide12Data.lastEntryAge) {
                 if (combinedValue) combinedValue += '\nLast Entry Age: ';
-                combinedValue += escapeXml(slide10Data.lastEntryAge);
+                combinedValue += escapeXml(slide12Data.lastEntryAge);
             }
 
             const combinedLabels = ['EligibilityLast Entry Age', 'Eligibility Last Entry Age', 'Eligibility/Last Entry Age'];
@@ -857,41 +858,41 @@ function updateSlide10GHSTable(zip, slide10Data) {
             if (combinedResult.success) {
                 slideXml = combinedResult.xml;
                 console.log(`  ✅ Updated Eligibility & Last Entry Age (combined row)`);
-                if (slide10Data.eligibility) {
-                    results.updated.push({ field: 'Eligibility', value: slide10Data.eligibility.substring(0, 50) + '...' });
+                if (slide12Data.eligibility) {
+                    results.updated.push({ field: 'Eligibility', value: slide12Data.eligibility.substring(0, 50) + '...' });
                 }
-                if (slide10Data.lastEntryAge) {
-                    results.updated.push({ field: 'Last Entry Age', value: slide10Data.lastEntryAge });
+                if (slide12Data.lastEntryAge) {
+                    results.updated.push({ field: 'Last Entry Age', value: slide12Data.lastEntryAge });
                 }
             } else {
-                console.log(`  ⚠️ Combined row not found in Slide 10`);
-                if (slide10Data.eligibility) {
+                console.log(`  ⚠️ Combined row not found in Slide 12`);
+                if (slide12Data.eligibility) {
                     results.errors.push({ field: 'Eligibility', error: 'Combined row not found in table' });
                 }
-                if (slide10Data.lastEntryAge) {
+                if (slide12Data.lastEntryAge) {
                     results.errors.push({ field: 'Last Entry Age', error: 'Combined row not found in table' });
                 }
             }
         }
 
         // 2. Update Basis of Cover - Use cell replacement approach
-        if (slide10Data.basisOfCover && slide10Data.basisOfCover.length > 0) {
-            console.log(`  🔄 Updating Basis of Cover with ${slide10Data.basisOfCover.length} entries...`);
+        if (slide12Data.basisOfCover && slide12Data.basisOfCover.length > 0) {
+            console.log(`  🔄 Updating Basis of Cover with ${slide12Data.basisOfCover.length} entries...`);
 
-            const basisResult = replaceBasisOfCoverCell(slideXml, slide10Data.basisOfCover);
+            const basisResult = replaceBasisOfCoverCell(slideXml, slide12Data.basisOfCover);
 
             if (basisResult.success) {
                 slideXml = basisResult.xml;
-                results.updated.push({ field: 'Basis of Cover', value: `${slide10Data.basisOfCover.length} categories` });
+                results.updated.push({ field: 'Basis of Cover', value: `${slide12Data.basisOfCover.length} categories` });
             } else {
-                console.log(`  ⚠️ Could not update Basis of Cover in Slide 10`);
+                console.log(`  ⚠️ Could not update Basis of Cover in Slide 12`);
                 results.errors.push({ field: 'Basis of Cover', error: 'Cell not found in table' });
             }
         }
 
-        // 3. Update Non-evidence Limit (may not exist in Slide 10)
-        if (slide10Data.nonEvidenceLimit) {
-            const nonEvidenceValue = escapeXml(slide10Data.nonEvidenceLimit);
+        // 3. Update Non-evidence Limit (may not exist in Slide 12)
+        if (slide12Data.nonEvidenceLimit) {
+            const nonEvidenceValue = escapeXml(slide12Data.nonEvidenceLimit);
             console.log(`  🔍 Updating Non-evidence Limit cell with: "${nonEvidenceValue.substring(0, 50)}..."`);
 
             const nonEvidenceResult = replaceTableCellByLabel(slideXml, 'Non-evidence Limit', nonEvidenceValue);
@@ -899,19 +900,19 @@ function updateSlide10GHSTable(zip, slide10Data) {
             if (nonEvidenceResult.success) {
                 slideXml = nonEvidenceResult.xml;
                 console.log(`  ✅ Updated Non-evidence Limit`);
-                results.updated.push({ field: 'Non-evidence Limit', value: slide10Data.nonEvidenceLimit.substring(0, 50) + '...' });
+                results.updated.push({ field: 'Non-evidence Limit', value: slide12Data.nonEvidenceLimit.substring(0, 50) + '...' });
             } else {
-                console.log(`  ⚠️ Non-evidence Limit row not found in Slide 10 (may not exist)`);
+                console.log(`  ⚠️ Non-evidence Limit row not found in Slide 12 (may not exist)`);
                 // Don't add to errors for slide 10 as this field may not exist
             }
         }
 
-        setSlideXML(zip, 10, slideXml);
-        console.log(`📝 Slide 10 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
+        setSlideXML(zip, 12, slideXml);
+        console.log(`📝 Slide 12 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
 
     } catch (error) {
-        console.error('❌ Error updating Slide 10:', error.message);
-        results.errors.push({ field: 'Slide 10', error: error.message });
+        console.error('❌ Error updating Slide 12:', error.message);
+        results.errors.push({ field: 'Slide 12', error: error.message });
     }
 
     return results;
@@ -1088,22 +1089,23 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Phase 4: Update Slide 10 - GHS Table (Group Hospital & Surgical)
-    if (placementData.slide10Data) {
-        console.log('📊 Processing Slide 10 GHS data...');
-        const slide10Results = updateSlide10GHSTable(zip, placementData.slide10Data);
+    // Phase 4: Update Slide 12 - GHS Table (Group Hospital & Surgical)
+    // Note: GHS is on Slide 12, not Slide 10 (Slide 10 is GPA)
+    if (placementData.slide12Data) {
+        console.log('📊 Processing Slide 12 GHS data...');
+        const slide12Results = updateSlide12GHSTable(zip, placementData.slide12Data);
 
-        for (const update of slide10Results.updated) {
+        for (const update of slide12Results.updated) {
             results.updatedSlides.push({
-                slide: 10,
+                slide: 12,
                 field: update.field,
                 value: update.value
             });
         }
 
-        for (const error of slide10Results.errors) {
+        for (const error of slide12Results.errors) {
             results.errors.push({
-                slide: 10,
+                slide: 12,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1250,7 +1252,7 @@ module.exports = {
     updateSlide1PeriodOfInsurance,
     updateSlide8GTLTable,
     updateSlide9GDDTable,
-    updateSlide10GHSTable,
+    updateSlide12GHSTable,
     generateBasisOfCoverParagraph,
     generateBasisOfCoverCellContent,
     escapeXml,

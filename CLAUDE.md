@@ -199,17 +199,17 @@ Row 4: "Non-evidence Limit" → Insurance limit value
 **Source**: Excel "GDD " sheet (note: sheet name has trailing space)
 **Template Structure**: Identical to Slide 8 - same 4-row table format
 
-#### ✅ Slide 10 - GHS (Group Hospital & Surgical) Table
+#### ✅ Slide 12 - GHS (Group Hospital & Surgical) Table
 | Field | Status | Notes |
 |-------|--------|-------|
 | Eligibility | ✅ | Combined row with Last Entry Age |
 | Last Entry Age | ✅ | Combined row with Eligibility |
-| Basis of Cover | ✅ | Bullet point pattern matching (multi-plan tiers) |
+| Basis of Cover | ✅ | Cell replacement with bullet points |
 | Non-evidence Limit | ⚠️ | May not exist in template |
 
 **Source**: Excel "GHS" sheet
-**Template Structure**: Identical to Slides 8-9 - same 4-row table format
-**Note**: Row 4 (Non-evidence Limit) may not exist in the template; code handles gracefully
+**Template Structure**: Same 4-row table format as Slides 8-9
+**Note**: GHS is on Slide 12, not Slide 10 (Slide 10 is GPA)
 
 ### API Endpoints
 - `POST /api/sharepoint-automation/process` - Process Excel and generate PowerPoint

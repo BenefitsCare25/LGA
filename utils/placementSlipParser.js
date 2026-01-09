@@ -458,7 +458,7 @@ function processPlacementSlip(buffer) {
             basisOfCover: gddData?.basisOfCover,
             nonEvidenceLimit: gddData?.nonEvidenceLimit
         },
-        slide10Data: {
+        slide12Data: {
             eligibility: ghsData?.eligibility,
             lastEntryAge: ghsData?.lastEntryAge,
             basisOfCover: ghsData?.basisOfCover,
