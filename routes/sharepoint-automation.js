@@ -806,4 +806,48 @@ router.post('/inspect-pptx', upload.single('pptxFile'), async (req, res) => {
     }
 });
 
+/**
+ * Inspect Slide 8 table structure from SharePoint template
+ */
+router.get('/inspect-slide8-tables', async (req, res) => {
+    try {
+        const accessToken = req.headers['x-access-token'] || req.query.accessToken;
+        if (!accessToken) {
+            return res.status(401).json({
+                success: false,
+                error: 'Access token required'
+            });
+        }
+
+        // Download template from SharePoint
+        const templatePath = `${CONFIG.TEMPLATE_FOLDER}/${CONFIG.TEMPLATE_FILENAME}`;
+        console.log('Downloading template for inspection:', templatePath);
+
+        const response = await graphClient
+            .api(`/me/drive/root:${templatePath}:/content`)
+            .header('Authorization', `Bearer ${accessToken}`)
+            .responseType('arraybuffer')
+            .get();
+
+        const templateBuffer = Buffer.from(response);
+        console.log('Template downloaded:', templateBuffer.length, 'bytes');
+
+        // Inspect slide 8 tables
+        const tableInfo = pptxProcessor.inspectSlide8Tables(templateBuffer);
+
+        res.json({
+            success: true,
+            templatePath: templatePath,
+            slide8Tables: tableInfo
+        });
+
+    } catch (error) {
+        console.error('Inspect Slide 8 error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
 module.exports = router;

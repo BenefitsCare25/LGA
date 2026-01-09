@@ -320,7 +320,12 @@ function replaceTableCellByLabel(xml, labelText, newValue) {
         console.log(`    ❌ Could not find row with label "${labelText}" (searched ${rowIndex} rows)`);
     }
 
-    return { xml: updatedXml, success };
+    // Return available labels for debugging
+    const availableLabels = allRows
+        .filter(r => r.cellCount >= 2 && r.labelCellText)
+        .map(r => r.labelCellText.substring(0, 40));
+
+    return { xml: updatedXml, success, availableLabels };
 }
 
 /**
@@ -385,39 +390,96 @@ function updateSlide8GTLTable(zip, slide8Data) {
     try {
         let slideXml = getSlideXML(zip, 8);
 
-        // 1. Update Eligibility value using cell-based mapping
-        if (slide8Data.eligibility) {
-            const eligibilityValue = escapeXml(slide8Data.eligibility);
-            console.log(`  🔍 Updating Eligibility cell with: "${eligibilityValue.substring(0, 50)}..."`);
+        // 1. Update Eligibility & Last Entry Age - Template has combined row "EligibilityLast Entry Age"
+        if (slide8Data.eligibility || slide8Data.lastEntryAge) {
+            console.log(`  🔍 Updating Eligibility/Last Entry Age combined row...`);
 
-            // Find row with "Eligibility" label and replace value in adjacent cell
-            const eligibilityResult = replaceTableCellByLabel(slideXml, 'Eligibility', eligibilityValue);
-
-            if (eligibilityResult.success) {
-                slideXml = eligibilityResult.xml;
-                console.log(`  ✅ Updated Eligibility`);
-                results.updated.push({ field: 'Eligibility', value: slide8Data.eligibility.substring(0, 50) + '...' });
-            } else {
-                console.log(`  ⚠️ Eligibility row not found in table`);
-                results.errors.push({ field: 'Eligibility', error: 'Row not found in table' });
+            // Build combined value: "Eligibility value\nLast Entry Age: age value"
+            let combinedValue = '';
+            if (slide8Data.eligibility) {
+                combinedValue = escapeXml(slide8Data.eligibility);
             }
-        }
+            if (slide8Data.lastEntryAge) {
+                if (combinedValue) combinedValue += '\nLast Entry Age: ';
+                combinedValue += escapeXml(slide8Data.lastEntryAge);
+            }
 
-        // 2. Update Last Entry Age value using cell-based mapping
-        if (slide8Data.lastEntryAge) {
-            const lastEntryAgeValue = escapeXml(slide8Data.lastEntryAge);
-            console.log(`  🔍 Updating Last Entry Age cell with: "${lastEntryAgeValue}"`);
+            // Try to find combined label first, then fall back to individual
+            const combinedLabels = ['EligibilityLast Entry Age', 'Eligibility Last Entry Age', 'Eligibility/Last Entry Age'];
+            let combinedResult = { success: false, xml: slideXml };
 
-            // Find row with "Last Entry Age" label and replace value in adjacent cell
-            const lastEntryAgeResult = replaceTableCellByLabel(slideXml, 'Last Entry Age', lastEntryAgeValue);
+            for (const label of combinedLabels) {
+                combinedResult = replaceTableCellByLabel(slideXml, label, combinedValue);
+                if (combinedResult.success) {
+                    console.log(`  📍 Found combined row with label: "${label}"`);
+                    break;
+                }
+            }
 
-            if (lastEntryAgeResult.success) {
-                slideXml = lastEntryAgeResult.xml;
-                console.log(`  ✅ Updated Last Entry Age`);
-                results.updated.push({ field: 'Last Entry Age', value: slide8Data.lastEntryAge });
+            if (combinedResult.success) {
+                slideXml = combinedResult.xml;
+                console.log(`  ✅ Updated Eligibility & Last Entry Age (combined row)`);
+                if (slide8Data.eligibility) {
+                    results.updated.push({ field: 'Eligibility', value: slide8Data.eligibility.substring(0, 50) + '...' });
+                }
+                if (slide8Data.lastEntryAge) {
+                    results.updated.push({ field: 'Last Entry Age', value: slide8Data.lastEntryAge });
+                }
             } else {
-                console.log(`  ⚠️ Last Entry Age row not found in table`);
-                results.errors.push({ field: 'Last Entry Age', error: 'Row not found in table' });
+                // Fall back to separate rows
+                console.log(`  🔄 Combined row not found, trying separate rows...`);
+
+                // Try Eligibility separately
+                if (slide8Data.eligibility) {
+                    const eligibilityValue = escapeXml(slide8Data.eligibility);
+                    const eligibilityLabels = ['Eligibility', 'Eligibility:'];
+                    let eligibilityResult = { success: false, xml: slideXml };
+
+                    for (const label of eligibilityLabels) {
+                        eligibilityResult = replaceTableCellByLabel(slideXml, label, eligibilityValue);
+                        if (eligibilityResult.success) break;
+                    }
+
+                    if (eligibilityResult.success) {
+                        slideXml = eligibilityResult.xml;
+                        console.log(`  ✅ Updated Eligibility`);
+                        results.updated.push({ field: 'Eligibility', value: slide8Data.eligibility.substring(0, 50) + '...' });
+                    } else {
+                        const availableLabels = eligibilityResult.availableLabels || [];
+                        console.log(`  ⚠️ Eligibility row not found. Available: ${availableLabels.join(', ')}`);
+                        results.errors.push({
+                            field: 'Eligibility',
+                            error: 'Row not found in table',
+                            hint: availableLabels.length > 0 ? `Available: ${availableLabels.slice(0, 5).join(', ')}` : 'No table rows found'
+                        });
+                    }
+                }
+
+                // Try Last Entry Age separately
+                if (slide8Data.lastEntryAge) {
+                    const lastEntryAgeValue = escapeXml(slide8Data.lastEntryAge);
+                    const lastEntryAgeLabels = ['Last Entry Age', 'Last Entry Age:'];
+                    let lastEntryAgeResult = { success: false, xml: slideXml };
+
+                    for (const label of lastEntryAgeLabels) {
+                        lastEntryAgeResult = replaceTableCellByLabel(slideXml, label, lastEntryAgeValue);
+                        if (lastEntryAgeResult.success) break;
+                    }
+
+                    if (lastEntryAgeResult.success) {
+                        slideXml = lastEntryAgeResult.xml;
+                        console.log(`  ✅ Updated Last Entry Age`);
+                        results.updated.push({ field: 'Last Entry Age', value: slide8Data.lastEntryAge });
+                    } else {
+                        const availableLabels = lastEntryAgeResult.availableLabels || [];
+                        console.log(`  ⚠️ Last Entry Age row not found. Available: ${availableLabels.join(', ')}`);
+                        results.errors.push({
+                            field: 'Last Entry Age',
+                            error: 'Row not found in table',
+                            hint: availableLabels.length > 0 ? `Available: ${availableLabels.slice(0, 5).join(', ')}` : 'No table rows found'
+                        });
+                    }
+                }
             }
         }
 
@@ -680,7 +742,8 @@ function processPPTX(pptxBuffer, placementData) {
             results.errors.push({
                 slide: 8,
                 field: error.field,
-                error: error.error
+                error: error.error,
+                hint: error.hint || null
             });
         }
     }
@@ -737,6 +800,84 @@ function inspectSlide(buffer, slideNumber) {
     };
 }
 
+/**
+ * Inspect slide 8 table structure for debugging
+ * @param {Buffer} buffer - PPTX file buffer
+ * @returns {Object} Table structure information
+ */
+function inspectSlide8Tables(buffer) {
+    const zip = readPPTX(buffer);
+    const xml = getSlideXML(zip, 8);
+
+    const result = {
+        tables: [],
+        relevantRows: []
+    };
+
+    // Find all tables
+    const tablePattern = /<a:tbl\b[^>]*>([\s\S]*?)<\/a:tbl>/g;
+    let tableMatch;
+    let tableNum = 0;
+
+    while ((tableMatch = tablePattern.exec(xml)) !== null) {
+        tableNum++;
+        const tableContent = tableMatch[1];
+        const tableInfo = {
+            tableNumber: tableNum,
+            rows: []
+        };
+
+        // Find all rows in this table
+        const rowPattern = /<a:tr\b[^>]*>([\s\S]*?)<\/a:tr>/g;
+        let rowMatch;
+
+        while ((rowMatch = rowPattern.exec(tableContent)) !== null) {
+            const rowContent = rowMatch[1];
+
+            // Extract cells from this row
+            const cellPattern = /<a:tc\b[^>]*>([\s\S]*?)<\/a:tc>/g;
+            const cells = [];
+            let cellMatch;
+
+            while ((cellMatch = cellPattern.exec(rowContent)) !== null) {
+                // Extract text from cell
+                const textPattern = /<a:t>([^<]*)<\/a:t>/g;
+                let cellText = '';
+                let textMatch;
+                while ((textMatch = textPattern.exec(cellMatch[1])) !== null) {
+                    cellText += textMatch[1];
+                }
+                cells.push(cellText.trim());
+            }
+
+            if (cells.length > 0) {
+                const rowInfo = {
+                    label: cells[0] || '',
+                    value: cells[1] || '',
+                    cellCount: cells.length
+                };
+                tableInfo.rows.push(rowInfo);
+
+                // Check for relevant fields
+                const labelLower = rowInfo.label.toLowerCase();
+                if (labelLower.includes('eligibility') ||
+                    labelLower.includes('entry age') ||
+                    labelLower.includes('evidence') ||
+                    labelLower.includes('basis')) {
+                    result.relevantRows.push({
+                        table: tableNum,
+                        ...rowInfo
+                    });
+                }
+            }
+        }
+
+        result.tables.push(tableInfo);
+    }
+
+    return result;
+}
+
 module.exports = {
     readPPTX,
     getSlideFiles,
@@ -754,5 +895,6 @@ module.exports = {
     getPPTXInfo,
     processPPTX,
     isValidPPTXBuffer,
-    inspectSlide
+    inspectSlide,
+    inspectSlide8Tables
 };
