@@ -293,6 +293,61 @@ function extractGTLData(sheet) {
 }
 
 /**
+ * Extract GDD (Group Dread Disease) specific data from the GDD sheet
+ * Sheet name has trailing space: "GDD "
+ * @param {Object} sheet - XLSX sheet object
+ * @returns {Object} GDD data including eligibility, last entry age, basis of cover, non-evidence limit
+ */
+function extractGDDData(sheet) {
+    if (!sheet) return null;
+
+    const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    console.log('📋 Extracting GDD data...');
+
+    // Extract individual fields (same structure as GTL)
+    const eligibility = extractFieldByLabel(data, 'eligibility :', 2);
+    const lastEntryAge = extractFieldByLabel(data, 'last entry age', 2);
+    const nonEvidenceLimit = extractFieldByLabel(data, 'non evidence limit', 2);
+
+    // Extract Basis of Cover - GDD typically has simpler structure
+    const basisOfCover = extractBasisOfCover(data);
+
+    return {
+        eligibility: eligibility,
+        lastEntryAge: lastEntryAge,
+        basisOfCover: basisOfCover,
+        nonEvidenceLimit: nonEvidenceLimit
+    };
+}
+
+/**
+ * Extract GHS (Group Hospital & Surgical) specific data from the GHS sheet
+ * @param {Object} sheet - XLSX sheet object
+ * @returns {Object} GHS data including eligibility, last entry age, basis of cover, non-evidence limit
+ */
+function extractGHSData(sheet) {
+    if (!sheet) return null;
+
+    const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    console.log('📋 Extracting GHS data...');
+
+    // Extract individual fields (same structure as GTL/GDD)
+    const eligibility = extractFieldByLabel(data, 'eligibility :', 2);
+    const lastEntryAge = extractFieldByLabel(data, 'last entry age', 2);
+    const nonEvidenceLimit = extractFieldByLabel(data, 'non evidence limit', 2);
+
+    // Extract Basis of Cover - GHS has multiple plan tiers
+    const basisOfCover = extractBasisOfCover(data);
+
+    return {
+        eligibility: eligibility,
+        lastEntryAge: lastEntryAge,
+        basisOfCover: basisOfCover,
+        nonEvidenceLimit: nonEvidenceLimit
+    };
+}
+
+/**
  * Extract all sheet data from workbook for future phases
  * @param {Object} workbook - XLSX workbook object
  * @returns {Object} Object with data from each sheet
@@ -356,12 +411,38 @@ function processPlacementSlip(buffer) {
         console.log(`   - Non-Evidence Limit: ${gtlData.nonEvidenceLimit ? 'Found' : 'Not found'}`);
     }
 
+    // Extract GDD-specific data for Slide 9 (note: sheet name has trailing space)
+    const gddSheet = workbook.Sheets['GDD '] || workbook.Sheets['GDD'];
+    const gddData = extractGDDData(gddSheet);
+
+    if (gddData) {
+        console.log('✅ GDD Data extracted successfully');
+        console.log(`   - Eligibility: ${gddData.eligibility ? 'Found' : 'Not found'}`);
+        console.log(`   - Last Entry Age: ${gddData.lastEntryAge ? 'Found' : 'Not found'}`);
+        console.log(`   - Basis of Cover: ${gddData.basisOfCover?.length || 0} entries`);
+        console.log(`   - Non-Evidence Limit: ${gddData.nonEvidenceLimit ? 'Found' : 'Not found'}`);
+    }
+
+    // Extract GHS-specific data for Slide 10
+    const ghsSheet = workbook.Sheets['GHS'];
+    const ghsData = extractGHSData(ghsSheet);
+
+    if (ghsData) {
+        console.log('✅ GHS Data extracted successfully');
+        console.log(`   - Eligibility: ${ghsData.eligibility ? 'Found' : 'Not found'}`);
+        console.log(`   - Last Entry Age: ${ghsData.lastEntryAge ? 'Found' : 'Not found'}`);
+        console.log(`   - Basis of Cover: ${ghsData.basisOfCover?.length || 0} entries`);
+        console.log(`   - Non-Evidence Limit: ${ghsData.nonEvidenceLimit ? 'Found' : 'Not found'}`);
+    }
+
     return {
         success: true,
         periodOfInsurance: periodOfInsurance,
         sheets: workbook.SheetNames,
         sheetData: allSheetData,
         gtlData: gtlData,
+        gddData: gddData,
+        ghsData: ghsData,
         slide1Data: {
             periodOfInsurance: periodOfInsurance
         },
@@ -370,6 +451,18 @@ function processPlacementSlip(buffer) {
             lastEntryAge: gtlData?.lastEntryAge,
             basisOfCover: gtlData?.basisOfCover,
             nonEvidenceLimit: gtlData?.nonEvidenceLimit
+        },
+        slide9Data: {
+            eligibility: gddData?.eligibility,
+            lastEntryAge: gddData?.lastEntryAge,
+            basisOfCover: gddData?.basisOfCover,
+            nonEvidenceLimit: gddData?.nonEvidenceLimit
+        },
+        slide10Data: {
+            eligibility: ghsData?.eligibility,
+            lastEntryAge: ghsData?.lastEntryAge,
+            basisOfCover: ghsData?.basisOfCover,
+            nonEvidenceLimit: ghsData?.nonEvidenceLimit
         }
     };
 }
@@ -394,6 +487,8 @@ module.exports = {
     formatDateRange,
     extractAllSheetData,
     extractGTLData,
+    extractGDDData,
+    extractGHSData,
     extractFieldByLabel,
     extractBasisOfCover,
     processPlacementSlip,

@@ -188,11 +188,34 @@ Row 4: "Non-evidence Limit" → Insurance limit value
 1. First trying combined label match
 2. Falling back to separate row matching if combined not found
 
+#### ✅ Slide 9 - GDD (Group Dread Disease) Table
+| Field | Status | Notes |
+|-------|--------|-------|
+| Eligibility | ✅ | Combined row with Last Entry Age |
+| Last Entry Age | ✅ | Combined row with Eligibility |
+| Basis of Cover | ✅ | Bullet point pattern matching |
+| Non-evidence Limit | ✅ | Table cell replacement |
+
+**Source**: Excel "GDD " sheet (note: sheet name has trailing space)
+**Template Structure**: Identical to Slide 8 - same 4-row table format
+
+#### ✅ Slide 10 - GHS (Group Hospital & Surgical) Table
+| Field | Status | Notes |
+|-------|--------|-------|
+| Eligibility | ✅ | Combined row with Last Entry Age |
+| Last Entry Age | ✅ | Combined row with Eligibility |
+| Basis of Cover | ✅ | Bullet point pattern matching (multi-plan tiers) |
+| Non-evidence Limit | ⚠️ | May not exist in template |
+
+**Source**: Excel "GHS" sheet
+**Template Structure**: Identical to Slides 8-9 - same 4-row table format
+**Note**: Row 4 (Non-evidence Limit) may not exist in the template; code handles gracefully
+
 ### API Endpoints
 - `POST /api/sharepoint-automation/process` - Process Excel and generate PowerPoint
 - `GET /api/sharepoint-automation/check-new-files` - Check for pending Excel files
 - `GET /api/sharepoint-automation/inspect-slide8-tables` - Debug endpoint for template inspection
 
 ### Future Phases
-- Slide 9-11: Additional insurance product details (GDD, GHS, GMM, etc.)
+- Slide 11: Additional insurance product details (GMM, GP, SP, Dental, GPA)
 - Webhook integration for automatic processing when new files uploaded
