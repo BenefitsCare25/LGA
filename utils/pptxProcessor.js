@@ -2394,6 +2394,102 @@ function updateCellTextByIndex(rowXml, cells, cellIndex, newValue) {
 }
 
 /**
+ * Update a cell with multiple paragraphs - one value per paragraph
+ * Used for rows that have main benefit + sub-item combined (e.g., "Post Hospitalisation" + "from")
+ * @param {string} rowXml - Full row XML
+ * @param {Array} cells - Array of cell objects from extractCellsFromRow
+ * @param {number} cellIndex - Index of cell to update
+ * @param {Array} values - Array of values, one per paragraph
+ * @returns {string} Updated row XML
+ */
+function updateCellWithMultipleParagraphs(rowXml, cells, cellIndex, values) {
+    if (cellIndex >= cells.length || !values || values.length === 0) return rowXml;
+
+    // Re-extract the cell at this index from the current rowXml
+    const cellPattern = /<a:tc\b[^>]*>([\s\S]*?)<\/a:tc>/g;
+    let match;
+    let currentIdx = 0;
+    let pos = -1;
+    let cell = null;
+
+    while ((match = cellPattern.exec(rowXml)) !== null) {
+        if (currentIdx === cellIndex) {
+            pos = match.index;
+            cell = {
+                full: match[0],
+                content: match[1]
+            };
+            break;
+        }
+        currentIdx++;
+    }
+
+    if (pos === -1 || !cell) return rowXml;
+
+    // Find all paragraphs in the cell
+    const paraPattern = /<a:p\b[^>]*>([\s\S]*?)<\/a:p>/g;
+    const paragraphs = [];
+    let paraMatch;
+
+    while ((paraMatch = paraPattern.exec(cell.content)) !== null) {
+        // Check if paragraph has any text runs
+        if (paraMatch[0].includes('<a:r>')) {
+            paragraphs.push({
+                full: paraMatch[0],
+                content: paraMatch[1],
+                index: paraMatch.index
+            });
+        }
+    }
+
+    if (paragraphs.length === 0) return rowXml;
+
+    let newCellContent = cell.content;
+
+    // Update each paragraph with corresponding value
+    for (let i = 0; i < paragraphs.length && i < values.length; i++) {
+        const para = paragraphs[i];
+        const value = values[i];
+
+        if (!value) continue;
+
+        const escapedValue = escapeXml(value);
+        const safeValue = escapedValue.replace(/\$/g, '$$$$');
+
+        // Find all runs in this paragraph
+        const runPattern = /<a:r>([\s\S]*?)<\/a:r>/g;
+        const runs = [];
+        let runMatch;
+
+        while ((runMatch = runPattern.exec(para.full)) !== null) {
+            if (runMatch[0].includes('<a:t>')) {
+                runs.push({
+                    full: runMatch[0],
+                    content: runMatch[1]
+                });
+            }
+        }
+
+        if (runs.length > 0) {
+            // Update first run with new value
+            const firstRun = runs[0];
+            const updatedFirstRun = firstRun.full.replace(/<a:t>[^<]*<\/a:t>/, `<a:t>${safeValue}</a:t>`);
+            let newPara = para.full.replace(firstRun.full, updatedFirstRun);
+
+            // Remove subsequent runs in this paragraph (consolidate text)
+            for (let j = 1; j < runs.length; j++) {
+                newPara = newPara.replace(runs[j].full, '');
+            }
+
+            newCellContent = newCellContent.replace(para.full, newPara);
+        }
+    }
+
+    const newCell = cell.full.replace(cell.content, newCellContent);
+    return rowXml.substring(0, pos) + newCell + rowXml.substring(pos + cell.full.length);
+}
+
+/**
  * Helper function to format benefit values (add thousands separators if numeric)
  * @param {string} value - Raw value from Excel
  * @returns {string} Formatted value
@@ -2433,6 +2529,7 @@ function updateSlide19GMMOverview(zip, slide19Data) {
     console.log('📋 Slide 19 Data received:');
     console.log(`   - eligibility: "${slide19Data.eligibility?.substring(0, 60) || 'null'}..."`);
     console.log(`   - lastEntryAge: "${slide19Data.lastEntryAge || 'null'}"`);
+    console.log(`   - categoryPlans: ${slide19Data.categoryPlans?.length || 0} entries`);
 
     try {
         let slideXml = getSlideXML(zip, 19);
@@ -2459,6 +2556,77 @@ function updateSlide19GMMOverview(zip, slide19Data) {
                 if (slide19Data.eligibility) {
                     results.errors.push({ field: 'Eligibility', error: 'Cell not found' });
                 }
+            }
+        }
+
+        // Update Category/Plan table
+        if (slide19Data.categoryPlans && slide19Data.categoryPlans.length > 0) {
+            console.log(`  🔄 Updating Category/Plan table with ${slide19Data.categoryPlans.length} entries...`);
+
+            // Find the Category/Plan table (second table, contains "Category" and "Plan" headers)
+            const tablePattern = /<a:tbl\b[^>]*>([\s\S]*?)<\/a:tbl>/g;
+            let tableMatch;
+            let tableIdx = 0;
+
+            while ((tableMatch = tablePattern.exec(slideXml)) !== null) {
+                const tableContent = tableMatch[1];
+
+                // Check if this table has Category/Plan headers
+                if (tableContent.toLowerCase().includes('category') && tableContent.toLowerCase().includes('plan')) {
+                    console.log(`    📍 Found Category/Plan table (table ${tableIdx})`);
+
+                    let updatedTableContent = tableContent;
+                    const rowPattern = /<a:tr\b[^>]*>([\s\S]*?)<\/a:tr>/g;
+                    let rowMatch;
+                    let rowIdx = 0;
+                    let dataRowIdx = 0;
+
+                    while ((rowMatch = rowPattern.exec(tableContent)) !== null) {
+                        const row = {
+                            full: rowMatch[0],
+                            content: rowMatch[1]
+                        };
+
+                        // Extract cells from row
+                        const cells = extractCellsFromRow(row.full);
+
+                        // Skip header row (row 0)
+                        if (rowIdx === 0) {
+                            rowIdx++;
+                            continue;
+                        }
+
+                        // Update data rows with Excel category/plan data
+                        if (dataRowIdx < slide19Data.categoryPlans.length) {
+                            const excelData = slide19Data.categoryPlans[dataRowIdx];
+                            let newRow = row.full;
+
+                            // Update category (column 0)
+                            if (excelData.category) {
+                                newRow = updateCellTextByIndex(newRow, cells, 0, excelData.category);
+                            }
+
+                            // Update plan (last column)
+                            if (excelData.plan) {
+                                const planColIndex = cells.length - 1;
+                                newRow = updateCellTextByIndex(newRow, cells, planColIndex, excelData.plan);
+                            }
+
+                            updatedTableContent = updatedTableContent.replace(row.full, newRow);
+                            console.log(`    ✅ Row ${rowIdx}: "${excelData.category.substring(0, 40)}..." → ${excelData.plan}`);
+                            results.updated.push({ field: `Category ${dataRowIdx + 1}`, value: excelData.plan });
+                            dataRowIdx++;
+                        }
+
+                        rowIdx++;
+                    }
+
+                    // Replace table in XML
+                    const updatedTable = tableMatch[0].replace(tableContent, updatedTableContent);
+                    slideXml = slideXml.replace(tableMatch[0], updatedTable);
+                    break;
+                }
+                tableIdx++;
             }
         }
 
@@ -2558,33 +2726,58 @@ function updateSlide20GMMScheduleOfBenefits(zip, slide20Data) {
                 const isMainBenefitRow = !isNaN(rowNumber) && rowNumber >= 1 && rowNumber <= 20;
 
                 if (isMainBenefitRow) {
-                    // Find matching benefit by number or name
+                    // Find matching benefit by NAME first, then fall back to number
+                    // This handles cases where PPTX and Excel have different benefit numbering
                     const matchedBenefit = scheduleData.benefits?.find(b => {
-                        // Match by number
-                        if (b.number === rowNumber) return true;
-                        // Match by name pattern
                         const benefitNameLower = (b.rawName || b.name || '').toLowerCase();
-                        return cell1Text.includes(benefitNameLower.substring(0, 15)) ||
-                               benefitNameLower.includes(cell1Text.substring(0, 15));
-                    });
+                        // Match by name pattern first (more reliable)
+                        if (cell1Text.includes(benefitNameLower.substring(0, 15)) ||
+                            benefitNameLower.includes(cell1Text.substring(0, 15))) {
+                            return true;
+                        }
+                        // Fall back to number matching only if names don't match
+                        return false;
+                    }) || scheduleData.benefits?.find(b => b.number === rowNumber);
 
                     if (matchedBenefit) {
                         currentBenefit = matchedBenefit;
                         let newRow = row.full;
 
+                        // Check if this row also contains a sub-item (combined row like "Post Hospitalisation" + "from")
+                        // This happens when cell1 contains both benefit name AND sub-item name
+                        const combinedSubItem = matchedBenefit.subItems?.find(si => {
+                            const subNameLower = (si.name || '').toLowerCase();
+                            // Check if the sub-item name appears in the row's description column
+                            return cell1Text.includes(subNameLower.substring(0, 10));
+                        });
+
                         // Update plan value columns (starting from column 6)
                         for (let p = 0; p < scheduleData.planHeaders.length && (6 + p) < cells.length; p++) {
                             const planHeader = scheduleData.planHeaders[p];
-                            const value = matchedBenefit.values?.[planHeader] || '';
-                            if (value) {
-                                const pptxColIndex = 6 + p;
-                                newRow = updateCellTextByIndex(newRow, cells, pptxColIndex, formatBenefitValue(value));
+                            const mainValue = matchedBenefit.values?.[planHeader] || '';
+                            const pptxColIndex = 6 + p;
+
+                            if (combinedSubItem) {
+                                // Combined row - use multi-paragraph update
+                                const subValue = combinedSubItem.values?.[planHeader] || '';
+                                const values = [
+                                    formatBenefitValue(mainValue),
+                                    formatBenefitValue(subValue)
+                                ];
+                                newRow = updateCellWithMultipleParagraphs(newRow, cells, pptxColIndex, values);
+                            } else if (mainValue) {
+                                // Single value row
+                                newRow = updateCellTextByIndex(newRow, cells, pptxColIndex, formatBenefitValue(mainValue));
                             }
                         }
 
                         updatedTableContent = updatedTableContent.replace(row.full, newRow);
                         results.updated.push({ field: `Benefit ${rowNumber}`, value: matchedBenefit.name });
-                        console.log(`    ✅ Updated Benefit ${rowNumber}: ${matchedBenefit.name.substring(0, 30)}...`);
+                        if (combinedSubItem) {
+                            console.log(`    ✅ Updated Benefit ${rowNumber}: ${matchedBenefit.name.substring(0, 30)}... (with sub-item: ${combinedSubItem.name})`);
+                        } else {
+                            console.log(`    ✅ Updated Benefit ${rowNumber}: ${matchedBenefit.name.substring(0, 30)}...`);
+                        }
                     }
                 }
                 // Check if this is a sub-item row (no number, but has content in col 1)

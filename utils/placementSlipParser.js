@@ -545,11 +545,82 @@ function extractGMMData(sheet) {
     // Extract Schedule of Benefits with dynamic plan handling
     const scheduleOfBenefits = extractGMMScheduleOfBenefits(data);
 
+    // Extract Category/Plan table for Slide 19
+    const categoryPlans = extractGMMCategoryPlans(data);
+
     return {
         eligibility: eligibility,
         lastEntryAge: lastEntryAge,
-        scheduleOfBenefits: scheduleOfBenefits
+        scheduleOfBenefits: scheduleOfBenefits,
+        categoryPlans: categoryPlans
     };
+}
+
+/**
+ * Extract GMM Category/Plan table for Slide 19
+ * Dynamically extracts categories and their corresponding plans
+ * Excludes suffix plans (ending with "S" like 1AS, 1BS, 2AS, 2BS, 3S)
+ * @param {Array} data - Sheet data as 2D array
+ * @returns {Array} Array of {category, plan} objects
+ */
+function extractGMMCategoryPlans(data) {
+    console.log('  🔍 Extracting GMM Category/Plan table...');
+
+    const categoryPlans = [];
+    let foundBasisOfCover = false;
+    let headerRow = -1;
+
+    for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        if (!row) continue;
+
+        const colA = String(row[0] || '').trim().toLowerCase();
+
+        // Find "Basis of Cover" header
+        if (colA.includes('basis of cover')) {
+            foundBasisOfCover = true;
+            console.log(`    📍 Found "Basis of Cover" at row ${i + 1}`);
+            continue;
+        }
+
+        // Stop at "Rate" section
+        if (foundBasisOfCover && colA.includes('rate')) {
+            console.log(`    🛑 Stopping at row ${i + 1} (found Rate section)`);
+            break;
+        }
+
+        // Skip header row (contains "Category" and "Plan")
+        if (foundBasisOfCover) {
+            const colD = String(row[3] || '').trim();
+            const colJ = String(row[9] || '').trim();
+
+            if (colD.toLowerCase() === 'category' && colJ.toLowerCase() === 'plan') {
+                headerRow = i;
+                continue;
+            }
+
+            // Extract category and plan (skip if empty or suffix plan)
+            if (colD && colJ && headerRow >= 0) {
+                // Exclude suffix plans (ending with "S" like 1AS, 1BS, 2AS, 2BS, 3S)
+                // Main plans end with numbers like 1A1, 1B1, 2A1, 2B1, 3.1
+                const planUpper = colJ.toUpperCase();
+                const isSuffixPlan = planUpper.endsWith('S') && !planUpper.endsWith('BS1');
+
+                if (!isSuffixPlan) {
+                    categoryPlans.push({
+                        category: colD,
+                        plan: colJ
+                    });
+                    console.log(`    📊 Category: "${colD.substring(0, 40)}..." → Plan: ${colJ}`);
+                } else {
+                    console.log(`    ⏭️ Skipping suffix plan: ${colJ}`);
+                }
+            }
+        }
+    }
+
+    console.log(`  ✅ Extracted ${categoryPlans.length} GMM category/plan entries`);
+    return categoryPlans;
 }
 
 /**
@@ -880,7 +951,8 @@ function processPlacementSlip(buffer) {
         // Slide 19: GMM Overview (Eligibility, Last Entry Age)
         slide19Data: {
             eligibility: gmmData?.eligibility,
-            lastEntryAge: gmmData?.lastEntryAge
+            lastEntryAge: gmmData?.lastEntryAge,
+            categoryPlans: gmmData?.categoryPlans
         },
         // Slide 20: GMM Schedule of Benefits
         slide20Data: {
