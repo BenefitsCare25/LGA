@@ -1718,11 +1718,11 @@ function updateSlide15ScheduleOfBenefits(zip, slide15Data) {
                 for (const subItem of benefit.subItems || []) {
                     const subNameLower = subItem.name.toLowerCase();
 
-                    // Hospital Miscellaneous: "Include Implants" -> actual value
+                    // Hospital Miscellaneous: Remove standalone "Include Implants" placeholder
+                    // (The actual value is already set in the plan columns via sub-item matching)
                     if (subNameLower.includes('hospital miscellaneous') && subItem.plan1Value) {
-                        if (subItem.plan1Value.toLowerCase().includes('exclude')) {
-                            directReplacements.push({ from: 'Include Implants', to: subItem.plan1Value });
-                        }
+                        // Remove the standalone placeholder text, don't replace it
+                        directReplacements.push({ from: 'Include Implants', to: '' });
                     }
 
                     // Surgical Schedule: "S$1,500" -> actual value
