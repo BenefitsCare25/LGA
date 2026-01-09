@@ -1609,6 +1609,9 @@ function updateSlide15ScheduleOfBenefits(zip, slide15Data) {
 
             console.log(`  📊 Found ${rows.length} rows in table`);
 
+            // Track current benefit section for proper sub-item matching
+            let currentBenefitNumber = null;
+
             // Process each row and update plan values
             for (let i = 0; i < rows.length; i++) {
                 const row = rows[i];
@@ -1631,9 +1634,12 @@ function updateSlide15ScheduleOfBenefits(zip, slide15Data) {
                         }
                     }
 
-                    // Update benefit rows by matching row number
+                    // Update benefit rows by matching row number and track current section
                     for (const benefit of scheduleData.benefits || []) {
                         if (cells[0].text.trim() === String(benefit.number)) {
+                            // Track that we're now in this benefit's section
+                            currentBenefitNumber = benefit.number;
+
                             let newRow = row.full;
 
                             // Update plan values in cells 10, 11, 12
@@ -1655,12 +1661,18 @@ function updateSlide15ScheduleOfBenefits(zip, slide15Data) {
                     }
 
                     // Update sub-item rows (Maximum no. of days, Hospital Misc, etc.)
+                    // Only match sub-items from the current benefit section to avoid cross-contamination
                     const rowText = cells.map(c => c.text).join(' ').toLowerCase();
                     const cell0Text = cells[0].text.trim().toLowerCase();
                     const cell1Text = cells[1]?.text.trim().toLowerCase() || '';
 
-                    for (const benefit of scheduleData.benefits || []) {
-                        for (const subItem of benefit.subItems || []) {
+                    // Find the current benefit's sub-items
+                    const currentBenefit = currentBenefitNumber
+                        ? (scheduleData.benefits || []).find(b => b.number === currentBenefitNumber)
+                        : null;
+
+                    if (currentBenefit && currentBenefit.subItems) {
+                        for (const subItem of currentBenefit.subItems) {
                             const subNameLower = subItem.name.toLowerCase();
                             const subIdentifier = (subItem.identifier || '').toLowerCase().replace(/\s/g, '');
                             const cell0Normalized = cell0Text.replace(/\s/g, '');
@@ -1815,15 +1827,21 @@ function updateSlide16ScheduleOfBenefits(zip, slide16Data) {
 
             console.log(`  📊 Found ${rows.length} rows in table`);
 
+            // Track current benefit section for proper sub-item matching
+            let currentBenefitNumber = null;
+
             // Process each row and update plan values
             for (let i = 0; i < rows.length; i++) {
                 const row = rows[i];
                 const cells = extractCellsFromRow(row.content);
 
                 if (cells.length >= 15) {
-                    // Update benefit rows by matching row number (7-15)
+                    // Update benefit rows by matching row number (7-15) and track current section
                     for (const benefit of scheduleData.benefits || []) {
                         if (benefit.number >= 7 && cells[0].text.trim() === String(benefit.number)) {
+                            // Track that we're now in this benefit's section
+                            currentBenefitNumber = benefit.number;
+
                             let newRow = row.full;
 
                             // Slide 16 uses columns 12, 13, 14 for plan values
@@ -1844,13 +1862,17 @@ function updateSlide16ScheduleOfBenefits(zip, slide16Data) {
                         }
                     }
 
-                    // Update sub-item rows for benefits 7-15 (Pre-existing, etc.)
+                    // Update sub-item rows for current benefit section only
                     const rowText = cells.map(c => c.text).join(' ').toLowerCase();
                     const cell0Text = cells[0].text.trim().toLowerCase();
 
-                    for (const benefit of scheduleData.benefits || []) {
-                        if (benefit.number < 7) continue; // Only process benefits 7-15 sub-items
-                        for (const subItem of benefit.subItems || []) {
+                    // Find the current benefit's sub-items (only for benefits 7-15)
+                    const currentBenefit = (currentBenefitNumber && currentBenefitNumber >= 7)
+                        ? (scheduleData.benefits || []).find(b => b.number === currentBenefitNumber)
+                        : null;
+
+                    if (currentBenefit && currentBenefit.subItems) {
+                        for (const subItem of currentBenefit.subItems) {
                             const subNameLower = subItem.name.toLowerCase();
                             const subIdentifier = (subItem.identifier || '').toLowerCase().replace(/\s/g, '');
                             const cell0Normalized = cell0Text.replace(/\s/g, '');
