@@ -919,6 +919,108 @@ function updateSlide12GHSTable(zip, slide12Data) {
 }
 
 /**
+ * Update Slide 10 GPA table with data from placement slip
+ * Note: GPA is on Slide 10, structure is similar to GTL/GDD/GHS but NO Non-evidence Limit
+ * Slide 11 is static informational content (no data mapping needed)
+ * @param {Object} zip - PizZip instance
+ * @param {Object} slide10Data - Data for slide 10 (eligibility, lastEntryAge, basisOfCover)
+ * @returns {Object} Results of the update operation
+ */
+function updateSlide10GPATable(zip, slide10Data) {
+    console.log('📝 Updating Slide 10 GPA Table...');
+
+    const results = {
+        updated: [],
+        errors: []
+    };
+
+    if (!slide10Data) {
+        console.log('⚠️ No slide 10 data provided');
+        return results;
+    }
+
+    // Debug: Log all incoming data
+    console.log('📋 Slide 10 Data received:');
+    console.log(`   - eligibility: "${slide10Data.eligibility?.substring(0, 60) || 'null'}..."`);
+    console.log(`   - lastEntryAge: "${slide10Data.lastEntryAge || 'null'}"`);
+    console.log(`   - basisOfCover: ${slide10Data.basisOfCover?.length || 0} items`);
+
+    try {
+        let slideXml = getSlideXML(zip, 10);
+
+        // 1. Update Eligibility & Last Entry Age - Template has combined row "EligibilityLast Entry Age"
+        if (slide10Data.eligibility || slide10Data.lastEntryAge) {
+            console.log(`  🔍 Updating Eligibility/Last Entry Age combined row...`);
+
+            let combinedValue = '';
+            if (slide10Data.eligibility) {
+                combinedValue = escapeXml(slide10Data.eligibility);
+            }
+            if (slide10Data.lastEntryAge) {
+                if (combinedValue) combinedValue += '\nLast Entry Age: ';
+                combinedValue += escapeXml(slide10Data.lastEntryAge);
+            }
+
+            const combinedLabels = ['EligibilityLast Entry Age', 'Eligibility Last Entry Age', 'Eligibility/Last Entry Age'];
+            let combinedResult = { success: false, xml: slideXml };
+
+            for (const label of combinedLabels) {
+                combinedResult = replaceTableCellByLabel(slideXml, label, combinedValue);
+                if (combinedResult.success) {
+                    console.log(`  📍 Found combined row with label: "${label}"`);
+                    break;
+                }
+            }
+
+            if (combinedResult.success) {
+                slideXml = combinedResult.xml;
+                console.log(`  ✅ Updated Eligibility & Last Entry Age (combined row)`);
+                if (slide10Data.eligibility) {
+                    results.updated.push({ field: 'Eligibility', value: slide10Data.eligibility.substring(0, 50) + '...' });
+                }
+                if (slide10Data.lastEntryAge) {
+                    results.updated.push({ field: 'Last Entry Age', value: slide10Data.lastEntryAge });
+                }
+            } else {
+                console.log(`  ⚠️ Combined row not found in Slide 10`);
+                if (slide10Data.eligibility) {
+                    results.errors.push({ field: 'Eligibility', error: 'Combined row not found in table' });
+                }
+                if (slide10Data.lastEntryAge) {
+                    results.errors.push({ field: 'Last Entry Age', error: 'Combined row not found in table' });
+                }
+            }
+        }
+
+        // 2. Update Basis of Cover - Use cell replacement approach
+        if (slide10Data.basisOfCover && slide10Data.basisOfCover.length > 0) {
+            console.log(`  🔄 Updating Basis of Cover with ${slide10Data.basisOfCover.length} entries...`);
+
+            const basisResult = replaceBasisOfCoverCell(slideXml, slide10Data.basisOfCover);
+
+            if (basisResult.success) {
+                slideXml = basisResult.xml;
+                results.updated.push({ field: 'Basis of Cover', value: `${slide10Data.basisOfCover.length} categories` });
+            } else {
+                console.log(`  ⚠️ Could not update Basis of Cover in Slide 10`);
+                results.errors.push({ field: 'Basis of Cover', error: 'Cell not found in table' });
+            }
+        }
+
+        // Note: GPA does NOT have Non-evidence Limit (unlike GTL, GDD, GHS)
+
+        setSlideXML(zip, 10, slideXml);
+        console.log(`📝 Slide 10 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
+
+    } catch (error) {
+        console.error('❌ Error updating Slide 10:', error.message);
+        results.errors.push({ field: 'Slide 10', error: error.message });
+    }
+
+    return results;
+}
+
+/**
  * Find text in slide XML and return its location
  * @param {string} xml - Slide XML content
  * @param {string} searchText - Text to find
@@ -1089,8 +1191,30 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Phase 4: Update Slide 12 - GHS Table (Group Hospital & Surgical)
-    // Note: GHS is on Slide 12, not Slide 10 (Slide 10 is GPA)
+    // Phase 4: Update Slide 10 - GPA Table (Group Personal Accident)
+    if (placementData.slide10Data) {
+        console.log('📊 Processing Slide 10 GPA data...');
+        const slide10Results = updateSlide10GPATable(zip, placementData.slide10Data);
+
+        for (const update of slide10Results.updated) {
+            results.updatedSlides.push({
+                slide: 10,
+                field: update.field,
+                value: update.value
+            });
+        }
+
+        for (const error of slide10Results.errors) {
+            results.errors.push({
+                slide: 10,
+                field: error.field,
+                error: error.error,
+                hint: error.hint || null
+            });
+        }
+    }
+
+    // Phase 5: Update Slide 12 - GHS Table (Group Hospital & Surgical)
     if (placementData.slide12Data) {
         console.log('📊 Processing Slide 12 GHS data...');
         const slide12Results = updateSlide12GHSTable(zip, placementData.slide12Data);
@@ -1252,6 +1376,7 @@ module.exports = {
     updateSlide1PeriodOfInsurance,
     updateSlide8GTLTable,
     updateSlide9GDDTable,
+    updateSlide10GPATable,
     updateSlide12GHSTable,
     generateBasisOfCoverParagraph,
     generateBasisOfCoverCellContent,

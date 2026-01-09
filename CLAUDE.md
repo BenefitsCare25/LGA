@@ -199,6 +199,26 @@ Row 4: "Non-evidence Limit" → Insurance limit value
 **Source**: Excel "GDD " sheet (note: sheet name has trailing space)
 **Template Structure**: Identical to Slide 8 - same 4-row table format
 
+#### ✅ Slide 10 - GPA (Group Personal Accident) Table
+| Field | Status | Notes |
+|-------|--------|-------|
+| Eligibility | ✅ | Combined row with Last Entry Age |
+| Last Entry Age | ✅ | Combined row with Eligibility |
+| Basis of Cover | ✅ | Cell replacement with bullet points |
+
+**Source**: Excel "GPA" sheet (Category in col 3, Basis in col 6)
+**Template Structure**: 3-row table (no Non-evidence Limit row)
+```
+Row 1: "24 Hours-Worldwide" (header)
+Row 2: "EligibilityLast Entry Age" → Combined eligibility + last entry age
+Row 3: "Basis of Cover" → Bullet points with category: basis format
+```
+**Note**: GPA does NOT have Non-evidence Limit field (unlike GTL, GDD, GHS)
+
+#### ℹ️ Slide 11 - GPA Additional Features (Static)
+Static informational slide describing GPA benefits - no data mapping needed.
+Contains descriptions of: Comatose State, Fractures, TCM Treatment, Mobility Extensions, Burns Benefits, Child Education Fund, Ambulance Costs.
+
 #### ✅ Slide 12 - GHS (Group Hospital & Surgical) Table
 | Field | Status | Notes |
 |-------|--------|-------|
@@ -218,7 +238,8 @@ Row 4: "Non-evidence Limit" → Insurance limit value
 | 6-7 | GTL Overview | - | N/A (static) |
 | 8 | GTL (Group Term Life) | GTL | ✅ Done |
 | 9 | GDD (Group Dread Disease) | GDD | ✅ Done |
-| 10-11 | GPA (Group Personal Accident) | GPA | ⏳ Pending |
+| 10 | GPA (Group Personal Accident) | GPA | ✅ Done |
+| 11 | GPA Additional Features | - | N/A (static) |
 | 12-15 | GHS (Group Hospital & Surgical) | GHS | ✅ Done (Slide 12) |
 
 ### API Endpoints
@@ -227,7 +248,6 @@ Row 4: "Non-evidence Limit" → Insurance limit value
 - `GET /api/sharepoint-automation/inspect-slide8-tables` - Debug endpoint for template inspection
 
 ### Future Phases
-- Slide 10: GPA (Group Personal Accident)
 - Slides 13-15: Additional GHS details
 - GMM, GP, SP, Dental sheets (if applicable slides exist)
 - Webhook integration for automatic processing

@@ -348,6 +348,108 @@ function extractGHSData(sheet) {
 }
 
 /**
+ * Extract GPA (Group Personal Accident) specific data from the GPA sheet
+ * GPA has different column structure: Category in col 3, Basis in col 6
+ * Note: GPA does NOT have Non-evidence Limit field
+ * @param {Object} sheet - XLSX sheet object
+ * @returns {Object} GPA data including eligibility, last entry age, basis of cover
+ */
+function extractGPAData(sheet) {
+    if (!sheet) return null;
+
+    const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    console.log('📋 Extracting GPA data...');
+
+    // Extract individual fields
+    const eligibility = extractFieldByLabel(data, 'eligibility :', 2);
+    const lastEntryAge = extractFieldByLabel(data, 'last entry age', 2);
+
+    // Extract Basis of Cover - GPA uses Category (col 3) and Basis (col 6)
+    const basisOfCover = extractGPABasisOfCover(data);
+
+    return {
+        eligibility: eligibility,
+        lastEntryAge: lastEntryAge,
+        basisOfCover: basisOfCover
+        // Note: GPA does not have Non-evidence Limit
+    };
+}
+
+/**
+ * Extract Basis of Cover table data from GPA sheet
+ * GPA has different column structure: Category in col 3, Basis in col 6
+ * @param {Array} data - Sheet data as 2D array
+ * @returns {Array} Array of {category, basis} objects
+ */
+function extractGPABasisOfCover(data) {
+    const basisOfCover = [];
+    let foundHeader = false;
+
+    console.log('  🔍 Searching for GPA Basis of Cover table...');
+
+    for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        if (!row) continue;
+
+        const cellA = String(row[0] || '').toLowerCase().trim();
+
+        // Look for "Basis of Cover" header row
+        if (cellA.includes('basis of cover')) {
+            foundHeader = true;
+            console.log(`  ✅ Found "Basis of Cover" header at row ${i}`);
+            continue;
+        }
+
+        // After finding header, look for data rows
+        if (foundHeader) {
+            // GPA structure: col 3 = Category, col 6 = Basis
+            const category = row[3] ? String(row[3]).trim() : '';
+            const basis = row[6] ? String(row[6]).trim() : '';
+
+            // Skip header row (contains "Category", "Basis", etc.)
+            if (category.toLowerCase() === 'category' || category.toLowerCase() === 'insured') {
+                console.log(`  📋 Skipping header row ${i}`);
+                continue;
+            }
+
+            // Stop at Rate section or notes
+            if (cellA.includes('rate') || cellA.includes('premium')) {
+                console.log(`  🛑 Stopping at row ${i} (found: "${cellA.substring(0, 30)}")`);
+                break;
+            }
+
+            // Stop if we hit the note row
+            if (String(row[1] || '').trim().startsWith('* FIGURES')) {
+                console.log(`  🛑 Stopping at note row ${i}`);
+                break;
+            }
+
+            // Valid data row: has category
+            if (category && category.length > 0 && !category.startsWith('*')) {
+                // Clean up category
+                const cleanCategory = category.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+
+                // Clean up basis - format as currency if pure number
+                let cleanBasis = basis;
+                if (basis && /^\d+$/.test(basis.replace(/,/g, ''))) {
+                    const numValue = parseFloat(basis.replace(/,/g, ''));
+                    cleanBasis = `$${numValue.toLocaleString()}`;
+                }
+
+                basisOfCover.push({
+                    category: cleanCategory,
+                    basis: cleanBasis
+                });
+                console.log(`  📊 Category: "${cleanCategory.substring(0, 40)}..." → Basis: "${String(cleanBasis).substring(0, 50)}..."`);
+            }
+        }
+    }
+
+    console.log(`  ✅ Extracted ${basisOfCover.length} GPA basis of cover entries`);
+    return basisOfCover;
+}
+
+/**
  * Extract all sheet data from workbook for future phases
  * @param {Object} workbook - XLSX workbook object
  * @returns {Object} Object with data from each sheet
@@ -423,7 +525,7 @@ function processPlacementSlip(buffer) {
         console.log(`   - Non-Evidence Limit: ${gddData.nonEvidenceLimit ? 'Found' : 'Not found'}`);
     }
 
-    // Extract GHS-specific data for Slide 10
+    // Extract GHS-specific data for Slide 12
     const ghsSheet = workbook.Sheets['GHS'];
     const ghsData = extractGHSData(ghsSheet);
 
@@ -435,6 +537,17 @@ function processPlacementSlip(buffer) {
         console.log(`   - Non-Evidence Limit: ${ghsData.nonEvidenceLimit ? 'Found' : 'Not found'}`);
     }
 
+    // Extract GPA-specific data for Slide 10
+    const gpaSheet = workbook.Sheets['GPA'];
+    const gpaData = extractGPAData(gpaSheet);
+
+    if (gpaData) {
+        console.log('✅ GPA Data extracted successfully');
+        console.log(`   - Eligibility: ${gpaData.eligibility ? 'Found' : 'Not found'}`);
+        console.log(`   - Last Entry Age: ${gpaData.lastEntryAge ? 'Found' : 'Not found'}`);
+        console.log(`   - Basis of Cover: ${gpaData.basisOfCover?.length || 0} entries`);
+    }
+
     return {
         success: true,
         periodOfInsurance: periodOfInsurance,
@@ -443,6 +556,7 @@ function processPlacementSlip(buffer) {
         gtlData: gtlData,
         gddData: gddData,
         ghsData: ghsData,
+        gpaData: gpaData,
         slide1Data: {
             periodOfInsurance: periodOfInsurance
         },
@@ -457,6 +571,12 @@ function processPlacementSlip(buffer) {
             lastEntryAge: gddData?.lastEntryAge,
             basisOfCover: gddData?.basisOfCover,
             nonEvidenceLimit: gddData?.nonEvidenceLimit
+        },
+        slide10Data: {
+            eligibility: gpaData?.eligibility,
+            lastEntryAge: gpaData?.lastEntryAge,
+            basisOfCover: gpaData?.basisOfCover
+            // Note: GPA does not have Non-evidence Limit
         },
         slide12Data: {
             eligibility: ghsData?.eligibility,
@@ -489,8 +609,10 @@ module.exports = {
     extractGTLData,
     extractGDDData,
     extractGHSData,
+    extractGPAData,
     extractFieldByLabel,
     extractBasisOfCover,
+    extractGPABasisOfCover,
     processPlacementSlip,
     isValidExcelBuffer,
     SHEET_NAMES
