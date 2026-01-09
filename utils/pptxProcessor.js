@@ -174,22 +174,24 @@ function escapeXml(text) {
  * Replace table cell value by finding row with matching label
  * Finds table row where first cell contains the label, then replaces content in value cell
  * @param {string} xml - Slide XML content
- * @param {string} labelText - Text to find in label cell (case-insensitive)
+ * @param {string} labelText - Text to find in label cell (case-insensitive, exact word match)
  * @param {string} newValue - New value to insert in the value cell
  * @returns {Object} { xml: updatedXml, success: boolean }
  */
 function replaceTableCellByLabel(xml, labelText, newValue) {
-    const labelLower = labelText.toLowerCase();
+    const labelLower = labelText.toLowerCase().trim();
+    console.log(`    🔎 Searching for row with label: "${labelText}"`);
 
     // Pattern to match table rows: <a:tr>...<a:tc>label cell</a:tc><a:tc>value cell</a:tc>...</a:tr>
-    // We need to find rows and check if first cell contains our label
     const rowPattern = /<a:tr\b[^>]*>([\s\S]*?)<\/a:tr>/g;
 
     let match;
     let updatedXml = xml;
     let success = false;
+    let rowIndex = 0;
 
     while ((match = rowPattern.exec(xml)) !== null) {
+        rowIndex++;
         const rowContent = match[1];
         const fullRow = match[0];
 
@@ -218,15 +220,21 @@ function replaceTableCellByLabel(xml, labelText, newValue) {
             labelCellText += textMatch[1];
         }
 
-        // Check if this row's label matches what we're looking for
-        if (labelCellText.toLowerCase().includes(labelLower)) {
-            console.log(`    📍 Found row with label "${labelText}" - cell text: "${labelCellText.substring(0, 30)}..."`);
+        // Normalize label cell text for comparison
+        const normalizedLabel = labelCellText.toLowerCase().trim();
+
+        // More precise matching: check if the cell text STARTS WITH or EQUALS the label
+        // This prevents "Eligibility" from matching "Eligibility Date"
+        const isExactMatch = normalizedLabel === labelLower ||
+                            normalizedLabel === labelLower + ':' ||
+                            normalizedLabel.startsWith(labelLower + ' ') ||
+                            normalizedLabel.startsWith(labelLower + ':');
+
+        if (isExactMatch) {
+            console.log(`    📍 Row ${rowIndex}: Found exact match for "${labelText}" - cell text: "${labelCellText.trim()}"`);
 
             // Get the value cell (second cell)
             const valueCell = cells[1];
-
-            // Find the text element(s) in value cell and replace content
-            // Look for <a:t>...</a:t> patterns in the value cell
             const valueCellContent = valueCell.content;
 
             // Find all <a:t> elements in value cell
@@ -242,14 +250,16 @@ function replaceTableCellByLabel(xml, labelText, newValue) {
                 });
             }
 
+            console.log(`    📝 Value cell has ${textElements.length} text elements: ${textElements.map(e => `"${e.text}"`).join(', ')}`);
+
             if (textElements.length > 0) {
-                // Strategy: Replace the main content text element (usually the longest one, or after ": ")
                 // Find the element that contains the actual value (not just ": " prefix)
                 let targetElement = null;
 
                 for (const elem of textElements) {
-                    // Skip elements that are just ": " or whitespace
-                    if (elem.text.trim() === ':' || elem.text.trim() === ': ' || elem.text.trim() === '') {
+                    const trimmed = elem.text.trim();
+                    // Skip elements that are just punctuation or whitespace
+                    if (trimmed === ':' || trimmed === ': ' || trimmed === '' || trimmed === '-') {
                         continue;
                     }
                     // Take the first substantial text element as the value
@@ -260,6 +270,8 @@ function replaceTableCellByLabel(xml, labelText, newValue) {
                 if (targetElement) {
                     const oldText = targetElement.full;
                     const newText = `<a:t>${newValue}</a:t>`;
+
+                    console.log(`    🔄 Replacing: "${targetElement.text.substring(0, 50)}..." → "${newValue.substring(0, 50)}..."`);
 
                     // Replace in the value cell
                     const newValueCellContent = valueCellContent.replace(oldText, newText);
@@ -272,11 +284,19 @@ function replaceTableCellByLabel(xml, labelText, newValue) {
                     // Replace in the XML
                     updatedXml = updatedXml.replace(fullRow, newFullRow);
                     success = true;
-                    console.log(`    ✅ Replaced "${targetElement.text.substring(0, 40)}..." with new value`);
+                    console.log(`    ✅ Successfully updated "${labelText}" cell`);
                     break;
+                } else {
+                    console.log(`    ⚠️ No substantial text element found in value cell`);
                 }
+            } else {
+                console.log(`    ⚠️ No text elements found in value cell`);
             }
         }
+    }
+
+    if (!success) {
+        console.log(`    ❌ Could not find row with label "${labelText}" (searched ${rowIndex} rows)`);
     }
 
     return { xml: updatedXml, success };
@@ -333,6 +353,13 @@ function updateSlide8GTLTable(zip, slide8Data) {
         console.log('⚠️ No slide 8 data provided');
         return results;
     }
+
+    // Debug: Log all incoming data
+    console.log('📋 Slide 8 Data received:');
+    console.log(`   - eligibility: "${slide8Data.eligibility?.substring(0, 60) || 'null'}..."`);
+    console.log(`   - lastEntryAge: "${slide8Data.lastEntryAge || 'null'}"`);
+    console.log(`   - basisOfCover: ${slide8Data.basisOfCover?.length || 0} items`);
+    console.log(`   - nonEvidenceLimit: "${slide8Data.nonEvidenceLimit?.substring(0, 60) || 'null'}..."`);
 
     try {
         let slideXml = getSlideXML(zip, 8);
