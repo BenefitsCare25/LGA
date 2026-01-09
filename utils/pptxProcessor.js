@@ -171,6 +171,118 @@ function escapeXml(text) {
 }
 
 /**
+ * Replace table cell value by finding row with matching label
+ * Finds table row where first cell contains the label, then replaces content in value cell
+ * @param {string} xml - Slide XML content
+ * @param {string} labelText - Text to find in label cell (case-insensitive)
+ * @param {string} newValue - New value to insert in the value cell
+ * @returns {Object} { xml: updatedXml, success: boolean }
+ */
+function replaceTableCellByLabel(xml, labelText, newValue) {
+    const labelLower = labelText.toLowerCase();
+
+    // Pattern to match table rows: <a:tr>...<a:tc>label cell</a:tc><a:tc>value cell</a:tc>...</a:tr>
+    // We need to find rows and check if first cell contains our label
+    const rowPattern = /<a:tr\b[^>]*>([\s\S]*?)<\/a:tr>/g;
+
+    let match;
+    let updatedXml = xml;
+    let success = false;
+
+    while ((match = rowPattern.exec(xml)) !== null) {
+        const rowContent = match[1];
+        const fullRow = match[0];
+
+        // Extract all cells from this row
+        const cellPattern = /<a:tc\b[^>]*>([\s\S]*?)<\/a:tc>/g;
+        const cells = [];
+        let cellMatch;
+
+        while ((cellMatch = cellPattern.exec(rowContent)) !== null) {
+            cells.push({
+                full: cellMatch[0],
+                content: cellMatch[1]
+            });
+        }
+
+        // Need at least 2 cells (label + value)
+        if (cells.length < 2) continue;
+
+        // Extract text from first cell (label cell)
+        const labelCell = cells[0].content;
+        const textPattern = /<a:t>([^<]*)<\/a:t>/g;
+        let labelCellText = '';
+        let textMatch;
+
+        while ((textMatch = textPattern.exec(labelCell)) !== null) {
+            labelCellText += textMatch[1];
+        }
+
+        // Check if this row's label matches what we're looking for
+        if (labelCellText.toLowerCase().includes(labelLower)) {
+            console.log(`    📍 Found row with label "${labelText}" - cell text: "${labelCellText.substring(0, 30)}..."`);
+
+            // Get the value cell (second cell)
+            const valueCell = cells[1];
+
+            // Find the text element(s) in value cell and replace content
+            // Look for <a:t>...</a:t> patterns in the value cell
+            const valueCellContent = valueCell.content;
+
+            // Find all <a:t> elements in value cell
+            const valueTextPattern = /<a:t>([^<]*)<\/a:t>/g;
+            const textElements = [];
+            let vtMatch;
+
+            while ((vtMatch = valueTextPattern.exec(valueCellContent)) !== null) {
+                textElements.push({
+                    full: vtMatch[0],
+                    text: vtMatch[1],
+                    index: vtMatch.index
+                });
+            }
+
+            if (textElements.length > 0) {
+                // Strategy: Replace the main content text element (usually the longest one, or after ": ")
+                // Find the element that contains the actual value (not just ": " prefix)
+                let targetElement = null;
+
+                for (const elem of textElements) {
+                    // Skip elements that are just ": " or whitespace
+                    if (elem.text.trim() === ':' || elem.text.trim() === ': ' || elem.text.trim() === '') {
+                        continue;
+                    }
+                    // Take the first substantial text element as the value
+                    targetElement = elem;
+                    break;
+                }
+
+                if (targetElement) {
+                    const oldText = targetElement.full;
+                    const newText = `<a:t>${newValue}</a:t>`;
+
+                    // Replace in the value cell
+                    const newValueCellContent = valueCellContent.replace(oldText, newText);
+                    const newValueCell = valueCell.full.replace(valueCellContent, newValueCellContent);
+
+                    // Replace in the row
+                    const newRowContent = rowContent.replace(valueCell.full, newValueCell);
+                    const newFullRow = fullRow.replace(rowContent, newRowContent);
+
+                    // Replace in the XML
+                    updatedXml = updatedXml.replace(fullRow, newFullRow);
+                    success = true;
+                    console.log(`    ✅ Replaced "${targetElement.text.substring(0, 40)}..." with new value`);
+                    break;
+                }
+            }
+        }
+    }
+
+    return { xml: updatedXml, success };
+}
+
+/**
  * Generate XML for a single bullet point paragraph in Basis of Cover
  * @param {string} category - Category name (bold)
  * @param {string} basis - Basis value
@@ -225,62 +337,39 @@ function updateSlide8GTLTable(zip, slide8Data) {
     try {
         let slideXml = getSlideXML(zip, 8);
 
-        // 1. Update Eligibility value
+        // 1. Update Eligibility value using cell-based mapping
         if (slide8Data.eligibility) {
             const eligibilityValue = escapeXml(slide8Data.eligibility);
-            console.log(`  🔍 Looking for Eligibility pattern to replace with: "${eligibilityValue.substring(0, 50)}..."`);
+            console.log(`  🔍 Updating Eligibility cell with: "${eligibilityValue.substring(0, 50)}..."`);
 
-            // Strategy: Find text containing "full-time" and "staff" in an <a:t> element (common eligibility text)
-            // More flexible pattern that matches various eligibility text formats
-            const eligibilityPatterns = [
-                // Pattern 1: Text with "All full-time" and "staff" and "birthday"
-                /(<a:t>)(All full-time[^<]*staff[^<]*birthday[^<]*)(<\/a:t>)/gi,
-                // Pattern 2: Text with "All full-time" and "staff"
-                /(<a:t>)(All full-time[^<]*staff[^<]*)(<\/a:t>)/gi,
-                // Pattern 3: Any text after ": " that contains "staff" and "birthday"
-                /(<a:t>: )(All [^<]*staff[^<]*birthday[^<]*)(<\/a:t>)/gi,
-                // Pattern 4: Highlighted text after colon
-                /(<a:t>)(All [^<]*permanent[^<]*staff[^<]*)(<\/a:t>)/gi
-            ];
+            // Find row with "Eligibility" label and replace value in adjacent cell
+            const eligibilityResult = replaceTableCellByLabel(slideXml, 'Eligibility', eligibilityValue);
 
-            let eligibilityUpdated = false;
-            for (const pattern of eligibilityPatterns) {
-                if (slideXml.match(pattern)) {
-                    slideXml = slideXml.replace(pattern, `$1${eligibilityValue}$3`);
-                    console.log(`  ✅ Updated Eligibility`);
-                    results.updated.push({ field: 'Eligibility', value: slide8Data.eligibility.substring(0, 50) + '...' });
-                    eligibilityUpdated = true;
-                    break;
-                }
-            }
-
-            if (!eligibilityUpdated) {
-                console.log(`  ⚠️ Eligibility pattern not found in template`);
-                results.errors.push({ field: 'Eligibility', error: 'Pattern not found' });
+            if (eligibilityResult.success) {
+                slideXml = eligibilityResult.xml;
+                console.log(`  ✅ Updated Eligibility`);
+                results.updated.push({ field: 'Eligibility', value: slide8Data.eligibility.substring(0, 50) + '...' });
+            } else {
+                console.log(`  ⚠️ Eligibility row not found in table`);
+                results.errors.push({ field: 'Eligibility', error: 'Row not found in table' });
             }
         }
 
-        // 2. Update Last Entry Age value
+        // 2. Update Last Entry Age value using cell-based mapping
         if (slide8Data.lastEntryAge) {
             const lastEntryAgeValue = escapeXml(slide8Data.lastEntryAge);
-            // Pattern: ": age 70 next birthday"
-            const lastEntryAgePattern = /(: )(age \d+ next birthday)/gi;
+            console.log(`  🔍 Updating Last Entry Age cell with: "${lastEntryAgeValue}"`);
 
-            if (slideXml.match(lastEntryAgePattern)) {
-                slideXml = slideXml.replace(lastEntryAgePattern, `$1${lastEntryAgeValue}`);
+            // Find row with "Last Entry Age" label and replace value in adjacent cell
+            const lastEntryAgeResult = replaceTableCellByLabel(slideXml, 'Last Entry Age', lastEntryAgeValue);
+
+            if (lastEntryAgeResult.success) {
+                slideXml = lastEntryAgeResult.xml;
                 console.log(`  ✅ Updated Last Entry Age`);
                 results.updated.push({ field: 'Last Entry Age', value: slide8Data.lastEntryAge });
             } else {
-                // Try more generic pattern
-                const altPattern = /(<a:t>: )(age[^<]+next birthday)(<\/a:t>)/gi;
-                if (slideXml.match(altPattern)) {
-                    slideXml = slideXml.replace(altPattern, `$1${lastEntryAgeValue}$3`);
-                    console.log(`  ✅ Updated Last Entry Age (alt pattern)`);
-                    results.updated.push({ field: 'Last Entry Age', value: slide8Data.lastEntryAge });
-                } else {
-                    console.log(`  ⚠️ Last Entry Age pattern not found`);
-                    results.errors.push({ field: 'Last Entry Age', error: 'Pattern not found' });
-                }
+                console.log(`  ⚠️ Last Entry Age row not found in table`);
+                results.errors.push({ field: 'Last Entry Age', error: 'Row not found in table' });
             }
         }
 
@@ -371,37 +460,21 @@ function updateSlide8GTLTable(zip, slide8Data) {
             }
         }
 
-        // 4. Update Non-evidence Limit value
+        // 4. Update Non-evidence Limit value using cell-based mapping
         if (slide8Data.nonEvidenceLimit) {
             const nonEvidenceValue = escapeXml(slide8Data.nonEvidenceLimit);
-            console.log(`  🔍 Looking for Non-evidence Limit pattern to replace with: "${nonEvidenceValue.substring(0, 50)}..."`);
+            console.log(`  🔍 Updating Non-evidence Limit cell with: "${nonEvidenceValue.substring(0, 50)}..."`);
 
-            // Strategy: Find text containing "Sum insured" or "underwriting" in an <a:t> element
-            const nonEvidencePatterns = [
-                // Pattern 1: Text starting with "Sum insured exceeding"
-                /(<a:t>)(Sum insured exceeding[^<]*underwriting[^<]*)(<\/a:t>)/gi,
-                // Pattern 2: Text with "Sum insured exceeding" (simpler)
-                /(<a:t>)(Sum insured exceeding[^<]*)(<\/a:t>)/gi,
-                // Pattern 3: After colon with Sum insured
-                /(<a:t>: )(Sum insured[^<]*)(<\/a:t>)/gi,
-                // Pattern 4: Any text containing "requires underwriting"
-                /(<a:t>)([^<]*requires underwriting[^<]*)(<\/a:t>)/gi
-            ];
+            // Find row with "Non-evidence Limit" label and replace value in adjacent cell
+            const nonEvidenceResult = replaceTableCellByLabel(slideXml, 'Non-evidence Limit', nonEvidenceValue);
 
-            let nonEvidenceUpdated = false;
-            for (const pattern of nonEvidencePatterns) {
-                if (slideXml.match(pattern)) {
-                    slideXml = slideXml.replace(pattern, `$1${nonEvidenceValue}$3`);
-                    console.log(`  ✅ Updated Non-evidence Limit`);
-                    results.updated.push({ field: 'Non-evidence Limit', value: slide8Data.nonEvidenceLimit.substring(0, 50) + '...' });
-                    nonEvidenceUpdated = true;
-                    break;
-                }
-            }
-
-            if (!nonEvidenceUpdated) {
-                console.log(`  ⚠️ Non-evidence Limit pattern not found in template`);
-                results.errors.push({ field: 'Non-evidence Limit', error: 'Pattern not found' });
+            if (nonEvidenceResult.success) {
+                slideXml = nonEvidenceResult.xml;
+                console.log(`  ✅ Updated Non-evidence Limit`);
+                results.updated.push({ field: 'Non-evidence Limit', value: slide8Data.nonEvidenceLimit.substring(0, 50) + '...' });
+            } else {
+                console.log(`  ⚠️ Non-evidence Limit row not found in table`);
+                results.errors.push({ field: 'Non-evidence Limit', error: 'Row not found in table' });
             }
         }
 
