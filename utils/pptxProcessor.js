@@ -1989,6 +1989,8 @@ function extractCellsFromRow(rowContent) {
 
 /**
  * Helper function to update text in a specific cell by index
+ * Handles cells with multiple <a:t> elements by replacing ALL of them with the new value
+ * Also handles empty cells by inserting text into the first <a:r> run
  * @param {string} rowXml - Full row XML
  * @param {Array} cells - Array of cells from extractCellsFromRow
  * @param {number} cellIndex - Index of cell to update
@@ -2001,18 +2003,62 @@ function updateCellTextByIndex(rowXml, cells, cellIndex, newValue) {
     const cell = cells[cellIndex];
     if (!cell || !cell.content) return rowXml;
 
-    // Find the first text element in the cell and replace its content
-    const textPattern = /<a:t>([^<]*)<\/a:t>/;
-    const textMatch = cell.content.match(textPattern);
+    const escapedValue = escapeXml(newValue);
 
-    if (textMatch) {
-        const escapedValue = escapeXml(newValue);
-        const newCellContent = cell.content.replace(textMatch[0], `<a:t>${escapedValue}</a:t>`);
-        const newCell = cell.full.replace(cell.content, newCellContent);
-        return rowXml.replace(cell.full, newCell);
+    // Find ALL text elements in the cell
+    const textPattern = /<a:t>([^<]*)<\/a:t>/g;
+    const textMatches = cell.content.match(textPattern);
+
+    let newCellContent = cell.content;
+
+    if (textMatches && textMatches.length > 0) {
+        // Replace the FIRST <a:t> with new value, REMOVE all subsequent <a:t> elements
+        let isFirst = true;
+        newCellContent = cell.content.replace(textPattern, (match) => {
+            if (isFirst) {
+                isFirst = false;
+                return `<a:t>${escapedValue}</a:t>`;
+            }
+            // Remove subsequent text elements by replacing with empty
+            return '<a:t></a:t>';
+        });
+    } else {
+        // No text elements found - try to insert into existing <a:r> run
+        const runPattern = /(<a:r>[\s\S]*?)(<\/a:r>)/;
+        const runMatch = cell.content.match(runPattern);
+
+        if (runMatch) {
+            // Insert <a:t> before the closing </a:r>
+            newCellContent = cell.content.replace(runPattern, `$1<a:t>${escapedValue}</a:t>$2`);
+        } else {
+            // No run element - insert a new <a:r> with <a:t> before <a:endParaRPr>
+            const endParaPattern = /(<a:endParaRPr)/;
+            const endParaMatch = cell.content.match(endParaPattern);
+
+            if (endParaMatch) {
+                // Insert run with text before the end paragraph properties
+                newCellContent = cell.content.replace(
+                    endParaPattern,
+                    `<a:r><a:rPr lang="en-SG" sz="1000" dirty="0"/><a:t>${escapedValue}</a:t></a:r>$1`
+                );
+            } else {
+                // Last resort: try inserting before </a:p>
+                const paraEndPattern = /(<\/a:p>)/;
+                if (cell.content.match(paraEndPattern)) {
+                    newCellContent = cell.content.replace(
+                        paraEndPattern,
+                        `<a:r><a:rPr lang="en-SG" sz="1000" dirty="0"/><a:t>${escapedValue}</a:t></a:r>$1`
+                    );
+                } else {
+                    // Can't update this cell
+                    return rowXml;
+                }
+            }
+        }
     }
 
-    return rowXml;
+    const newCell = cell.full.replace(cell.content, newCellContent);
+    return rowXml.replace(cell.full, newCell);
 }
 
 /**
