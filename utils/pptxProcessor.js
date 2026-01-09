@@ -1697,6 +1697,60 @@ function updateSlide15ScheduleOfBenefits(zip, slide15Data) {
                 }
             }
 
+            // Direct value replacements for rows where label and value are split
+            // PPT sometimes has "(a) Hospital Misc" in one row, and "Include Implants" value in the next row
+            const directReplacements = [];
+
+            // Collect replacement pairs from sub-items
+            for (const benefit of scheduleData.benefits || []) {
+                for (const subItem of benefit.subItems || []) {
+                    const subNameLower = subItem.name.toLowerCase();
+
+                    // Hospital Miscellaneous: "Include Implants" -> actual value
+                    if (subNameLower.includes('hospital miscellaneous') && subItem.plan1Value) {
+                        if (subItem.plan1Value.toLowerCase().includes('exclude')) {
+                            directReplacements.push({ from: 'Include Implants', to: subItem.plan1Value });
+                        }
+                    }
+
+                    // Surgical Schedule: "S$1,500" -> actual value
+                    if (subNameLower.includes('surgical schedule') && subItem.plan1Value) {
+                        const surgicalMatch = subItem.plan1Value.match(/S\$[\d,]+/);
+                        if (surgicalMatch) {
+                            directReplacements.push({ from: 'S$1,500', to: surgicalMatch[0] });
+                        }
+                    }
+
+                    // Maximum no. of days replacements
+                    if (subNameLower.includes('maximum no. of days') && subItem.plan1Value) {
+                        const daysVal = subItem.plan1Value;
+                        // Map common template values to actual values
+                        if (daysVal.includes('121')) {
+                            directReplacements.push({ from: '120 days', to: '121 days' });
+                        }
+                        if (daysVal.includes('31')) {
+                            directReplacements.push({ from: '30 days', to: '31 days' });
+                        }
+                    }
+
+                    // Qualification period days
+                    if (subNameLower.includes('qualification period') && subItem.plan1Value) {
+                        const daysVal = subItem.plan1Value;
+                        if (daysVal.includes('121')) {
+                            directReplacements.push({ from: '120 days', to: '121 days' });
+                        }
+                    }
+                }
+            }
+
+            // Apply direct replacements to table content
+            for (const repl of directReplacements) {
+                if (updatedTableContent.includes(repl.from)) {
+                    updatedTableContent = updatedTableContent.split(repl.from).join(repl.to);
+                    console.log(`    ✅ Direct replacement: "${repl.from}" → "${repl.to}"`);
+                }
+            }
+
             // Replace table in XML
             const updatedTable = tableMatch[0].replace(tableContent, updatedTableContent);
             slideXml = slideXml.replace(tableMatch[0], updatedTable);
@@ -2017,12 +2071,81 @@ function updateSlide18RoomAndBoard(zip, slide18Data) {
             slideXml = slideXml.replace(tableMatch[0], updatedTable);
         }
 
-        // Check if we need to add a second table for 4 Bedded classification
+        // Add second section for 4 Bedded classification if available
         if (entitlements.length > 1) {
             const secondEntitlement = entitlements[1];
-            console.log(`  📝 Note: Second section "${secondEntitlement.beddedType}" available but requires manual table addition`);
-            // For now, we just log that additional data exists
-            // Full implementation would require duplicating the table XML structure
+            console.log(`  📊 Adding second section: "${secondEntitlement.beddedType}" with ${secondEntitlement.wards.length} ward classes`);
+
+            // Find the table again (it may have been modified)
+            const tablePattern2 = /<a:tbl\b[^>]*>([\s\S]*?)<\/a:tbl>/;
+            const tableMatch2 = tablePattern2.exec(slideXml);
+
+            if (tableMatch2) {
+                // Extract existing row templates from the table
+                const rowPattern = /<a:tr\b[^>]*>([\s\S]*?)<\/a:tr>/g;
+                const existingRows = [];
+                let rowMatch;
+                while ((rowMatch = rowPattern.exec(tableMatch2[1])) !== null) {
+                    existingRows.push(rowMatch[0]);
+                }
+
+                if (existingRows.length >= 3) {
+                    // Use existing rows as templates:
+                    // Row 0: Header (merged cells) - use for new section header
+                    // Row 1: Sub-header (Class of Ward | Hospital Cash Benefit)
+                    // Row 2+: Ward data rows (Ward | Benefit)
+
+                    const headerRowTemplate = existingRows[0];
+                    const subHeaderRowTemplate = existingRows[1];
+                    const wardRowTemplate = existingRows[2]; // Use B1 row as template
+
+                    // Create new rows for 4 Bedded section
+                    let newRows = '\n';
+
+                    // 1. Empty separator row (optional - just add spacing in header)
+                    // 2. Header row: "Room & Board 4 Bedded"
+                    const escapedBeddedType2 = escapeXml(secondEntitlement.beddedType);
+                    let newHeaderRow = headerRowTemplate.replace(
+                        />Room\s*&amp;\s*Board[^<]*</gi,
+                        `>Room &amp; Board ${escapedBeddedType2}<`
+                    );
+                    newRows += newHeaderRow;
+
+                    // 3. Sub-header row: "Class of Ward" | "Hospital Cash Benefit..."
+                    newRows += subHeaderRowTemplate;
+
+                    // 4. Ward rows for second section
+                    for (const ward of secondEntitlement.wards) {
+                        // Clone and modify ward row template
+                        let newWardRow = wardRowTemplate;
+
+                        // Replace ward class name (first cell text)
+                        const wardClassPattern = /(<a:tc\b[^>]*>[\s\S]*?<a:t>)[^<]*(<\/a:t>)/;
+                        newWardRow = newWardRow.replace(wardClassPattern, `$1${escapeXml(ward.classOfWard)}$2`);
+
+                        // Replace benefit value (second cell text)
+                        // Find second <a:tc> and update its text
+                        const cells = newWardRow.match(/<a:tc\b[^>]*>[\s\S]*?<\/a:tc>/g);
+                        if (cells && cells.length >= 2) {
+                            const oldSecondCell = cells[1];
+                            const newSecondCell = oldSecondCell.replace(
+                                /(<a:t>)[^<]*(<\/a:t>)/,
+                                `$1${escapeXml(ward.benefit)}$2`
+                            );
+                            newWardRow = newWardRow.replace(oldSecondCell, newSecondCell);
+                        }
+
+                        newRows += newWardRow;
+                        console.log(`    ✅ Added ward "${ward.classOfWard}": ${ward.benefit}`);
+                        results.updated.push({ field: `4 Bedded ${ward.classOfWard}`, value: ward.benefit });
+                    }
+
+                    // Insert new rows before closing </a:tbl>
+                    const updatedTableXml = tableMatch2[0].replace('</a:tbl>', newRows + '</a:tbl>');
+                    slideXml = slideXml.replace(tableMatch2[0], updatedTableXml);
+                    console.log(`  ✅ Added ${secondEntitlement.beddedType} section with ${secondEntitlement.wards.length} wards`);
+                }
+            }
         }
 
         setSlideXML(zip, 18, slideXml);
