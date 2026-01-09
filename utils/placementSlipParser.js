@@ -741,17 +741,30 @@ function extractGHSScheduleOfBenefits(data) {
             // Extract numbered benefit rows (1-15)
             const rowNumber = parseInt(col0, 10);
             if (!isNaN(rowNumber) && rowNumber >= 1 && rowNumber <= 15) {
+                let plan1Value = String(row[6] || '').trim();
+                let plan2Value = String(row[7] || '').trim();
+                let plan3Value = String(row[8] || '').trim();
+
+                // Handle merged cells: if Plan1 has value but Plan2/Plan3 are empty,
+                // the cell is likely merged and applies to all plans
+                if (plan1Value && !plan2Value && !plan3Value) {
+                    plan2Value = plan1Value;
+                    plan3Value = plan1Value;
+                    console.log(`    📊 Benefit ${rowNumber}: "${col1.substring(0, 40)}..." → All plans: "${plan1Value.substring(0, 20)}" (merged cell)`);
+                } else {
+                    console.log(`    📊 Benefit ${rowNumber}: "${col1.substring(0, 40)}..." → Plan1: "${plan1Value.substring(0, 20)}"`);
+                }
+
                 const benefitItem = {
                     number: rowNumber,
                     name: col1,
-                    plan1Value: String(row[6] || '').trim(),
-                    plan2Value: String(row[7] || '').trim(),
-                    plan3Value: String(row[8] || '').trim(),
+                    plan1Value: plan1Value,
+                    plan2Value: plan2Value,
+                    plan3Value: plan3Value,
                     subItems: []
                 };
 
                 result.benefits.push(benefitItem);
-                console.log(`    📊 Benefit ${rowNumber}: "${col1.substring(0, 40)}..." → Plan1: "${benefitItem.plan1Value.substring(0, 20)}"`);
             }
 
             // Extract sub-items (Maximum no. of days, Qualification period, etc.)

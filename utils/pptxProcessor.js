@@ -475,8 +475,6 @@ function updateSlide8GTLTable(zip, slide8Data) {
 
         // 1. Update Eligibility & Last Entry Age - Replace as separate text elements to avoid duplication
         if (slide8Data.eligibility || slide8Data.lastEntryAge) {
-            console.log(`  🔍 Updating Eligibility/Last Entry Age (separate elements)...`);
-
             const eligResult = replaceEligibilityAndLastEntryAgeSeparately(
                 slideXml,
                 slide8Data.eligibility,
@@ -590,7 +588,6 @@ function updateSlide8GTLTable(zip, slide8Data) {
         // 4. Update Non-evidence Limit value using cell-based mapping
         if (slide8Data.nonEvidenceLimit) {
             const nonEvidenceValue = escapeXml(slide8Data.nonEvidenceLimit);
-            console.log(`  🔍 Updating Non-evidence Limit cell with: "${nonEvidenceValue.substring(0, 50)}..."`);
 
             // Find row with "Non-evidence Limit" label and replace value in adjacent cell
             const nonEvidenceResult = replaceTableCellByLabel(slideXml, 'Non-evidence Limit', nonEvidenceValue);
@@ -649,8 +646,6 @@ function updateSlide9GDDTable(zip, slide9Data) {
 
         // 1. Update Eligibility & Last Entry Age - Replace as separate text elements to avoid duplication
         if (slide9Data.eligibility || slide9Data.lastEntryAge) {
-            console.log(`  🔍 Updating Eligibility/Last Entry Age (separate elements)...`);
-
             const eligResult = replaceEligibilityAndLastEntryAgeSeparately(
                 slideXml,
                 slide9Data.eligibility,
@@ -692,7 +687,6 @@ function updateSlide9GDDTable(zip, slide9Data) {
         // 3. Update Non-evidence Limit
         if (slide9Data.nonEvidenceLimit) {
             const nonEvidenceValue = escapeXml(slide9Data.nonEvidenceLimit);
-            console.log(`  🔍 Updating Non-evidence Limit cell with: "${nonEvidenceValue.substring(0, 50)}..."`);
 
             const nonEvidenceResult = replaceTableCellByLabel(slideXml, 'Non-evidence Limit', nonEvidenceValue);
 
@@ -995,8 +989,6 @@ function updateSlide12GHSTable(zip, slide12Data) {
 
         // 1. Update Eligibility & Last Entry Age - Replace separately to avoid duplication
         if (slide12Data.eligibility || slide12Data.lastEntryAge) {
-            console.log(`  🔍 Updating Eligibility/Last Entry Age (separate elements)...`);
-
             const eligResult = replaceEligibilityAndLastEntryAgeSeparately(
                 slideXml,
                 slide12Data.eligibility,
@@ -1077,8 +1069,6 @@ function updateSlide10GPATable(zip, slide10Data) {
 
         // 1. Update Eligibility & Last Entry Age - Replace as separate text elements to avoid duplication
         if (slide10Data.eligibility || slide10Data.lastEntryAge) {
-            console.log(`  🔍 Updating Eligibility/Last Entry Age (separate elements)...`);
-
             const eligResult = replaceEligibilityAndLastEntryAgeSeparately(
                 slideXml,
                 slide10Data.eligibility,
@@ -2000,10 +1990,31 @@ function extractCellsFromRow(rowContent) {
 function updateCellTextByIndex(rowXml, cells, cellIndex, newValue) {
     if (cellIndex >= cells.length) return rowXml;
 
-    const cell = cells[cellIndex];
-    if (!cell || !cell.content) return rowXml;
+    // Re-extract the cell at this index from the current rowXml
+    // This handles cases where earlier updates shifted positions
+    const cellPattern = /<a:tc\b[^>]*>([\s\S]*?)<\/a:tc>/g;
+    let match;
+    let currentIdx = 0;
+    let pos = -1;
+    let cell = null;
+
+    while ((match = cellPattern.exec(rowXml)) !== null) {
+        if (currentIdx === cellIndex) {
+            pos = match.index;
+            cell = {
+                full: match[0],
+                content: match[1]
+            };
+            break;
+        }
+        currentIdx++;
+    }
+
+    if (pos === -1 || !cell) return rowXml; // Cell not found
 
     const escapedValue = escapeXml(newValue);
+    // Escape $ for replacement strings ($ has special meaning in String.replace)
+    const safeValue = escapedValue.replace(/\$/g, '$$$$');
 
     // Find ALL text elements in the cell
     const textPattern = /<a:t>([^<]*)<\/a:t>/g;
@@ -2028,26 +2039,26 @@ function updateCellTextByIndex(rowXml, cells, cellIndex, newValue) {
         const runMatch = cell.content.match(runPattern);
 
         if (runMatch) {
-            // Insert <a:t> before the closing </a:r>
-            newCellContent = cell.content.replace(runPattern, `$1<a:t>${escapedValue}</a:t>$2`);
+            // Insert <a:t> before the closing </a:r> - use safeValue for $ escaping
+            newCellContent = cell.content.replace(runPattern, `$1<a:t>${safeValue}</a:t>$2`);
         } else {
             // No run element - insert a new <a:r> with <a:t> before <a:endParaRPr>
             const endParaPattern = /(<a:endParaRPr)/;
             const endParaMatch = cell.content.match(endParaPattern);
 
             if (endParaMatch) {
-                // Insert run with text before the end paragraph properties
+                // Insert run with text before the end paragraph properties - use safeValue
                 newCellContent = cell.content.replace(
                     endParaPattern,
-                    `<a:r><a:rPr lang="en-SG" sz="1000" dirty="0"/><a:t>${escapedValue}</a:t></a:r>$1`
+                    `<a:r><a:rPr lang="en-SG" sz="1000" dirty="0"/><a:t>${safeValue}</a:t></a:r>$1`
                 );
             } else {
-                // Last resort: try inserting before </a:p>
+                // Last resort: try inserting before </a:p> - use safeValue
                 const paraEndPattern = /(<\/a:p>)/;
                 if (cell.content.match(paraEndPattern)) {
                     newCellContent = cell.content.replace(
                         paraEndPattern,
-                        `<a:r><a:rPr lang="en-SG" sz="1000" dirty="0"/><a:t>${escapedValue}</a:t></a:r>$1`
+                        `<a:r><a:rPr lang="en-SG" sz="1000" dirty="0"/><a:t>${safeValue}</a:t></a:r>$1`
                     );
                 } else {
                     // Can't update this cell
@@ -2058,7 +2069,8 @@ function updateCellTextByIndex(rowXml, cells, cellIndex, newValue) {
     }
 
     const newCell = cell.full.replace(cell.content, newCellContent);
-    return rowXml.replace(cell.full, newCell);
+    // Use substring replacement at the correct position (pos was calculated earlier)
+    return rowXml.substring(0, pos) + newCell + rowXml.substring(pos + cell.full.length);
 }
 
 /**
