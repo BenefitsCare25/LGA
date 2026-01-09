@@ -6,14 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Development Commands
 - `npm run dev` - Start development server with nodemon auto-restart
-- `npm start` - Start production server 
+- `npm start` - Start production server
 - `node server.js` - Direct server start (same as npm start)
 
 ### Testing API Endpoints
 - Visit `http://localhost:3000/api/apollo/test` - Test Apify connection
 - Visit `http://localhost:3000/api/leads/test` - Test OpenAI connection
 - Visit `http://localhost:3000/health` - Server health check
-- Visit `http://localhost:3000/github-auth-test` - Test GitHub device flow authentication
 
 ### File Processing
 - No build step required (server serves static HTML directly)
@@ -33,52 +32,18 @@ This is a lead generation automation tool that combines Apollo.io scraping with 
 
 **Route Modules**
 - `routes/apollo.js` - Apollo.io/Apify integration for lead scraping
-- `routes/leads.js` - Lead processing and OpenAI content generation  
+- `routes/leads.js` - Lead processing and OpenAI content generation
 - `routes/email-automation.js` - Email campaign management with Excel integration
 - `routes/microsoft-graph.js` - Microsoft Graph API integration
-- `routes/email-*.js` - Various email-related services (templates, tracking, scheduling, bounce detection)
+- `routes/sharepoint-automation.js` - SharePoint document automation
 - `routes/auth.js` - Authentication handling
-- `routes/campaign-status.js` - Campaign monitoring
 
 **Utility Modules (utils/)**
+- `pptxProcessor.js` - PowerPoint XML manipulation (PizZip)
+- `placementSlipParser.js` - Excel placement slip parsing (XLSX)
 - `excelProcessor.js` - Excel file manipulation and processing
 - `excelGraphAPI.js` - Direct Excel updates via Microsoft Graph API
-- `emailContentProcessor.js` - Email content generation and processing
-- `campaignLockManager.js` - Prevents concurrent campaign conflicts
-- `campaignTokenManager.js` - Manages campaign authentication tokens
-- `excelDuplicateChecker.js` - Prevents duplicate lead processing
-- `EmailSender.js` - Centralized email campaign sending with token refresh and error handling
-- `processSingleton.js` - Ensures single server instance
-
-### Data Flow Architecture
-
-1. **Lead Generation**: Form submission → Apollo URL generation → Apify scraper → Lead extraction
-2. **Content Processing**: Lead data → OpenAI API → AI-generated outreach content
-3. **Email Campaigns**: Excel upload → Lead processing → Microsoft Graph → Email sending → Tracking updates
-4. **Tracking**: Read receipts (pixel tracking) + Reply monitoring (cron job) → Excel updates via Graph API
-
-### Key Integration Points
-
-**External APIs**
-- Apify API for Apollo.io lead scraping
-- OpenAI API for AI content generation
-- Microsoft Graph API for email sending and Excel integration
-
-**Authentication**
-- Delegated authentication for Microsoft Graph (in `middleware/delegatedGraphAuth.js`)
-- GitHub OAuth device flow authentication (in `utils/githubAuth.js`)
-- API key-based authentication for external services
-
-**GitHub Device Flow Integration**
-- OAuth device flow for GitHub authentication without client secrets
-- Secure authentication flow suitable for server-side applications
-- Session-based token management with automatic cleanup
-- Routes available at `/api/github-auth/*` for device flow management
-
-**File Processing**
-- Excel files processed with XLSX library and updated via Graph API
-- PDF content extraction for reference material processing
-- Multer for file upload handling with 10MB limits
+- `EmailSender.js` - Centralized email campaign sending
 
 ## Environment Configuration
 
@@ -86,174 +51,46 @@ Required environment variables (see `.env.example`):
 - `APIFY_API_TOKEN` - Apollo.io scraping via Apify
 - `OPENAI_API_KEY` - AI content generation
 - `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` - Microsoft Graph integration
-- `GITHUB_CLIENT_ID` - GitHub OAuth app client ID for device flow authentication
-- `RENDER_EXTERNAL_URL` - Deployment URL for tracking callbacks
-
-## Important Implementation Notes
-
-### File Path Configuration
-- HTML files are served from the `public/` directory
-- Server routes use `path.join(__dirname, 'public', 'filename.html')` pattern
-- Fixed ENOENT errors by correcting file paths in server.js (lines 117, 122, 127)
-
-## Important Implementation Notes
-
-### Process Management
-- Server uses singleton pattern to prevent multiple instances
-- Campaign lock manager prevents concurrent email sending conflicts  
-- Background job processing for large datasets to avoid timeouts
-
-### Excel Integration Pattern
-- Direct Graph API updates for real-time Excel modifications
-- Duplicate checking before processing leads
-- Batch processing with error recovery for large datasets
-
-### Email Campaign Architecture
-- Centralized campaign sending via EmailSender utility class
-- Template-based email generation with AI personalization
-- Automatic token refresh during long campaigns (>1 hour)
-- Graceful authentication expiration handling with campaign stops
-- Tracking via pixel images and Microsoft Graph inbox monitoring
-- Rate limiting and bounce detection for deliverability
-- Excel update queueing with proper closure handling
-
-### Phone Number Lookup (AI-Powered Web Search Feature)
-- **Real-time web search**: Uses OpenAI **gpt-4o-mini-search-preview** model with native web search capabilities
-- **Automatic Integration**: Phone lookup runs automatically during Apollo scraping for leads without phone numbers
-- **Search sources**: Company websites, LinkedIn profiles, business directories, and professional networks
-- **Singapore-optimized**: Geolocation set to Singapore for relevant local results
-- **Manual lookup options**:
-  - Frontend: "Find Missing Phones" button in email-automation.html
-  - API: `/api/email-automation/find-missing-phones` (batch lookup for all missing)
-  - API: `/api/email-automation/find-phones-for-leads` (targeted lookup by email list)
-- **Smart caching**: 24-hour cache prevents duplicate API calls for same leads
-- **Automatic Excel updates**: Found phone numbers automatically saved to OneDrive Excel file via Graph API
-- **No rate limiting**: Processes all leads as fast as possible
-- **Comprehensive logging**: Detailed progress tracking and error reporting with source attribution
-
-### Error Handling
-- Graceful degradation when optional services are unavailable
-- Comprehensive API testing endpoints for troubleshooting
-- Detailed error logging for campaign and processing issues
 
 ## SharePoint Document Automation
 
-Automated PowerPoint generation from Excel placement slips stored on SharePoint/OneDrive.
-
-### Overview
-- **Input**: Excel placement slip files (e.g., `Placement Slips - CBRE Group (2025-2026).xlsx`)
-- **Template**: `CBRE Staff Communication 2025.pptx` stored in SharePoint Templates folder
-- **Output**: Updated PowerPoint with client-specific data, saved to SharePoint Generated folder
+Automated PowerPoint generation from Excel placement slips.
 
 ### Key Files
-- `routes/sharepoint-automation.js` - API endpoints for SharePoint integration
-- `utils/pptxProcessor.js` - PowerPoint XML manipulation using PizZip
-- `utils/placementSlipParser.js` - Excel data extraction using XLSX library
-- `public/sharepoint-automation.html` - Frontend UI for processing
+- `utils/pptxProcessor.js` - PowerPoint XML manipulation (PizZip)
+- `utils/placementSlipParser.js` - Excel data extraction (XLSX)
+- `routes/sharepoint-automation.js` - API endpoints
 
-### SharePoint Folder Structure
-```
-/CBRE-Document-Automation/
-├── Placement-Slips/     # Input Excel files
-├── Templates/           # PowerPoint templates
-├── Generated/           # Output files
-└── Archive/             # Processed files
-```
+### Slide Mapping Status
 
-### Slide Update Progress
+| Slide | Product | Excel Sheet | Fields | Status |
+|-------|---------|-------------|--------|--------|
+| 1 | Period of Insurance | GTL | Date range | ✅ |
+| 8 | GTL (Group Term Life) | GTL | Eligibility, Last Entry Age, Basis of Cover, Non-evidence Limit | ✅ |
+| 9 | GDD (Group Dread Disease) | GDD  | Eligibility, Last Entry Age, Basis of Cover, Non-evidence Limit | ✅ |
+| 10 | GPA (Group Personal Accident) | GPA | Eligibility, Last Entry Age, Basis of Cover | ✅ |
+| 11 | GPA Additional Features | - | Static content | N/A |
+| 12 | GHS (Group Hospital & Surgical) | GHS | Eligibility, Last Entry Age, Category/Plan | ✅ |
+| 13-15 | GHS Details | GHS | TBD | ⏳ |
 
-#### ✅ Slide 1 - Period of Insurance
-- **Field**: Period of Insurance date range
-- **Source**: Excel GTL sheet, row with "Period of Insurance :" label
-- **Format**: `DD Month YYYY to DD Month YYYY` (e.g., "10 July 2024 to 30 June 2026")
-- **Method**: Direct text replacement in slide XML
+### Technical Notes
 
-#### ✅ Slide 8 - GTL (Group Term Life) Table
-| Field | Status | Notes |
-|-------|--------|-------|
-| Eligibility | ✅ | Combined row with Last Entry Age |
-| Last Entry Age | ✅ | Combined row with Eligibility |
-| Basis of Cover | ✅ | Bullet point pattern matching |
-| Non-evidence Limit | ✅ | Table cell replacement |
+**Eligibility/Last Entry Age Cell Structure**:
+Template cell has 3 text elements: \`": "\` + eligibility + \`": age XX next birthday"\`
+Code uses \`replaceEligibilityAndLastEntryAgeSeparately()\` to update each element independently.
 
-**Template Structure (Slide 8 Table):**
-```
-Row 1: "24 Hours-Worldwide" (header)
-Row 2: "EligibilityLast Entry Age" → Combined eligibility + last entry age value
-Row 3: "Basis of Cover" → Bullet points with category: basis format
-Row 4: "Non-evidence Limit" → Insurance limit value
-```
+**Excel Sheet Names**: GTL, GHS, GPA (standard), "GDD " (trailing space)
 
-**Important**: The template has "Eligibility" and "Last Entry Age" merged into ONE row labeled `EligibilityLast Entry Age` (no space). Code handles this by:
-1. First trying combined label match
-2. Falling back to separate row matching if combined not found
-
-#### ✅ Slide 9 - GDD (Group Dread Disease) Table
-| Field | Status | Notes |
-|-------|--------|-------|
-| Eligibility | ✅ | Combined row with Last Entry Age |
-| Last Entry Age | ✅ | Combined row with Eligibility |
-| Basis of Cover | ✅ | Bullet point pattern matching |
-| Non-evidence Limit | ✅ | Table cell replacement |
-
-**Source**: Excel "GDD " sheet (note: sheet name has trailing space)
-**Template Structure**: Identical to Slide 8 - same 4-row table format
-
-#### ✅ Slide 10 - GPA (Group Personal Accident) Table
-| Field | Status | Notes |
-|-------|--------|-------|
-| Eligibility | ✅ | Combined row with Last Entry Age |
-| Last Entry Age | ✅ | Combined row with Eligibility |
-| Basis of Cover | ✅ | Cell replacement with bullet points |
-
-**Source**: Excel "GPA" sheet (Category in col 3, Basis in col 6)
-**Template Structure**: 3-row table (no Non-evidence Limit row)
-```
-Row 1: "24 Hours-Worldwide" (header)
-Row 2: "EligibilityLast Entry Age" → Combined eligibility + last entry age
-Row 3: "Basis of Cover" → Bullet points with category: basis format
-```
-**Note**: GPA does NOT have Non-evidence Limit field (unlike GTL, GDD, GHS)
-
-#### ℹ️ Slide 11 - GPA Additional Features (Static)
-Static informational slide describing GPA benefits - no data mapping needed.
-Contains descriptions of: Comatose State, Fractures, TCM Treatment, Mobility Extensions, Burns Benefits, Child Education Fund, Ambulance Costs.
-
-#### ✅ Slide 12 - GHS (Group Hospital & Surgical) Tables
-Slide 12 has TWO tables with different structure than Slides 8-10:
-
-**Table 1 - Eligibility (2 rows)**
-| Field | Status | Notes |
-|-------|--------|-------|
-| Eligibility | ✅ | Separate text element replacement |
-| Last Entry Age | ✅ | Separate text element replacement |
-
-**Table 2 - Category/Plan (6 rows)**
-| Field | Status | Notes |
-|-------|--------|-------|
-| Category/Plan | ✅ | Maps Plan codes from Excel column I |
-
-**Source**: Excel "GHS" sheet (Category in col 3, Plan in col 8)
-**Template Structure**: Two separate tables (not combined like Slides 8-10)
-**Note**: Eligibility/Last Entry Age are replaced as SEPARATE text elements to avoid duplication
-
-### Template Slide Mapping
-| Slide | Product | Excel Sheet | Status |
-|-------|---------|-------------|--------|
-| 1 | Period of Insurance | GTL | ✅ Done |
-| 6-7 | GTL Overview | - | N/A (static) |
-| 8 | GTL (Group Term Life) | GTL | ✅ Done |
-| 9 | GDD (Group Dread Disease) | GDD | ✅ Done |
-| 10 | GPA (Group Personal Accident) | GPA | ✅ Done |
-| 11 | GPA Additional Features | - | N/A (static) |
-| 12-15 | GHS (Group Hospital & Surgical) | GHS | ✅ Done (Slide 12) |
+**Excel Column Mapping**:
+| Sheet | Category Col | Value Col |
+|-------|--------------|-----------|
+| GTL/GDD | 3 | 5 (Basis) |
+| GPA | 3 | 6 (Basis) |
+| GHS | 3 | 8 (Plan) |
 
 ### API Endpoints
-- `POST /api/sharepoint-automation/process` - Process Excel and generate PowerPoint
-- `GET /api/sharepoint-automation/check-new-files` - Check for pending Excel files
-- `GET /api/sharepoint-automation/inspect-slide8-tables` - Debug endpoint for template inspection
+- \`POST /api/sharepoint-automation/process\` - Process Excel → Generate PPTX
+- \`GET /api/sharepoint-automation/check-new-files\` - Check pending files
 
-### Future Phases
-- Slides 13-15: Additional GHS details
-- GMM, GP, SP, Dental sheets (if applicable slides exist)
-- Webhook integration for automatic processing
+### Next Phase
+- Slides 13-15: Additional GHS plan details
