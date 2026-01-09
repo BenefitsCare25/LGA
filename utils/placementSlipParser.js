@@ -767,19 +767,40 @@ function extractGHSScheduleOfBenefits(data) {
                 result.benefits.push(benefitItem);
             }
 
-            // Extract sub-items (Maximum no. of days, Qualification period, etc.)
-            if (col1.toLowerCase().includes('maximum no. of days') ||
-                col1.toLowerCase().includes('qualification period')) {
+            // Extract sub-items (Maximum no. of days, Qualification period, Hospital Misc, etc.)
+            const col1Lower = col1.toLowerCase();
+            const isSubItem = col1Lower.includes('maximum no. of days') ||
+                col1Lower.includes('qualification period') ||
+                col1Lower.includes('hospital miscellaneous') ||
+                col1Lower.includes('surgical fees') ||
+                col1Lower.includes('surgical schedule') ||
+                col1Lower.includes('pre-existing') || col1Lower.includes('pre- existing') ||
+                col1Lower.includes('daily in hospital doctor') ||
+                col0.match(/^\s*\(\s*[a-d]\s*\)\s*$/i); // Match (a), (b), (c), (d)
+
+            if (isSubItem) {
+                let subPlan1 = String(row[6] || '').trim();
+                let subPlan2 = String(row[7] || '').trim();
+                let subPlan3 = String(row[8] || '').trim();
+
+                // Handle merged cells for sub-items too
+                if (subPlan1 && !subPlan2 && !subPlan3) {
+                    subPlan2 = subPlan1;
+                    subPlan3 = subPlan1;
+                }
+
                 const subItem = {
                     name: col1,
-                    plan1Value: String(row[6] || '').trim(),
-                    plan2Value: String(row[7] || '').trim(),
-                    plan3Value: String(row[8] || '').trim()
+                    identifier: col0, // Keep the (a), (b), etc. identifier
+                    plan1Value: subPlan1,
+                    plan2Value: subPlan2,
+                    plan3Value: subPlan3
                 };
 
                 // Add to the last benefit item
                 if (result.benefits.length > 0) {
                     result.benefits[result.benefits.length - 1].subItems.push(subItem);
+                    console.log(`      └─ Sub-item: "${col1.substring(0, 30)}..." → "${subPlan1.substring(0, 20)}"`);
                 }
             }
         }

@@ -1653,6 +1653,47 @@ function updateSlide15ScheduleOfBenefits(zip, slide15Data) {
                             break;
                         }
                     }
+
+                    // Update sub-item rows (Maximum no. of days, Hospital Misc, etc.)
+                    const rowText = cells.map(c => c.text).join(' ').toLowerCase();
+                    const cell0Text = cells[0].text.trim().toLowerCase();
+                    const cell1Text = cells[1]?.text.trim().toLowerCase() || '';
+
+                    for (const benefit of scheduleData.benefits || []) {
+                        for (const subItem of benefit.subItems || []) {
+                            const subNameLower = subItem.name.toLowerCase();
+                            const subIdentifier = (subItem.identifier || '').toLowerCase().replace(/\s/g, '');
+                            const cell0Normalized = cell0Text.replace(/\s/g, '');
+
+                            // Match by identifier (a), (b), (c), (d) or by keywords
+                            const identifierMatch = subIdentifier && cell0Normalized === subIdentifier;
+                            const keywordMatch = (
+                                (subNameLower.includes('maximum no. of days') && rowText.includes('maximum no. of days')) ||
+                                (subNameLower.includes('hospital miscellaneous') && rowText.includes('hospital miscellaneous')) ||
+                                (subNameLower.includes('surgical fees') && rowText.includes('surgical fees')) ||
+                                (subNameLower.includes('surgical schedule') && rowText.includes('surgical schedule')) ||
+                                (subNameLower.includes('qualification period') && rowText.includes('qualification period') && !rowText.includes('all disabilities')) ||
+                                (subNameLower.includes('daily in hospital doctor') && rowText.includes('daily in hospital doctor')) ||
+                                ((subNameLower.includes('pre-existing') || subNameLower.includes('pre- existing')) && (rowText.includes('pre-existing') || rowText.includes('pre- existing')))
+                            );
+
+                            if (identifierMatch || keywordMatch) {
+                                let newRow = row.full;
+                                if (subItem.plan1Value) {
+                                    newRow = updateCellTextByIndex(newRow, cells, 10, formatBenefitValue(subItem.plan1Value));
+                                }
+                                if (subItem.plan2Value) {
+                                    newRow = updateCellTextByIndex(newRow, cells, 11, formatBenefitValue(subItem.plan2Value));
+                                }
+                                if (subItem.plan3Value) {
+                                    newRow = updateCellTextByIndex(newRow, cells, 12, formatBenefitValue(subItem.plan3Value));
+                                }
+                                updatedTableContent = updatedTableContent.replace(row.full, newRow);
+                                console.log(`    ✅ Updated sub-item: ${subItem.name.substring(0, 40)}...`);
+                                break;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -1746,6 +1787,43 @@ function updateSlide16ScheduleOfBenefits(zip, slide16Data) {
                             results.updated.push({ field: `Benefit ${benefit.number}`, value: benefit.name.substring(0, 30) });
                             console.log(`    ✅ Updated Benefit ${benefit.number}: ${benefit.name.substring(0, 30)}...`);
                             break;
+                        }
+                    }
+
+                    // Update sub-item rows for benefits 7-15 (Pre-existing, etc.)
+                    const rowText = cells.map(c => c.text).join(' ').toLowerCase();
+                    const cell0Text = cells[0].text.trim().toLowerCase();
+
+                    for (const benefit of scheduleData.benefits || []) {
+                        if (benefit.number < 7) continue; // Only process benefits 7-15 sub-items
+                        for (const subItem of benefit.subItems || []) {
+                            const subNameLower = subItem.name.toLowerCase();
+                            const subIdentifier = (subItem.identifier || '').toLowerCase().replace(/\s/g, '');
+                            const cell0Normalized = cell0Text.replace(/\s/g, '');
+
+                            // Match by identifier (a), (b), (c), (d) or by keywords
+                            const identifierMatch = subIdentifier && cell0Normalized === subIdentifier;
+                            const keywordMatch = (
+                                (subNameLower.includes('maximum no. of days') && rowText.includes('maximum no. of days')) ||
+                                ((subNameLower.includes('pre-existing') || subNameLower.includes('pre- existing')) && (rowText.includes('pre-existing') || rowText.includes('pre- existing')))
+                            );
+
+                            if (identifierMatch || keywordMatch) {
+                                let newRow = row.full;
+                                // Slide 16 uses columns 12, 13, 14 for plan values
+                                if (subItem.plan1Value) {
+                                    newRow = updateCellTextByIndex(newRow, cells, 12, formatBenefitValue(subItem.plan1Value));
+                                }
+                                if (subItem.plan2Value) {
+                                    newRow = updateCellTextByIndex(newRow, cells, 13, formatBenefitValue(subItem.plan2Value));
+                                }
+                                if (subItem.plan3Value) {
+                                    newRow = updateCellTextByIndex(newRow, cells, 14, formatBenefitValue(subItem.plan3Value));
+                                }
+                                updatedTableContent = updatedTableContent.replace(row.full, newRow);
+                                console.log(`    ✅ Updated sub-item: ${subItem.name.substring(0, 40)}...`);
+                                break;
+                            }
                         }
                     }
                 }
@@ -1901,6 +1979,15 @@ function updateSlide18RoomAndBoard(zip, slide18Data) {
 
                 if (cells.length >= 2) {
                     const wardClass = cells[0].text.trim();
+                    const wardClassLower = wardClass.toLowerCase();
+
+                    // Skip header rows - don't update rows that say "Class of Ward" or "Room & Board"
+                    if (wardClassLower.includes('class of ward') ||
+                        wardClassLower.includes('room') ||
+                        wardClassLower.includes('board') ||
+                        wardClassLower.includes('bedded')) {
+                        continue;
+                    }
 
                     // Find matching ward in Excel data
                     for (const ward of firstEntitlement.wards) {
@@ -1908,10 +1995,12 @@ function updateSlide18RoomAndBoard(zip, slide18Data) {
                         const normalizedExcel = ward.classOfWard.replace(/\s+/g, ' ').trim();
                         const normalizedPpt = wardClass.replace(/\s+/g, ' ').trim();
 
-                        if (normalizedExcel === normalizedPpt ||
-                            normalizedExcel.includes(normalizedPpt) ||
-                            normalizedPpt.includes(normalizedExcel)) {
+                        // Use stricter matching - exact match or contains only for longer strings (>2 chars)
+                        const exactMatch = normalizedExcel === normalizedPpt;
+                        const containsMatch = normalizedPpt.length > 2 &&
+                            (normalizedExcel.includes(normalizedPpt) || normalizedPpt.includes(normalizedExcel));
 
+                        if (exactMatch || containsMatch) {
                             // Update benefit value in second cell
                             const newRow = updateCellTextByIndex(row.full, cells, 1, ward.benefit);
                             updatedTableContent = updatedTableContent.replace(row.full, newRow);
