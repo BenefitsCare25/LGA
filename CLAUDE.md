@@ -135,3 +135,64 @@ Required environment variables (see `.env.example`):
 - Graceful degradation when optional services are unavailable
 - Comprehensive API testing endpoints for troubleshooting
 - Detailed error logging for campaign and processing issues
+
+## SharePoint Document Automation
+
+Automated PowerPoint generation from Excel placement slips stored on SharePoint/OneDrive.
+
+### Overview
+- **Input**: Excel placement slip files (e.g., `Placement Slips - CBRE Group (2025-2026).xlsx`)
+- **Template**: `CBRE Staff Communication 2025.pptx` stored in SharePoint Templates folder
+- **Output**: Updated PowerPoint with client-specific data, saved to SharePoint Generated folder
+
+### Key Files
+- `routes/sharepoint-automation.js` - API endpoints for SharePoint integration
+- `utils/pptxProcessor.js` - PowerPoint XML manipulation using PizZip
+- `utils/placementSlipParser.js` - Excel data extraction using XLSX library
+- `public/sharepoint-automation.html` - Frontend UI for processing
+
+### SharePoint Folder Structure
+```
+/CBRE-Document-Automation/
+├── Placement-Slips/     # Input Excel files
+├── Templates/           # PowerPoint templates
+├── Generated/           # Output files
+└── Archive/             # Processed files
+```
+
+### Slide Update Progress
+
+#### ✅ Slide 1 - Period of Insurance
+- **Field**: Period of Insurance date range
+- **Source**: Excel GTL sheet, row with "Period of Insurance :" label
+- **Format**: `DD Month YYYY to DD Month YYYY` (e.g., "10 July 2024 to 30 June 2026")
+- **Method**: Direct text replacement in slide XML
+
+#### ✅ Slide 8 - GTL (Group Term Life) Table
+| Field | Status | Notes |
+|-------|--------|-------|
+| Eligibility | ✅ | Combined row with Last Entry Age |
+| Last Entry Age | ✅ | Combined row with Eligibility |
+| Basis of Cover | ✅ | Bullet point pattern matching |
+| Non-evidence Limit | ✅ | Table cell replacement |
+
+**Template Structure (Slide 8 Table):**
+```
+Row 1: "24 Hours-Worldwide" (header)
+Row 2: "EligibilityLast Entry Age" → Combined eligibility + last entry age value
+Row 3: "Basis of Cover" → Bullet points with category: basis format
+Row 4: "Non-evidence Limit" → Insurance limit value
+```
+
+**Important**: The template has "Eligibility" and "Last Entry Age" merged into ONE row labeled `EligibilityLast Entry Age` (no space). Code handles this by:
+1. First trying combined label match
+2. Falling back to separate row matching if combined not found
+
+### API Endpoints
+- `POST /api/sharepoint-automation/process` - Process Excel and generate PowerPoint
+- `GET /api/sharepoint-automation/check-new-files` - Check for pending Excel files
+- `GET /api/sharepoint-automation/inspect-slide8-tables` - Debug endpoint for template inspection
+
+### Future Phases
+- Slide 9-11: Additional insurance product details (GDD, GHS, GMM, etc.)
+- Webhook integration for automatic processing when new files uploaded
