@@ -557,6 +557,39 @@ function extractGMMData(sheet) {
 }
 
 /**
+ * Clean category text by removing empty bullet lines
+ * @param {string} text - Raw category text from Excel
+ * @returns {string} Cleaned text with empty bullets removed
+ */
+function cleanCategoryText(text) {
+    if (!text) return '';
+
+    // Split by common line break patterns (newline, carriage return, or bullet followed by space/newline)
+    const lines = text.split(/[\r\n]+|(?=•)/);
+
+    // Filter out empty lines and lines that are just bullet points
+    const cleanedLines = lines
+        .map(line => line.trim())
+        .filter(line => {
+            // Remove if empty
+            if (!line) return false;
+            // Remove if just a bullet point (with optional whitespace)
+            if (/^[•\-\*]?\s*$/.test(line)) return false;
+            // Keep if has actual content
+            return true;
+        })
+        .map(line => {
+            // Ensure each line starts with bullet point
+            if (!line.startsWith('•')) {
+                return '• ' + line;
+            }
+            return line;
+        });
+
+    return cleanedLines.join('\n');
+}
+
+/**
  * Extract GMM Category/Plan table for Slide 19
  * Dynamically extracts categories and their corresponding plans
  * Excludes suffix plans (ending with "S" like 1AS, 1BS, 2AS, 2BS, 3S)
@@ -607,11 +640,14 @@ function extractGMMCategoryPlans(data) {
                 const isSuffixPlan = planUpper.endsWith('S') && !planUpper.endsWith('BS1');
 
                 if (!isSuffixPlan) {
+                    // Clean category text - remove empty bullet lines
+                    const cleanedCategory = cleanCategoryText(colD);
+
                     categoryPlans.push({
-                        category: colD,
+                        category: cleanedCategory,
                         plan: colJ
                     });
-                    console.log(`    📊 Category: "${colD.substring(0, 40)}..." → Plan: ${colJ}`);
+                    console.log(`    📊 Category: "${cleanedCategory.substring(0, 40)}..." → Plan: ${colJ}`);
                 } else {
                     console.log(`    ⏭️ Skipping suffix plan: ${colJ}`);
                 }
