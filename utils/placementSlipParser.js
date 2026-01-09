@@ -528,6 +528,192 @@ function extractGPABasisOfCover(data) {
 }
 
 /**
+ * Extract GMM (Group Major Medical) specific data from the GMM sheet
+ * @param {Object} sheet - XLSX sheet object
+ * @returns {Object} GMM data including eligibility, last entry age, scheduleOfBenefits
+ */
+function extractGMMData(sheet) {
+    if (!sheet) return null;
+
+    const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    console.log('📋 Extracting GMM data...');
+
+    // Extract individual fields
+    const eligibility = extractFieldByLabel(data, 'eligibility :', 2);
+    const lastEntryAge = extractFieldByLabel(data, 'last entry age', 2);
+
+    // Extract Schedule of Benefits with dynamic plan handling
+    const scheduleOfBenefits = extractGMMScheduleOfBenefits(data);
+
+    return {
+        eligibility: eligibility,
+        lastEntryAge: lastEntryAge,
+        scheduleOfBenefits: scheduleOfBenefits
+    };
+}
+
+/**
+ * Extract GMM Schedule of Benefits table data for Slide 20
+ * Dynamically extracts plan headers and all benefit rows with their values
+ * @param {Array} data - Sheet data as 2D array
+ * @returns {Object} { planHeaders, planColumns, benefits }
+ */
+function extractGMMScheduleOfBenefits(data) {
+    console.log('  🔍 Extracting GMM Schedule of Benefits with dynamic plan handling...');
+
+    const result = {
+        planHeaders: [],   // Dynamic plan names from Excel header row
+        planColumns: [],   // Column indices for each plan
+        benefits: []       // Array of benefit rows with sub-items
+    };
+
+    // Benefit name patterns for matching
+    const BENEFIT_PATTERNS = [
+        { name: 'Daily Room & Board', pattern: /daily room.*board/i },
+        { name: 'Inpatient benefits', pattern: /inpatient benefits/i },
+        { name: 'Post Hospitalisation', pattern: /post hospital/i },
+        { name: 'Surgical Implants', pattern: /surgical implants/i },
+        { name: 'Outpatient Treatment', pattern: /outpatient treatment/i },
+        { name: 'Daily Parental Accommodation', pattern: /parental accommodation/i },
+        { name: 'Daily Home Nursing Benefit', pattern: /home nursing/i },
+        { name: 'HIV due to blood Transfusion', pattern: /hiv.*transfusion/i },
+        { name: 'Maximum Benefit', pattern: /maximum benefit/i },
+        { name: 'Extension to cover GST', pattern: /extension.*gst/i }
+    ];
+
+    let foundScheduleHeader = false;
+    let scheduleStartRow = -1;
+    let currentBenefit = null;
+
+    for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        if (!row) continue;
+
+        const col0 = String(row[0] || '').trim();
+        const col1 = String(row[1] || '').trim();
+        const col0Lower = col0.toLowerCase();
+        const col1Lower = col1.toLowerCase();
+
+        // Find the "SCHEDULE OF BENEFITS / INSURER" header row to extract plan headers dynamically
+        if (col0Lower.includes('schedule of benefits') && col0Lower.includes('insurer')) {
+            foundScheduleHeader = true;
+            scheduleStartRow = i;
+
+            // Extract plan headers DYNAMICALLY from columns 7+ (column H onwards)
+            // GMM has columns: 7=1A/1B, 8=1AS/1BS, 9=2A/2B, 10=2AS/2BS, 11=3, etc.
+            for (let colIdx = 7; colIdx < row.length; colIdx++) {
+                const header = String(row[colIdx] || '').trim();
+                if (header && !header.toLowerCase().includes('schedule') && header.length < 20) {
+                    result.planHeaders.push(header);
+                    result.planColumns.push(colIdx);
+                }
+            }
+
+            console.log(`    📍 Found Schedule of Benefits header at row ${i + 1}`);
+            console.log(`    📋 Dynamic plan headers: ${result.planHeaders.join(', ')}`);
+            console.log(`    📋 Plan columns: ${result.planColumns.join(', ')}`);
+            continue;
+        }
+
+        // After finding header, extract benefit rows
+        if (foundScheduleHeader && i > scheduleStartRow) {
+            // Stop at Endorsements section
+            if (col0Lower.includes('endorsement') || col0Lower.includes('endorsements')) {
+                console.log(`    🛑 Stopping at row ${i + 1} (found endorsements section)`);
+                break;
+            }
+
+            // Check if this is a main benefit row (has number in column 0)
+            const rowNumber = parseInt(col0, 10);
+            const isMainBenefitRow = !isNaN(rowNumber) && rowNumber >= 1 && rowNumber <= 20;
+
+            // Match benefit by name pattern (column 1)
+            let matchedPattern = null;
+            for (const bp of BENEFIT_PATTERNS) {
+                if (bp.pattern.test(col1)) {
+                    matchedPattern = bp;
+                    break;
+                }
+            }
+
+            if (isMainBenefitRow || matchedPattern) {
+                // Extract values for all dynamic plan columns
+                const values = {};
+                for (let p = 0; p < result.planHeaders.length; p++) {
+                    const planHeader = result.planHeaders[p];
+                    const colIdx = result.planColumns[p];
+                    let value = String(row[colIdx] || '').trim();
+
+                    // Format co-insurance decimals as percentages
+                    if (value && !isNaN(parseFloat(value)) && parseFloat(value) < 1 && parseFloat(value) > 0) {
+                        value = `${Math.round(parseFloat(value) * 100)}%`;
+                    }
+
+                    values[planHeader] = value;
+                }
+
+                // Create benefit item
+                const benefitItem = {
+                    number: isMainBenefitRow ? rowNumber : null,
+                    name: matchedPattern ? matchedPattern.name : col1,
+                    rawName: col1,
+                    values: values,
+                    subItems: []
+                };
+
+                result.benefits.push(benefitItem);
+                currentBenefit = benefitItem;
+
+                const firstValue = values[result.planHeaders[0]] || '';
+                console.log(`    📊 Benefit ${rowNumber || '?'}: "${col1.substring(0, 40)}..." → ${result.planHeaders[0]}: "${firstValue.substring(0, 20)}"`);
+            }
+            // Check for sub-items (rows without number in col 0, but have content in col 1)
+            else if (!col0 && col1 && currentBenefit) {
+                // Sub-item patterns
+                const isSubItem =
+                    col1Lower.includes('from') ||
+                    col1Lower.includes('deductible') ||
+                    col1Lower.includes('co - insurance') || col1Lower.includes('co-insurance') ||
+                    col1Lower.includes('maximum no') ||
+                    col1Lower.includes('maximum limit') ||
+                    col1Lower.includes('per any one disability') ||
+                    col1Lower.match(/^\s*\(\s*[a-z]\s*\)\s*/i); // Match (a), (b), etc.
+
+                if (isSubItem) {
+                    // Extract values for all dynamic plan columns
+                    const subValues = {};
+                    for (let p = 0; p < result.planHeaders.length; p++) {
+                        const planHeader = result.planHeaders[p];
+                        const colIdx = result.planColumns[p];
+                        let value = String(row[colIdx] || '').trim();
+
+                        // Format co-insurance decimals as percentages
+                        if (value && !isNaN(parseFloat(value)) && parseFloat(value) < 1 && parseFloat(value) > 0) {
+                            value = `${Math.round(parseFloat(value) * 100)}%`;
+                        }
+
+                        subValues[planHeader] = value;
+                    }
+
+                    const subItem = {
+                        name: col1,
+                        identifier: col0,
+                        values: subValues
+                    };
+
+                    currentBenefit.subItems.push(subItem);
+                    const firstSubValue = subValues[result.planHeaders[0]] || '';
+                    console.log(`      └─ Sub-item: "${col1.substring(0, 30)}..." → "${firstSubValue.substring(0, 20)}"`);
+                }
+            }
+        }
+    }
+
+    console.log(`  ✅ Extracted ${result.benefits.length} GMM benefit items with ${result.planHeaders.length} plan types`);
+    return result;
+}
+
+/**
  * Extract all sheet data from workbook for future phases
  * @param {Object} workbook - XLSX workbook object
  * @returns {Object} Object with data from each sheet
@@ -628,6 +814,18 @@ function processPlacementSlip(buffer) {
         console.log(`   - Basis of Cover: ${gpaData.basisOfCover?.length || 0} entries`);
     }
 
+    // Extract GMM-specific data for Slides 19-20
+    const gmmSheet = workbook.Sheets['GMM'];
+    const gmmData = extractGMMData(gmmSheet);
+
+    if (gmmData) {
+        console.log('✅ GMM Data extracted successfully');
+        console.log(`   - Eligibility: ${gmmData.eligibility ? 'Found' : 'Not found'}`);
+        console.log(`   - Last Entry Age: ${gmmData.lastEntryAge ? 'Found' : 'Not found'}`);
+        console.log(`   - Schedule of Benefits: ${gmmData.scheduleOfBenefits?.benefits?.length || 0} items`);
+        console.log(`   - Plan Types: ${gmmData.scheduleOfBenefits?.planHeaders?.join(', ') || 'None'}`);
+    }
+
     return {
         success: true,
         periodOfInsurance: periodOfInsurance,
@@ -637,6 +835,7 @@ function processPlacementSlip(buffer) {
         gddData: gddData,
         ghsData: ghsData,
         gpaData: gpaData,
+        gmmData: gmmData,
         slide1Data: {
             periodOfInsurance: periodOfInsurance
         },
@@ -677,6 +876,15 @@ function processPlacementSlip(buffer) {
         // Slide 18: GHS Room & Board Entitlements
         slide18Data: {
             roomAndBoardEntitlements: ghsData?.roomAndBoardEntitlements
+        },
+        // Slide 19: GMM Overview (Eligibility, Last Entry Age)
+        slide19Data: {
+            eligibility: gmmData?.eligibility,
+            lastEntryAge: gmmData?.lastEntryAge
+        },
+        // Slide 20: GMM Schedule of Benefits
+        slide20Data: {
+            scheduleOfBenefits: gmmData?.scheduleOfBenefits
         }
     };
 }
@@ -956,6 +1164,8 @@ module.exports = {
     extractGHSQualificationPeriod,
     extractGHSRoomAndBoardEntitlements,
     extractGPAData,
+    extractGMMData,
+    extractGMMScheduleOfBenefits,
     extractFieldByLabel,
     extractBasisOfCover,
     extractGPABasisOfCover,

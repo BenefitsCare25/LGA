@@ -76,6 +76,8 @@ Automated PowerPoint generation from Excel placement slips.
 | 16 | GHS Schedule of Benefits (7-15) | GHS | Outpatient Treatment, Miscarriage, Death, Ambulance, Medical Report, Psychiatric, Overseas, Rehab, GST | ✅ |
 | 17 | GHS Notes | GHS | Qualification Period (14 days from Row 43) | ✅ |
 | 18 | GHS Hospital Cash Allowance | GHS | Room & Board Entitlements (1&2 Bedded, 4 Bedded ward classes) | ✅ |
+| 19 | GMM (Group Major Medical) Overview | GMM | Eligibility, Last Entry Age | ✅ |
+| 20 | GMM Schedule of Benefits | GMM | Dynamic plan columns, 10 benefits with sub-items | ✅ |
 
 ### Technical Notes
 
@@ -127,5 +129,46 @@ Code uses \`replaceEligibilityAndLastEntryAgeSeparately()\` to update each eleme
 | B2 / B2 + | S$200 | S$150 |
 | C | S$300 | S$200 |
 
+### Slide 19 GMM Overview
+
+**Excel Source**: GMM sheet
+- Row 10, Col 2: Eligibility
+- Row 12, Col 2: Last Entry Age
+
+**PowerPoint Structure**: Small table with Eligibility/Last Entry Age row (same pattern as slides 8-12)
+
+### Slide 20 GMM Schedule of Benefits
+
+**Dynamic Plan Column Handling**:
+- Plan headers extracted from Excel Row 49 (columns 7+)
+- Supports variable number of plan types (e.g., 1A/1B, 1AS/1BS, 2A/2B, 2AS/2BS, 3, 3S)
+- PPTX plan columns start at index 6, mapped sequentially
+
+**Excel Source**: GMM sheet, Rows 50-95
+| Excel Column | Content |
+|--------------|---------|
+| 7 (H) | Plan 1A/1B values |
+| 8 (I) | Plan 1AS/1BS values (spouse) |
+| 9 (J) | Plan 2A/2B values |
+| 10 (K) | Plan 2AS/2BS values (spouse) |
+| 11 (L) | Plan 3 values |
+| 12 (M) | Plan 3S values (spouse) |
+
+**Benefit Items (10 total)**:
+1. Daily Room & Board (with sub-items: from, Co-insurance)
+2. Inpatient benefits (with sub-items: Deductible, Co-insurance)
+3. Post Hospitalisation (with sub-items: from, Co-insurance)
+4. Surgical Implants (with sub-item: Co-insurance)
+5. Outpatient Treatment (NA values)
+6. Daily Parental Accommodation (with sub-items: Max days, Co-insurance)
+7. Daily Home Nursing Benefit (with sub-items: Max days, Co-insurance)
+8. HIV due to blood Transfusion (with sub-item: Co-insurance)
+9. Maximum Benefit (with sub-items: Per disability, Co-insurance)
+10. Extension to cover GST
+
+**Value Formatting**:
+- Co-insurance decimals (0.2) → percentages (20%)
+- Literal strings preserved: "As per GHS", "As charged", "NA"
+
 ### Next Phase
-- Slides 19+: Additional GMM, GP, Dental mappings (if required)
+- Slides 21+: Additional GP, SP, Dental mappings (if required)

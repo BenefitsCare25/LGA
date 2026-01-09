@@ -1429,6 +1429,52 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
+    // Phase 10: Update Slide 19 - GMM Overview (Eligibility, Last Entry Age)
+    if (placementData.slide19Data) {
+        console.log('📊 Processing Slide 19 GMM Overview...');
+        const slide19Results = updateSlide19GMMOverview(zip, placementData.slide19Data);
+
+        for (const update of slide19Results.updated) {
+            results.updatedSlides.push({
+                slide: 19,
+                field: update.field,
+                value: update.value
+            });
+        }
+
+        for (const error of slide19Results.errors) {
+            results.errors.push({
+                slide: 19,
+                field: error.field,
+                error: error.error,
+                hint: error.hint || null
+            });
+        }
+    }
+
+    // Phase 11: Update Slide 20 - GMM Schedule of Benefits
+    if (placementData.slide20Data) {
+        console.log('📊 Processing Slide 20 GMM Schedule of Benefits...');
+        const slide20Results = updateSlide20GMMScheduleOfBenefits(zip, placementData.slide20Data);
+
+        for (const update of slide20Results.updated) {
+            results.updatedSlides.push({
+                slide: 20,
+                field: update.field,
+                value: update.value
+            });
+        }
+
+        for (const error of slide20Results.errors) {
+            results.errors.push({
+                slide: 20,
+                field: error.field,
+                error: error.error,
+                hint: error.hint || null
+            });
+        }
+    }
+
     // Generate updated PPTX buffer
     const updatedBuffer = writePPTX(zip);
 
@@ -2365,6 +2411,229 @@ function formatBenefitValue(value) {
     return value;
 }
 
+/**
+ * Update Slide 19 GMM Overview with eligibility and last entry age
+ * @param {Object} zip - PizZip instance
+ * @param {Object} slide19Data - Data for slide 19 (eligibility, lastEntryAge)
+ * @returns {Object} Results of the update operation
+ */
+function updateSlide19GMMOverview(zip, slide19Data) {
+    console.log('📝 Updating Slide 19 GMM Overview...');
+
+    const results = {
+        updated: [],
+        errors: []
+    };
+
+    if (!slide19Data) {
+        console.log('⚠️ No slide 19 data provided');
+        return results;
+    }
+
+    console.log('📋 Slide 19 Data received:');
+    console.log(`   - eligibility: "${slide19Data.eligibility?.substring(0, 60) || 'null'}..."`);
+    console.log(`   - lastEntryAge: "${slide19Data.lastEntryAge || 'null'}"`);
+
+    try {
+        let slideXml = getSlideXML(zip, 19);
+
+        // Update Eligibility & Last Entry Age - Replace as separate text elements
+        if (slide19Data.eligibility || slide19Data.lastEntryAge) {
+            const eligResult = replaceEligibilityAndLastEntryAgeSeparately(
+                slideXml,
+                slide19Data.eligibility,
+                slide19Data.lastEntryAge
+            );
+
+            if (eligResult.success) {
+                slideXml = eligResult.xml;
+                console.log(`  ✅ Updated Eligibility & Last Entry Age`);
+                if (slide19Data.eligibility) {
+                    results.updated.push({ field: 'Eligibility', value: slide19Data.eligibility.substring(0, 50) + '...' });
+                }
+                if (slide19Data.lastEntryAge) {
+                    results.updated.push({ field: 'Last Entry Age', value: slide19Data.lastEntryAge });
+                }
+            } else {
+                console.log(`  ⚠️ Could not update Eligibility/Last Entry Age`);
+                if (slide19Data.eligibility) {
+                    results.errors.push({ field: 'Eligibility', error: 'Cell not found' });
+                }
+            }
+        }
+
+        setSlideXML(zip, 19, slideXml);
+        console.log(`📝 Slide 19 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
+
+    } catch (error) {
+        console.error('❌ Error updating Slide 19:', error.message);
+        results.errors.push({ field: 'Slide 19', error: error.message });
+    }
+
+    return results;
+}
+
+/**
+ * Update Slide 20 GMM Schedule of Benefits with dynamic plan columns
+ * @param {Object} zip - PizZip instance
+ * @param {Object} slide20Data - Data for slide 20 (scheduleOfBenefits with planHeaders, planColumns, benefits)
+ * @returns {Object} Results of the update operation
+ */
+function updateSlide20GMMScheduleOfBenefits(zip, slide20Data) {
+    console.log('📝 Updating Slide 20 GMM Schedule of Benefits...');
+
+    const results = {
+        updated: [],
+        errors: []
+    };
+
+    if (!slide20Data || !slide20Data.scheduleOfBenefits) {
+        console.log('⚠️ No slide 20 data provided');
+        return results;
+    }
+
+    const scheduleData = slide20Data.scheduleOfBenefits;
+    console.log(`📋 GMM Schedule data: ${scheduleData.benefits?.length || 0} benefits`);
+    console.log(`📋 Dynamic plan headers: ${scheduleData.planHeaders?.join(', ') || 'None'}`);
+
+    try {
+        let slideXml = getSlideXML(zip, 20);
+
+        // Find and update table rows
+        const tablePattern = /<a:tbl\b[^>]*>([\s\S]*?)<\/a:tbl>/g;
+        let tableMatch = tablePattern.exec(slideXml);
+
+        if (tableMatch) {
+            let tableContent = tableMatch[1];
+            let updatedTableContent = tableContent;
+
+            // Find all rows in the table
+            const rowPattern = /<a:tr\b[^>]*>([\s\S]*?)<\/a:tr>/g;
+            let rowMatch;
+            const rows = [];
+
+            while ((rowMatch = rowPattern.exec(tableContent)) !== null) {
+                rows.push({
+                    full: rowMatch[0],
+                    content: rowMatch[1],
+                    index: rowMatch.index
+                });
+            }
+
+            console.log(`  📊 Found ${rows.length} rows in Slide 20 table`);
+
+            // Track current benefit for sub-item association
+            let currentBenefit = null;
+
+            // Process each row
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const cells = extractCellsFromRow(row.content);
+
+                if (cells.length < 7) continue; // Need at least benefit number + name + plan columns
+
+                const cell0Text = cells[0].text.trim();
+                const cell1Text = cells[1].text.trim().toLowerCase();
+                const rowText = cell0Text + ' ' + cell1Text;
+
+                // Check if this is the header row (contains "SCHEDULE OF BENEFITS")
+                if (rowText.toLowerCase().includes('schedule of benefits')) {
+                    // Update plan header cells (columns 6+) with dynamic plan names
+                    if (scheduleData.planHeaders && scheduleData.planHeaders.length > 0) {
+                        let newRow = row.full;
+                        for (let p = 0; p < scheduleData.planHeaders.length && (6 + p) < cells.length; p++) {
+                            const planHeader = scheduleData.planHeaders[p];
+                            const pptxColIndex = 6 + p;
+                            newRow = updateCellTextByIndex(newRow, cells, pptxColIndex, `Plan ${planHeader}`);
+                        }
+                        updatedTableContent = updatedTableContent.replace(row.full, newRow);
+                        results.updated.push({ field: 'Plan Headers', value: scheduleData.planHeaders.join(', ') });
+                        console.log(`    ✅ Updated plan headers: ${scheduleData.planHeaders.join(', ')}`);
+                    }
+                    continue;
+                }
+
+                // Check if this is a main benefit row (has number in column 0)
+                const rowNumber = parseInt(cell0Text, 10);
+                const isMainBenefitRow = !isNaN(rowNumber) && rowNumber >= 1 && rowNumber <= 20;
+
+                if (isMainBenefitRow) {
+                    // Find matching benefit by number or name
+                    const matchedBenefit = scheduleData.benefits?.find(b => {
+                        // Match by number
+                        if (b.number === rowNumber) return true;
+                        // Match by name pattern
+                        const benefitNameLower = (b.rawName || b.name || '').toLowerCase();
+                        return cell1Text.includes(benefitNameLower.substring(0, 15)) ||
+                               benefitNameLower.includes(cell1Text.substring(0, 15));
+                    });
+
+                    if (matchedBenefit) {
+                        currentBenefit = matchedBenefit;
+                        let newRow = row.full;
+
+                        // Update plan value columns (starting from column 6)
+                        for (let p = 0; p < scheduleData.planHeaders.length && (6 + p) < cells.length; p++) {
+                            const planHeader = scheduleData.planHeaders[p];
+                            const value = matchedBenefit.values?.[planHeader] || '';
+                            if (value) {
+                                const pptxColIndex = 6 + p;
+                                newRow = updateCellTextByIndex(newRow, cells, pptxColIndex, formatBenefitValue(value));
+                            }
+                        }
+
+                        updatedTableContent = updatedTableContent.replace(row.full, newRow);
+                        results.updated.push({ field: `Benefit ${rowNumber}`, value: matchedBenefit.name });
+                        console.log(`    ✅ Updated Benefit ${rowNumber}: ${matchedBenefit.name.substring(0, 30)}...`);
+                    }
+                }
+                // Check if this is a sub-item row (no number, but has content in col 1)
+                else if (!cell0Text && cell1Text && currentBenefit) {
+                    // Find matching sub-item
+                    const matchedSubItem = currentBenefit.subItems?.find(si => {
+                        const subNameLower = (si.name || '').toLowerCase();
+                        return cell1Text.includes(subNameLower.substring(0, 10)) ||
+                               subNameLower.includes(cell1Text.substring(0, 10));
+                    });
+
+                    if (matchedSubItem) {
+                        let newRow = row.full;
+
+                        // Update plan value columns for sub-item
+                        for (let p = 0; p < scheduleData.planHeaders.length && (6 + p) < cells.length; p++) {
+                            const planHeader = scheduleData.planHeaders[p];
+                            const value = matchedSubItem.values?.[planHeader] || '';
+                            if (value) {
+                                const pptxColIndex = 6 + p;
+                                newRow = updateCellTextByIndex(newRow, cells, pptxColIndex, formatBenefitValue(value));
+                            }
+                        }
+
+                        updatedTableContent = updatedTableContent.replace(row.full, newRow);
+                        console.log(`      └─ Updated sub-item: ${matchedSubItem.name.substring(0, 25)}...`);
+                    }
+                }
+            }
+
+            // Replace table in XML
+            const updatedTable = tableMatch[0].replace(tableContent, updatedTableContent);
+            slideXml = slideXml.replace(tableMatch[0], updatedTable);
+        } else {
+            console.log('  ⚠️ No table found in Slide 20');
+            results.errors.push({ field: 'Slide 20 Table', error: 'Table not found' });
+        }
+
+        setSlideXML(zip, 20, slideXml);
+        console.log(`📝 Slide 20 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
+
+    } catch (error) {
+        console.error('❌ Error updating Slide 20:', error.message);
+        results.errors.push({ field: 'Slide 20', error: error.message });
+    }
+
+    return results;
+}
+
 module.exports = {
     readPPTX,
     getSlideFiles,
@@ -2380,6 +2649,8 @@ module.exports = {
     updateSlide16ScheduleOfBenefits,
     updateSlide17QualificationPeriod,
     updateSlide18RoomAndBoard,
+    updateSlide19GMMOverview,
+    updateSlide20GMMScheduleOfBenefits,
     generateBasisOfCoverParagraph,
     generateBasisOfCoverCellContent,
     escapeXml,
