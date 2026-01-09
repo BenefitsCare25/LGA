@@ -821,6 +821,418 @@ function extractGMMScheduleOfBenefits(data) {
 }
 
 /**
+ * Extract GP (General Practitioner) data from GP sheet
+ * @param {Object} sheet - XLSX sheet object
+ * @returns {Object} Extracted GP data
+ */
+function extractGPData(sheet) {
+    if (!sheet) {
+        console.log('⚠️ GP sheet not found');
+        return null;
+    }
+
+    console.log('📋 Extracting GP Data...');
+    const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+    // Extract eligibility (Row 11, Col 2)
+    const eligibility = extractFieldByLabel(data, 'eligibility :', 2);
+    console.log(`  ✅ GP Eligibility: ${eligibility ? eligibility.substring(0, 50) + '...' : 'Not found'}`);
+
+    // Extract last entry age (Row 13, Col 2)
+    const lastEntryAge = extractFieldByLabel(data, 'last entry age', 2);
+    console.log(`  ✅ GP Last Entry Age: ${lastEntryAge || 'Not found'}`);
+
+    // Extract Category/Plan table
+    const categoryPlans = extractGPCategoryPlans(data);
+
+    // Extract Schedule of Benefits
+    const scheduleOfBenefits = extractGPScheduleOfBenefits(data);
+
+    return {
+        eligibility: eligibility,
+        lastEntryAge: lastEntryAge,
+        categoryPlans: categoryPlans,
+        scheduleOfBenefits: scheduleOfBenefits
+    };
+}
+
+/**
+ * Extract GP Category/Plan table
+ * @param {Array} data - Sheet data as 2D array
+ * @returns {Array} Array of {category, plan} objects
+ */
+function extractGPCategoryPlans(data) {
+    console.log('  🔍 Extracting GP Category/Plan table...');
+
+    const categoryPlans = [];
+    let foundBasisOfCover = false;
+    let headerRow = -1;
+
+    for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        if (!row) continue;
+
+        const colA = String(row[0] || '').trim().toLowerCase();
+
+        // Find "Basis of Cover" header
+        if (colA.includes('basis of cover')) {
+            foundBasisOfCover = true;
+            console.log(`    📍 Found "Basis of Cover" at row ${i + 1}`);
+            continue;
+        }
+
+        // Stop at "Rate" section
+        if (foundBasisOfCover && colA.includes('rate')) {
+            console.log(`    🛑 Stopping at row ${i + 1} (found Rate section)`);
+            break;
+        }
+
+        // Extract category and plan
+        if (foundBasisOfCover) {
+            const colD = String(row[3] || '').trim();  // Category column
+            const colJ = String(row[9] || '').trim();  // Plan column for GP
+
+            // Skip header row
+            if (colD.toLowerCase() === 'category' && colJ.toLowerCase() === 'plan') {
+                headerRow = i;
+                continue;
+            }
+
+            // Extract category and plan (skip if empty)
+            if (colD && colJ && headerRow >= 0) {
+                // Clean category text
+                const cleanedCategory = cleanCategoryText(colD);
+
+                categoryPlans.push({
+                    category: cleanedCategory,
+                    plan: colJ
+                });
+                console.log(`    📊 Category: "${cleanedCategory.substring(0, 40)}..." → Plan: ${colJ}`);
+            }
+        }
+    }
+
+    console.log(`  ✅ Extracted ${categoryPlans.length} GP category/plan entries`);
+    return categoryPlans;
+}
+
+/**
+ * Extract GP Schedule of Benefits
+ * @param {Array} data - Sheet data as 2D array
+ * @returns {Object} Schedule of benefits with plan headers and benefits
+ */
+function extractGPScheduleOfBenefits(data) {
+    console.log('  🔍 Extracting GP Schedule of Benefits...');
+
+    const result = {
+        planHeaders: [],
+        planColumns: [],
+        benefits: []
+    };
+
+    let foundScheduleHeader = false;
+    let scheduleStartRow = -1;
+    let currentBenefit = null;
+
+    for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        if (!row) continue;
+
+        const col0 = String(row[0] || '').trim();
+        const col1 = String(row[1] || '').trim();
+        const col0Lower = col0.toLowerCase();
+
+        // Find Schedule of Benefits header row
+        if (col0Lower.includes('schedule of benefits')) {
+            foundScheduleHeader = true;
+            scheduleStartRow = i;
+
+            // Extract plan headers from columns 7 and 9 for GP
+            const header1 = String(row[7] || '').trim();
+            const header2 = String(row[9] || '').trim();
+
+            if (header1) {
+                result.planHeaders.push(header1);
+                result.planColumns.push(7);
+            }
+            if (header2) {
+                result.planHeaders.push(header2);
+                result.planColumns.push(9);
+            }
+
+            console.log(`    📍 Found Schedule header at row ${i + 1}`);
+            console.log(`    📋 Plan headers: ${result.planHeaders.join(', ')}`);
+            continue;
+        }
+
+        // After header, extract benefits
+        if (foundScheduleHeader && i > scheduleStartRow) {
+            // Stop at Endorsements
+            if (col0Lower.includes('endorsement')) {
+                console.log(`    🛑 Stopping at row ${i + 1} (endorsements)`);
+                break;
+            }
+
+            // Check for main benefit item (A, B, C, D, E, F or -1, -2, etc.)
+            const isLetter = /^[A-F]$/i.test(col0);
+            const isNumbered = /^-?\d+$/.test(col0);
+            const isSubItem = /^\(\s*[a-z]\s*\)$/i.test(col0);
+
+            if (isLetter || isNumbered) {
+                // Main benefit row
+                const values = {};
+                for (let p = 0; p < result.planColumns.length; p++) {
+                    const colIdx = result.planColumns[p];
+                    const value = String(row[colIdx] || '').trim();
+                    values[result.planHeaders[p]] = value;
+                }
+
+                currentBenefit = {
+                    identifier: col0,
+                    name: col1,
+                    values: values,
+                    subItems: []
+                };
+                result.benefits.push(currentBenefit);
+                console.log(`    📊 Benefit ${col0}: "${col1.substring(0, 30)}..."`);
+            } else if (isSubItem && currentBenefit) {
+                // Sub-item row
+                const values = {};
+                for (let p = 0; p < result.planColumns.length; p++) {
+                    const colIdx = result.planColumns[p];
+                    const value = String(row[colIdx] || '').trim();
+                    values[result.planHeaders[p]] = value;
+                }
+
+                currentBenefit.subItems.push({
+                    identifier: col0,
+                    name: col1,
+                    values: values
+                });
+            } else if (col1 && currentBenefit && !col0) {
+                // Continuation or note row (like "includes Teleconsultation")
+                // Check if it has values
+                const hasValues = result.planColumns.some(colIdx => String(row[colIdx] || '').trim());
+                if (hasValues) {
+                    const values = {};
+                    for (let p = 0; p < result.planColumns.length; p++) {
+                        const colIdx = result.planColumns[p];
+                        const value = String(row[colIdx] || '').trim();
+                        values[result.planHeaders[p]] = value;
+                    }
+                    currentBenefit.subItems.push({
+                        identifier: '',
+                        name: col1,
+                        values: values
+                    });
+                }
+            }
+        }
+    }
+
+    console.log(`  ✅ Extracted ${result.benefits.length} GP benefits`);
+    return result;
+}
+
+/**
+ * Extract SP (Specialist) data from SP sheet
+ * @param {Object} sheet - XLSX sheet object
+ * @returns {Object} Extracted SP data
+ */
+function extractSPData(sheet) {
+    if (!sheet) {
+        console.log('⚠️ SP sheet not found');
+        return null;
+    }
+
+    console.log('📋 Extracting SP Data...');
+    const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+    // Extract eligibility (Row 11, Col 2)
+    const eligibility = extractFieldByLabel(data, 'eligibility :', 2);
+    console.log(`  ✅ SP Eligibility: ${eligibility ? eligibility.substring(0, 50) + '...' : 'Not found'}`);
+
+    // Extract last entry age (Row 13, Col 2)
+    const lastEntryAge = extractFieldByLabel(data, 'last entry age', 2);
+    console.log(`  ✅ SP Last Entry Age: ${lastEntryAge || 'Not found'}`);
+
+    // Extract Category/Plan table
+    const categoryPlans = extractSPCategoryPlans(data);
+
+    // Extract Schedule of Benefits
+    const scheduleOfBenefits = extractSPScheduleOfBenefits(data);
+
+    return {
+        eligibility: eligibility,
+        lastEntryAge: lastEntryAge,
+        categoryPlans: categoryPlans,
+        scheduleOfBenefits: scheduleOfBenefits
+    };
+}
+
+/**
+ * Extract SP Category/Plan table
+ * @param {Array} data - Sheet data as 2D array
+ * @returns {Array} Array of {category, plan} objects
+ */
+function extractSPCategoryPlans(data) {
+    console.log('  🔍 Extracting SP Category/Plan table...');
+
+    const categoryPlans = [];
+    let foundBasisOfCover = false;
+    let headerRow = -1;
+
+    for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        if (!row) continue;
+
+        const colA = String(row[0] || '').trim().toLowerCase();
+
+        // Find "Basis of Cover" header
+        if (colA.includes('basis of cover')) {
+            foundBasisOfCover = true;
+            console.log(`    📍 Found "Basis of Cover" at row ${i + 1}`);
+            continue;
+        }
+
+        // Stop at "Rate" section
+        if (foundBasisOfCover && colA.includes('rate')) {
+            console.log(`    🛑 Stopping at row ${i + 1} (found Rate section)`);
+            break;
+        }
+
+        // Extract category and plan
+        if (foundBasisOfCover) {
+            const colD = String(row[3] || '').trim();  // Category column
+            const colI = String(row[8] || '').trim();  // Plan column for SP (column 8)
+
+            // Skip header row
+            if (colD.toLowerCase() === 'category' && colI.toLowerCase() === 'plan') {
+                headerRow = i;
+                continue;
+            }
+
+            // Extract category and plan (skip if empty)
+            if (colD && colI && headerRow >= 0) {
+                // Clean category text
+                const cleanedCategory = cleanCategoryText(colD);
+
+                categoryPlans.push({
+                    category: cleanedCategory,
+                    plan: colI
+                });
+                console.log(`    📊 Category: "${cleanedCategory.substring(0, 40)}..." → Plan: ${colI}`);
+            }
+        }
+    }
+
+    console.log(`  ✅ Extracted ${categoryPlans.length} SP category/plan entries`);
+    return categoryPlans;
+}
+
+/**
+ * Extract SP Schedule of Benefits
+ * @param {Array} data - Sheet data as 2D array
+ * @returns {Object} Schedule of benefits with plan headers and benefits
+ */
+function extractSPScheduleOfBenefits(data) {
+    console.log('  🔍 Extracting SP Schedule of Benefits...');
+
+    const result = {
+        planHeaders: [],
+        planColumns: [],
+        benefits: []
+    };
+
+    let foundScheduleHeader = false;
+    let scheduleStartRow = -1;
+    let currentBenefit = null;
+
+    for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        if (!row) continue;
+
+        const col0 = String(row[0] || '').trim();
+        const col1 = String(row[1] || '').trim();
+        const col0Lower = col0.toLowerCase();
+
+        // Find Schedule of Benefits header row
+        if (col0Lower.includes('schedule of benefits')) {
+            foundScheduleHeader = true;
+            scheduleStartRow = i;
+
+            // Extract plan headers from columns 7 and 9 for SP
+            const header1 = String(row[7] || '').trim();
+            const header2 = String(row[9] || '').trim();
+
+            if (header1) {
+                result.planHeaders.push(header1);
+                result.planColumns.push(7);
+            }
+            if (header2) {
+                result.planHeaders.push(header2);
+                result.planColumns.push(9);
+            }
+
+            console.log(`    📍 Found Schedule header at row ${i + 1}`);
+            console.log(`    📋 Plan headers: ${result.planHeaders.join(', ')}`);
+            continue;
+        }
+
+        // After header, extract benefits
+        if (foundScheduleHeader && i > scheduleStartRow) {
+            // Stop at Endorsements
+            if (col0Lower.includes('endorsement')) {
+                console.log(`    🛑 Stopping at row ${i + 1} (endorsements)`);
+                break;
+            }
+
+            // Check for main benefit item (numbered 1, 2, 3, etc. or 8 for therapy)
+            const isNumbered = /^\d+$/.test(col0);
+            const isSubItem = col0 === '' && col1 && currentBenefit;
+
+            if (isNumbered) {
+                // Main benefit row
+                const values = {};
+                for (let p = 0; p < result.planColumns.length; p++) {
+                    const colIdx = result.planColumns[p];
+                    const value = String(row[colIdx] || '').trim();
+                    values[result.planHeaders[p]] = value;
+                }
+
+                currentBenefit = {
+                    number: parseInt(col0, 10),
+                    name: col1,
+                    values: values,
+                    subItems: []
+                };
+                result.benefits.push(currentBenefit);
+                console.log(`    📊 Benefit ${col0}: "${col1.substring(0, 30)}..."`);
+            } else if (isSubItem) {
+                // Sub-item row (Per visit, Limit per policy year, With referral letter, etc.)
+                const values = {};
+                for (let p = 0; p < result.planColumns.length; p++) {
+                    const colIdx = result.planColumns[p];
+                    const value = String(row[colIdx] || '').trim();
+                    values[result.planHeaders[p]] = value;
+                }
+
+                // Only add if it has a meaningful name
+                if (col1.trim()) {
+                    currentBenefit.subItems.push({
+                        name: col1,
+                        values: values
+                    });
+                }
+            }
+        }
+    }
+
+    console.log(`  ✅ Extracted ${result.benefits.length} SP benefits`);
+    return result;
+}
+
+/**
  * Extract all sheet data from workbook for future phases
  * @param {Object} workbook - XLSX workbook object
  * @returns {Object} Object with data from each sheet
@@ -933,6 +1345,32 @@ function processPlacementSlip(buffer) {
         console.log(`   - Plan Types: ${gmmData.scheduleOfBenefits?.planHeaders?.join(', ') || 'None'}`);
     }
 
+    // Extract GP-specific data for Slides 24-25
+    const gpSheet = workbook.Sheets['GP'];
+    const gpData = extractGPData(gpSheet);
+
+    if (gpData) {
+        console.log('✅ GP Data extracted successfully');
+        console.log(`   - Eligibility: ${gpData.eligibility ? 'Found' : 'Not found'}`);
+        console.log(`   - Last Entry Age: ${gpData.lastEntryAge ? 'Found' : 'Not found'}`);
+        console.log(`   - Category/Plans: ${gpData.categoryPlans?.length || 0} entries`);
+        console.log(`   - Schedule of Benefits: ${gpData.scheduleOfBenefits?.benefits?.length || 0} items`);
+        console.log(`   - Plan Types: ${gpData.scheduleOfBenefits?.planHeaders?.join(', ') || 'None'}`);
+    }
+
+    // Extract SP-specific data for Slides 26-27
+    const spSheet = workbook.Sheets['SP'];
+    const spData = extractSPData(spSheet);
+
+    if (spData) {
+        console.log('✅ SP Data extracted successfully');
+        console.log(`   - Eligibility: ${spData.eligibility ? 'Found' : 'Not found'}`);
+        console.log(`   - Last Entry Age: ${spData.lastEntryAge ? 'Found' : 'Not found'}`);
+        console.log(`   - Category/Plans: ${spData.categoryPlans?.length || 0} entries`);
+        console.log(`   - Schedule of Benefits: ${spData.scheduleOfBenefits?.benefits?.length || 0} items`);
+        console.log(`   - Plan Types: ${spData.scheduleOfBenefits?.planHeaders?.join(', ') || 'None'}`);
+    }
+
     return {
         success: true,
         periodOfInsurance: periodOfInsurance,
@@ -993,7 +1431,30 @@ function processPlacementSlip(buffer) {
         // Slide 20: GMM Schedule of Benefits
         slide20Data: {
             scheduleOfBenefits: gmmData?.scheduleOfBenefits
-        }
+        },
+        // Slide 24: GP Overview (Eligibility, Last Entry Age, Category/Plan)
+        slide24Data: {
+            eligibility: gpData?.eligibility,
+            lastEntryAge: gpData?.lastEntryAge,
+            categoryPlans: gpData?.categoryPlans
+        },
+        // Slide 25: GP Schedule of Benefits
+        slide25Data: {
+            scheduleOfBenefits: gpData?.scheduleOfBenefits
+        },
+        // Slide 26: SP Overview (Eligibility, Last Entry Age, Category/Plan)
+        slide26Data: {
+            eligibility: spData?.eligibility,
+            lastEntryAge: spData?.lastEntryAge,
+            categoryPlans: spData?.categoryPlans
+        },
+        // Slide 27: SP Schedule of Benefits
+        slide27Data: {
+            scheduleOfBenefits: spData?.scheduleOfBenefits
+        },
+        // Raw data for additional processing
+        gpData: gpData,
+        spData: spData
     };
 }
 
@@ -1274,6 +1735,12 @@ module.exports = {
     extractGPAData,
     extractGMMData,
     extractGMMScheduleOfBenefits,
+    extractGPData,
+    extractGPCategoryPlans,
+    extractGPScheduleOfBenefits,
+    extractSPData,
+    extractSPCategoryPlans,
+    extractSPScheduleOfBenefits,
     extractFieldByLabel,
     extractBasisOfCover,
     extractGPABasisOfCover,
