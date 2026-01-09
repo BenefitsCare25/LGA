@@ -78,6 +78,11 @@ Automated PowerPoint generation from Excel placement slips.
 | 18 | GHS Hospital Cash Allowance | GHS | Room & Board Entitlements (1&2 Bedded, 4 Bedded ward classes) | ✅ |
 | 19 | GMM (Group Major Medical) Overview | GMM | Eligibility, Last Entry Age | ✅ |
 | 20 | GMM Schedule of Benefits | GMM | Dynamic plan columns, 10 benefits with sub-items | ✅ |
+| 21-23 | Additional Content | - | Static content | N/A |
+| 24 | GP (General Practitioner) Overview | GP | Eligibility, Last Entry Age, Category/Plan | ✅ |
+| 25 | GP Schedule of Benefits | GP | Dynamic plan columns, 6 benefits (Panel, Polyclinic, Non-Panel, A&E, Overseas, TCM) | ✅ |
+| 26 | SP (Specialist) Overview | SP | Eligibility, Last Entry Age, Category/Plan | ✅ |
+| 27 | SP Schedule of Benefits | SP | Dynamic plan columns, 7 benefits with sub-items | ✅ |
 
 ### Technical Notes
 

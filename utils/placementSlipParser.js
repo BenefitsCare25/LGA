@@ -579,11 +579,9 @@ function cleanCategoryText(text) {
             return true;
         })
         .map(line => {
-            // Ensure each line starts with bullet point
-            if (!line.startsWith('•')) {
-                return '• ' + line;
-            }
-            return line;
+            // REMOVE bullet characters - PPTX handles bullets via XML formatting
+            // This prevents double bullets (one from PPTX, one from text)
+            return line.replace(/^[•\-\*]\s*/, '');
         });
 
     return cleanedLines.join('\n');
