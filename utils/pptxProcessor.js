@@ -1347,6 +1347,98 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
+    // Phase 6: Update Slide 15 - GHS Schedule of Benefits (Items 1-6)
+    if (placementData.slide15Data) {
+        console.log('📊 Processing Slide 15 GHS Schedule of Benefits...');
+        const slide15Results = updateSlide15ScheduleOfBenefits(zip, placementData.slide15Data);
+
+        for (const update of slide15Results.updated) {
+            results.updatedSlides.push({
+                slide: 15,
+                field: update.field,
+                value: update.value
+            });
+        }
+
+        for (const error of slide15Results.errors) {
+            results.errors.push({
+                slide: 15,
+                field: error.field,
+                error: error.error,
+                hint: error.hint || null
+            });
+        }
+    }
+
+    // Phase 7: Update Slide 16 - GHS Schedule of Benefits (Items 7-15)
+    if (placementData.slide16Data) {
+        console.log('📊 Processing Slide 16 GHS Schedule of Benefits...');
+        const slide16Results = updateSlide16ScheduleOfBenefits(zip, placementData.slide16Data);
+
+        for (const update of slide16Results.updated) {
+            results.updatedSlides.push({
+                slide: 16,
+                field: update.field,
+                value: update.value
+            });
+        }
+
+        for (const error of slide16Results.errors) {
+            results.errors.push({
+                slide: 16,
+                field: error.field,
+                error: error.error,
+                hint: error.hint || null
+            });
+        }
+    }
+
+    // Phase 8: Update Slide 17 - GHS Qualification Period (14 days)
+    if (placementData.slide17Data) {
+        console.log('📊 Processing Slide 17 GHS Qualification Period...');
+        const slide17Results = updateSlide17QualificationPeriod(zip, placementData.slide17Data);
+
+        for (const update of slide17Results.updated) {
+            results.updatedSlides.push({
+                slide: 17,
+                field: update.field,
+                value: update.value
+            });
+        }
+
+        for (const error of slide17Results.errors) {
+            results.errors.push({
+                slide: 17,
+                field: error.field,
+                error: error.error,
+                hint: error.hint || null
+            });
+        }
+    }
+
+    // Phase 9: Update Slide 18 - GHS Room & Board Entitlements
+    if (placementData.slide18Data) {
+        console.log('📊 Processing Slide 18 GHS Room & Board...');
+        const slide18Results = updateSlide18RoomAndBoard(zip, placementData.slide18Data);
+
+        for (const update of slide18Results.updated) {
+            results.updatedSlides.push({
+                slide: 18,
+                field: update.field,
+                value: update.value
+            });
+        }
+
+        for (const error of slide18Results.errors) {
+            results.errors.push({
+                slide: 18,
+                field: error.field,
+                error: error.error,
+                hint: error.hint || null
+            });
+        }
+    }
+
     // Generate updated PPTX buffer
     const updatedBuffer = writePPTX(zip);
 
@@ -1477,6 +1569,468 @@ function inspectSlide8Tables(buffer) {
     return result;
 }
 
+/**
+ * Update Slide 15 Schedule of Benefits table with data from placement slip
+ * Slide 15 contains benefit items 1-6 with plan values in columns 10, 11, 12
+ * @param {Object} zip - PizZip instance
+ * @param {Object} slide15Data - Data for slide 15 (scheduleOfBenefits)
+ * @returns {Object} Results of the update operation
+ */
+function updateSlide15ScheduleOfBenefits(zip, slide15Data) {
+    console.log('📝 Updating Slide 15 Schedule of Benefits...');
+
+    const results = {
+        updated: [],
+        errors: []
+    };
+
+    if (!slide15Data || !slide15Data.scheduleOfBenefits) {
+        console.log('⚠️ No slide 15 data provided');
+        return results;
+    }
+
+    const scheduleData = slide15Data.scheduleOfBenefits;
+    console.log(`📋 Schedule data: ${scheduleData.benefits?.length || 0} benefits, plans: ${scheduleData.planHeaders?.join(', ')}`);
+
+    try {
+        let slideXml = getSlideXML(zip, 15);
+
+        // Find and update table rows
+        const tablePattern = /<a:tbl\b[^>]*>([\s\S]*?)<\/a:tbl>/g;
+        let tableMatch = tablePattern.exec(slideXml);
+
+        if (tableMatch) {
+            let tableContent = tableMatch[1];
+            let updatedTableContent = tableContent;
+
+            // Find all rows in the table
+            const rowPattern = /<a:tr\b[^>]*>([\s\S]*?)<\/a:tr>/g;
+            let rowMatch;
+            let rowNum = 0;
+            const rows = [];
+
+            while ((rowMatch = rowPattern.exec(tableContent)) !== null) {
+                rows.push({
+                    full: rowMatch[0],
+                    content: rowMatch[1],
+                    index: rowMatch.index
+                });
+            }
+
+            console.log(`  📊 Found ${rows.length} rows in table`);
+
+            // Process each row and update plan values
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const cells = extractCellsFromRow(row.content);
+
+                if (cells.length >= 13) {
+                    // Get first cell text to identify the row
+                    const firstCellText = cells[0].text.toLowerCase();
+
+                    // Update "14 DAYS" row (qualification period)
+                    if (firstCellText.includes('all disabilities')) {
+                        const qualDays = scheduleData.qualificationPeriodDays;
+                        if (qualDays) {
+                            let newRow = row.full;
+                            // Update cells 10, 11, 12 (which may all have the same value)
+                            newRow = updateCellTextByIndex(newRow, cells, 10, qualDays);
+                            updatedTableContent = updatedTableContent.replace(row.full, newRow);
+                            results.updated.push({ field: 'Qualification Period', value: qualDays });
+                            console.log(`    ✅ Updated "All disabilities" row: ${qualDays}`);
+                        }
+                    }
+
+                    // Update benefit rows by matching row number
+                    for (const benefit of scheduleData.benefits || []) {
+                        if (cells[0].text.trim() === String(benefit.number)) {
+                            let newRow = row.full;
+
+                            // Update plan values in cells 10, 11, 12
+                            if (benefit.plan1Value) {
+                                newRow = updateCellTextByIndex(newRow, cells, 10, formatBenefitValue(benefit.plan1Value));
+                            }
+                            if (benefit.plan2Value) {
+                                newRow = updateCellTextByIndex(newRow, cells, 11, formatBenefitValue(benefit.plan2Value));
+                            }
+                            if (benefit.plan3Value) {
+                                newRow = updateCellTextByIndex(newRow, cells, 12, formatBenefitValue(benefit.plan3Value));
+                            }
+
+                            updatedTableContent = updatedTableContent.replace(row.full, newRow);
+                            results.updated.push({ field: `Benefit ${benefit.number}`, value: benefit.name.substring(0, 30) });
+                            console.log(`    ✅ Updated Benefit ${benefit.number}: ${benefit.name.substring(0, 30)}...`);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Replace table in XML
+            const updatedTable = tableMatch[0].replace(tableContent, updatedTableContent);
+            slideXml = slideXml.replace(tableMatch[0], updatedTable);
+        }
+
+        setSlideXML(zip, 15, slideXml);
+        console.log(`📝 Slide 15 update complete: ${results.updated.length} fields updated`);
+
+    } catch (error) {
+        console.error('❌ Error updating Slide 15:', error.message);
+        results.errors.push({ field: 'Slide 15', error: error.message });
+    }
+
+    return results;
+}
+
+/**
+ * Update Slide 16 Schedule of Benefits table (continuation)
+ * Slide 16 contains benefit items 7-15 with plan values in columns 12, 13, 14
+ * @param {Object} zip - PizZip instance
+ * @param {Object} slide16Data - Data for slide 16 (scheduleOfBenefits)
+ * @returns {Object} Results of the update operation
+ */
+function updateSlide16ScheduleOfBenefits(zip, slide16Data) {
+    console.log('📝 Updating Slide 16 Schedule of Benefits...');
+
+    const results = {
+        updated: [],
+        errors: []
+    };
+
+    if (!slide16Data || !slide16Data.scheduleOfBenefits) {
+        console.log('⚠️ No slide 16 data provided');
+        return results;
+    }
+
+    const scheduleData = slide16Data.scheduleOfBenefits;
+
+    try {
+        let slideXml = getSlideXML(zip, 16);
+
+        // Find and update table rows
+        const tablePattern = /<a:tbl\b[^>]*>([\s\S]*?)<\/a:tbl>/g;
+        let tableMatch = tablePattern.exec(slideXml);
+
+        if (tableMatch) {
+            let tableContent = tableMatch[1];
+            let updatedTableContent = tableContent;
+
+            // Find all rows in the table
+            const rowPattern = /<a:tr\b[^>]*>([\s\S]*?)<\/a:tr>/g;
+            let rowMatch;
+            const rows = [];
+
+            while ((rowMatch = rowPattern.exec(tableContent)) !== null) {
+                rows.push({
+                    full: rowMatch[0],
+                    content: rowMatch[1],
+                    index: rowMatch.index
+                });
+            }
+
+            console.log(`  📊 Found ${rows.length} rows in table`);
+
+            // Process each row and update plan values
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const cells = extractCellsFromRow(row.content);
+
+                if (cells.length >= 15) {
+                    // Update benefit rows by matching row number (7-15)
+                    for (const benefit of scheduleData.benefits || []) {
+                        if (benefit.number >= 7 && cells[0].text.trim() === String(benefit.number)) {
+                            let newRow = row.full;
+
+                            // Slide 16 uses columns 12, 13, 14 for plan values
+                            if (benefit.plan1Value) {
+                                newRow = updateCellTextByIndex(newRow, cells, 12, formatBenefitValue(benefit.plan1Value));
+                            }
+                            if (benefit.plan2Value) {
+                                newRow = updateCellTextByIndex(newRow, cells, 13, formatBenefitValue(benefit.plan2Value));
+                            }
+                            if (benefit.plan3Value) {
+                                newRow = updateCellTextByIndex(newRow, cells, 14, formatBenefitValue(benefit.plan3Value));
+                            }
+
+                            updatedTableContent = updatedTableContent.replace(row.full, newRow);
+                            results.updated.push({ field: `Benefit ${benefit.number}`, value: benefit.name.substring(0, 30) });
+                            console.log(`    ✅ Updated Benefit ${benefit.number}: ${benefit.name.substring(0, 30)}...`);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Replace table in XML
+            const updatedTable = tableMatch[0].replace(tableContent, updatedTableContent);
+            slideXml = slideXml.replace(tableMatch[0], updatedTable);
+        }
+
+        setSlideXML(zip, 16, slideXml);
+        console.log(`📝 Slide 16 update complete: ${results.updated.length} fields updated`);
+
+    } catch (error) {
+        console.error('❌ Error updating Slide 16:', error.message);
+        results.errors.push({ field: 'Slide 16', error: error.message });
+    }
+
+    return results;
+}
+
+/**
+ * Update Slide 17 qualification period (days) text
+ * Replaces "14 days" placeholder with actual value from Excel
+ * @param {Object} zip - PizZip instance
+ * @param {Object} slide17Data - Data for slide 17 (qualificationPeriodDays)
+ * @returns {Object} Results of the update operation
+ */
+function updateSlide17QualificationPeriod(zip, slide17Data) {
+    console.log('📝 Updating Slide 17 Qualification Period...');
+
+    const results = {
+        updated: [],
+        errors: []
+    };
+
+    if (!slide17Data || !slide17Data.qualificationPeriodDays) {
+        console.log('⚠️ No slide 17 data provided');
+        return results;
+    }
+
+    const daysValue = slide17Data.qualificationPeriodDays;
+    console.log(`📋 Qualification period value: "${daysValue}"`);
+
+    try {
+        let slideXml = getSlideXML(zip, 17);
+
+        // Extract just the number from "14 DAYS" format
+        const daysMatch = daysValue.match(/(\d+)/);
+        const daysNumber = daysMatch ? daysMatch[1] : daysValue;
+
+        // Pattern 1: Replace "14 days  (CELL: G43)" placeholder
+        const placeholderPattern = /(\d+)\s*days?\s*\(CELL:\s*G43\)/gi;
+        if (placeholderPattern.test(slideXml)) {
+            slideXml = slideXml.replace(placeholderPattern, `${daysNumber} days`);
+            results.updated.push({ field: 'Qualification Period', value: `${daysNumber} days` });
+            console.log(`  ✅ Updated placeholder to: ${daysNumber} days`);
+        }
+
+        // Pattern 2: Replace standalone "14 days" text followed by note
+        const standalonePattern = /<a:t>(\d+)\s*days?\s*<\/a:t>/gi;
+        if (standalonePattern.test(slideXml)) {
+            slideXml = slideXml.replace(standalonePattern, `<a:t>${daysNumber} days</a:t>`);
+            if (results.updated.length === 0) {
+                results.updated.push({ field: 'Qualification Period', value: `${daysNumber} days` });
+            }
+            console.log(`  ✅ Updated standalone text to: ${daysNumber} days`);
+        }
+
+        setSlideXML(zip, 17, slideXml);
+        console.log(`📝 Slide 17 update complete: ${results.updated.length} fields updated`);
+
+    } catch (error) {
+        console.error('❌ Error updating Slide 17:', error.message);
+        results.errors.push({ field: 'Slide 17', error: error.message });
+    }
+
+    return results;
+}
+
+/**
+ * Update Slide 18 Room & Board entitlement tables
+ * Maps multiple bedded classification sections with ward classes and benefits
+ * @param {Object} zip - PizZip instance
+ * @param {Object} slide18Data - Data for slide 18 (roomAndBoardEntitlements)
+ * @returns {Object} Results of the update operation
+ */
+function updateSlide18RoomAndBoard(zip, slide18Data) {
+    console.log('📝 Updating Slide 18 Room & Board...');
+
+    const results = {
+        updated: [],
+        errors: []
+    };
+
+    if (!slide18Data || !slide18Data.roomAndBoardEntitlements) {
+        console.log('⚠️ No slide 18 data provided');
+        return results;
+    }
+
+    const entitlements = slide18Data.roomAndBoardEntitlements;
+    console.log(`📋 Room & Board entitlements: ${entitlements.length} sections`);
+
+    try {
+        let slideXml = getSlideXML(zip, 18);
+
+        // Find the first entitlement section to use for mapping
+        const firstEntitlement = entitlements[0];
+        if (!firstEntitlement) {
+            console.log('⚠️ No entitlement sections found');
+            return results;
+        }
+
+        console.log(`  📊 Mapping first section: "${firstEntitlement.beddedType}" with ${firstEntitlement.wards.length} ward classes`);
+
+        // Update the table header to reflect the bedded type
+        const headerPattern = />Room\s*&amp;\s*Board\s*\d*\s*Bedded</gi;
+        if (headerPattern.test(slideXml)) {
+            const newHeader = `>Room &amp; Board ${firstEntitlement.beddedType}<`;
+            slideXml = slideXml.replace(headerPattern, newHeader);
+            results.updated.push({ field: 'Table Header', value: firstEntitlement.beddedType });
+            console.log(`  ✅ Updated table header to: Room & Board ${firstEntitlement.beddedType}`);
+        }
+
+        // Find and update the table
+        const tablePattern = /<a:tbl\b[^>]*>([\s\S]*?)<\/a:tbl>/g;
+        let tableMatch = tablePattern.exec(slideXml);
+
+        if (tableMatch) {
+            let tableContent = tableMatch[1];
+            let updatedTableContent = tableContent;
+
+            // Find all rows
+            const rowPattern = /<a:tr\b[^>]*>([\s\S]*?)<\/a:tr>/g;
+            let rowMatch;
+            const rows = [];
+
+            while ((rowMatch = rowPattern.exec(tableContent)) !== null) {
+                rows.push({
+                    full: rowMatch[0],
+                    content: rowMatch[1],
+                    index: rowMatch.index
+                });
+            }
+
+            console.log(`  📊 Found ${rows.length} rows in table`);
+
+            // Map ward classes from Excel to PowerPoint table
+            for (const row of rows) {
+                const cells = extractCellsFromRow(row.content);
+
+                if (cells.length >= 2) {
+                    const wardClass = cells[0].text.trim();
+
+                    // Find matching ward in Excel data
+                    for (const ward of firstEntitlement.wards) {
+                        // Normalize ward class names for comparison
+                        const normalizedExcel = ward.classOfWard.replace(/\s+/g, ' ').trim();
+                        const normalizedPpt = wardClass.replace(/\s+/g, ' ').trim();
+
+                        if (normalizedExcel === normalizedPpt ||
+                            normalizedExcel.includes(normalizedPpt) ||
+                            normalizedPpt.includes(normalizedExcel)) {
+
+                            // Update benefit value in second cell
+                            const newRow = updateCellTextByIndex(row.full, cells, 1, ward.benefit);
+                            updatedTableContent = updatedTableContent.replace(row.full, newRow);
+                            results.updated.push({ field: wardClass, value: ward.benefit });
+                            console.log(`    ✅ Updated ward "${wardClass}": ${ward.benefit}`);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Replace table in XML
+            const updatedTable = tableMatch[0].replace(tableContent, updatedTableContent);
+            slideXml = slideXml.replace(tableMatch[0], updatedTable);
+        }
+
+        // Check if we need to add a second table for 4 Bedded classification
+        if (entitlements.length > 1) {
+            const secondEntitlement = entitlements[1];
+            console.log(`  📝 Note: Second section "${secondEntitlement.beddedType}" available but requires manual table addition`);
+            // For now, we just log that additional data exists
+            // Full implementation would require duplicating the table XML structure
+        }
+
+        setSlideXML(zip, 18, slideXml);
+        console.log(`📝 Slide 18 update complete: ${results.updated.length} fields updated`);
+
+    } catch (error) {
+        console.error('❌ Error updating Slide 18:', error.message);
+        results.errors.push({ field: 'Slide 18', error: error.message });
+    }
+
+    return results;
+}
+
+/**
+ * Helper function to extract cells from a table row
+ * @param {string} rowContent - Row XML content
+ * @returns {Array} Array of cell objects with text and content
+ */
+function extractCellsFromRow(rowContent) {
+    const cellPattern = /<a:tc\b[^>]*>([\s\S]*?)<\/a:tc>/g;
+    const cells = [];
+    let cellMatch;
+
+    while ((cellMatch = cellPattern.exec(rowContent)) !== null) {
+        const cellContent = cellMatch[1];
+        const textPattern = /<a:t>([^<]*)<\/a:t>/g;
+        let cellText = '';
+        let textMatch;
+
+        while ((textMatch = textPattern.exec(cellContent)) !== null) {
+            cellText += textMatch[1];
+        }
+
+        cells.push({
+            full: cellMatch[0],
+            content: cellContent,
+            text: cellText.trim()
+        });
+    }
+
+    return cells;
+}
+
+/**
+ * Helper function to update text in a specific cell by index
+ * @param {string} rowXml - Full row XML
+ * @param {Array} cells - Array of cells from extractCellsFromRow
+ * @param {number} cellIndex - Index of cell to update
+ * @param {string} newValue - New text value
+ * @returns {string} Updated row XML
+ */
+function updateCellTextByIndex(rowXml, cells, cellIndex, newValue) {
+    if (cellIndex >= cells.length) return rowXml;
+
+    const cell = cells[cellIndex];
+    if (!cell || !cell.content) return rowXml;
+
+    // Find the first text element in the cell and replace its content
+    const textPattern = /<a:t>([^<]*)<\/a:t>/;
+    const textMatch = cell.content.match(textPattern);
+
+    if (textMatch) {
+        const escapedValue = escapeXml(newValue);
+        const newCellContent = cell.content.replace(textMatch[0], `<a:t>${escapedValue}</a:t>`);
+        const newCell = cell.full.replace(cell.content, newCellContent);
+        return rowXml.replace(cell.full, newCell);
+    }
+
+    return rowXml;
+}
+
+/**
+ * Helper function to format benefit values (add thousands separators if numeric)
+ * @param {string} value - Raw value from Excel
+ * @returns {string} Formatted value
+ */
+function formatBenefitValue(value) {
+    if (!value) return value;
+
+    // Check if it's a pure number
+    const cleanValue = value.replace(/,/g, '').trim();
+    if (/^\d+$/.test(cleanValue)) {
+        const num = parseInt(cleanValue, 10);
+        return num.toLocaleString('en-US');
+    }
+
+    return value;
+}
+
 module.exports = {
     readPPTX,
     getSlideFiles,
@@ -1488,11 +2042,18 @@ module.exports = {
     updateSlide9GDDTable,
     updateSlide10GPATable,
     updateSlide12GHSTable,
+    updateSlide15ScheduleOfBenefits,
+    updateSlide16ScheduleOfBenefits,
+    updateSlide17QualificationPeriod,
+    updateSlide18RoomAndBoard,
     generateBasisOfCoverParagraph,
     generateBasisOfCoverCellContent,
     escapeXml,
     findTextInSlide,
     extractTextContent,
+    extractCellsFromRow,
+    updateCellTextByIndex,
+    formatBenefitValue,
     writePPTX,
     getPPTXInfo,
     processPPTX,

@@ -323,7 +323,7 @@ function extractGDDData(sheet) {
 /**
  * Extract GHS (Group Hospital & Surgical) specific data from the GHS sheet
  * @param {Object} sheet - XLSX sheet object
- * @returns {Object} GHS data including eligibility, last entry age, categoryPlans
+ * @returns {Object} GHS data including eligibility, last entry age, categoryPlans, scheduleOfBenefits, roomAndBoardEntitlements
  */
 function extractGHSData(sheet) {
     if (!sheet) return null;
@@ -339,10 +339,22 @@ function extractGHSData(sheet) {
     // GHS uses: Category (col 3), Plan (col 8 - column I)
     const categoryPlans = extractGHSCategoryPlans(data);
 
+    // Extract Schedule of Benefits for Slides 15-16
+    const scheduleOfBenefits = extractGHSScheduleOfBenefits(data);
+
+    // Extract Qualification Period for Slide 17
+    const qualificationPeriodDays = extractGHSQualificationPeriod(data);
+
+    // Extract Room & Board Entitlements for Slide 18
+    const roomAndBoardEntitlements = extractGHSRoomAndBoardEntitlements(data);
+
     return {
         eligibility: eligibility,
         lastEntryAge: lastEntryAge,
-        categoryPlans: categoryPlans
+        categoryPlans: categoryPlans,
+        scheduleOfBenefits: scheduleOfBenefits,
+        qualificationPeriodDays: qualificationPeriodDays,
+        roomAndBoardEntitlements: roomAndBoardEntitlements
     };
 }
 
@@ -600,6 +612,9 @@ function processPlacementSlip(buffer) {
         console.log(`   - Eligibility: ${ghsData.eligibility ? 'Found' : 'Not found'}`);
         console.log(`   - Last Entry Age: ${ghsData.lastEntryAge ? 'Found' : 'Not found'}`);
         console.log(`   - Category/Plans: ${ghsData.categoryPlans?.length || 0} entries`);
+        console.log(`   - Schedule of Benefits: ${ghsData.scheduleOfBenefits?.benefits?.length || 0} items`);
+        console.log(`   - Qualification Period: ${ghsData.qualificationPeriodDays || 'Not found'}`);
+        console.log(`   - Room & Board Sections: ${ghsData.roomAndBoardEntitlements?.length || 0} sections`);
     }
 
     // Extract GPA-specific data for Slide 10
@@ -647,8 +662,237 @@ function processPlacementSlip(buffer) {
             eligibility: ghsData?.eligibility,
             lastEntryAge: ghsData?.lastEntryAge,
             categoryPlans: ghsData?.categoryPlans
+        },
+        // Slides 15-16: GHS Schedule of Benefits table
+        slide15Data: {
+            scheduleOfBenefits: ghsData?.scheduleOfBenefits
+        },
+        slide16Data: {
+            scheduleOfBenefits: ghsData?.scheduleOfBenefits
+        },
+        // Slide 17: GHS Qualification Period (14 days)
+        slide17Data: {
+            qualificationPeriodDays: ghsData?.qualificationPeriodDays
+        },
+        // Slide 18: GHS Room & Board Entitlements
+        slide18Data: {
+            roomAndBoardEntitlements: ghsData?.roomAndBoardEntitlements
         }
     };
+}
+
+/**
+ * Extract GHS Schedule of Benefits table data for Slides 15-16
+ * Extracts plan headers and all benefit rows with their values
+ * @param {Array} data - Sheet data as 2D array
+ * @returns {Object} { planHeaders, benefits, qualificationPeriodDays }
+ */
+function extractGHSScheduleOfBenefits(data) {
+    console.log('  🔍 Extracting GHS Schedule of Benefits...');
+
+    const result = {
+        planHeaders: [], // e.g., ["Plan 1A/1B", "Plan 2A/2B", "Plan 3"]
+        benefits: [],    // Array of benefit rows
+        qualificationPeriodDays: null // "14 DAYS" value for slide 17
+    };
+
+    let foundScheduleHeader = false;
+    let scheduleStartRow = -1;
+
+    for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        if (!row) continue;
+
+        const col0 = String(row[0] || '').trim();
+        const col1 = String(row[1] || '').trim();
+        const col0Lower = col0.toLowerCase();
+
+        // Find the "SCHEDULE OF BENEFITS / INSURER / PLAN" header row
+        if (col0Lower.includes('schedule of benefits') && col0Lower.includes('plan')) {
+            foundScheduleHeader = true;
+            scheduleStartRow = i;
+
+            // Extract plan headers from columns 6, 7, 8
+            result.planHeaders = [
+                String(row[6] || '').trim(),
+                String(row[7] || '').trim(),
+                String(row[8] || '').trim()
+            ].filter(h => h);
+
+            console.log(`    📍 Found Schedule of Benefits header at row ${i + 1}`);
+            console.log(`    📋 Plan headers: ${result.planHeaders.join(', ')}`);
+            continue;
+        }
+
+        // After finding header, extract benefit rows
+        if (foundScheduleHeader && i > scheduleStartRow) {
+            // Stop at Endorsements section or end markers
+            if (col0Lower.includes('endorsement') || col0Lower.includes('additional arrangement')) {
+                console.log(`    🛑 Stopping at row ${i + 1} (found: "${col0.substring(0, 30)}")`);
+                break;
+            }
+
+            // Extract "All disabilities..." row for qualification period (Slide 17)
+            if (col0Lower.includes('all disabilities') && col0Lower.includes('qualification period')) {
+                result.qualificationPeriodDays = String(row[6] || '').trim();
+                console.log(`    📅 Qualification period: "${result.qualificationPeriodDays}"`);
+            }
+
+            // Extract numbered benefit rows (1-15)
+            const rowNumber = parseInt(col0, 10);
+            if (!isNaN(rowNumber) && rowNumber >= 1 && rowNumber <= 15) {
+                const benefitItem = {
+                    number: rowNumber,
+                    name: col1,
+                    plan1Value: String(row[6] || '').trim(),
+                    plan2Value: String(row[7] || '').trim(),
+                    plan3Value: String(row[8] || '').trim(),
+                    subItems: []
+                };
+
+                result.benefits.push(benefitItem);
+                console.log(`    📊 Benefit ${rowNumber}: "${col1.substring(0, 40)}..." → Plan1: "${benefitItem.plan1Value.substring(0, 20)}"`);
+            }
+
+            // Extract sub-items (Maximum no. of days, Qualification period, etc.)
+            if (col1.toLowerCase().includes('maximum no. of days') ||
+                col1.toLowerCase().includes('qualification period')) {
+                const subItem = {
+                    name: col1,
+                    plan1Value: String(row[6] || '').trim(),
+                    plan2Value: String(row[7] || '').trim(),
+                    plan3Value: String(row[8] || '').trim()
+                };
+
+                // Add to the last benefit item
+                if (result.benefits.length > 0) {
+                    result.benefits[result.benefits.length - 1].subItems.push(subItem);
+                }
+            }
+        }
+    }
+
+    console.log(`  ✅ Extracted ${result.benefits.length} benefit items`);
+    return result;
+}
+
+/**
+ * Extract qualification period (days) for Slide 17
+ * Specifically looks for "All disabilities including any and all complications..."
+ * @param {Array} data - Sheet data as 2D array
+ * @returns {string|null} The days value (e.g., "14 DAYS")
+ */
+function extractGHSQualificationPeriod(data) {
+    console.log('  🔍 Extracting GHS Qualification Period for Slide 17...');
+
+    for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        if (!row) continue;
+
+        const col0 = String(row[0] || '').toLowerCase().trim();
+
+        // Find the "All disabilities including any and all complications..." row
+        if (col0.includes('all disabilities') &&
+            (col0.includes('qualification period') || col0.includes('complications'))) {
+            const daysValue = String(row[6] || '').trim();
+            console.log(`    📍 Found at row ${i + 1}: "${daysValue}"`);
+            return daysValue;
+        }
+    }
+
+    console.log('    ⚠️ Qualification period not found');
+    return null;
+}
+
+/**
+ * Extract Room & Board entitlement sections for Slide 18
+ * Extracts multiple bedded classification sections with ward classes and benefits
+ * @param {Array} data - Sheet data as 2D array
+ * @returns {Array} Array of entitlement sections with ward data
+ */
+function extractGHSRoomAndBoardEntitlements(data) {
+    console.log('  🔍 Extracting GHS Room & Board Entitlements for Slide 18...');
+
+    const entitlements = [];
+    let currentSection = null;
+
+    for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        if (!row) continue;
+
+        const col1 = String(row[1] || '').trim();
+        const col2 = String(row[2] || '').trim();
+
+        // Check for GHS Entitlement section headers
+        if (col1.includes('GHS Entitlement : Room & Board')) {
+            // Save previous section if exists
+            if (currentSection && currentSection.wards.length > 0) {
+                entitlements.push(currentSection);
+            }
+
+            // Determine bedded type from header
+            let beddedType = 'Unknown';
+            if (col1.includes('1 & 2 Bedded') || col1.includes('1 &amp; 2 Bedded')) {
+                beddedType = '1 & 2 Bedded';
+            } else if (col1.includes('4 Bedded')) {
+                beddedType = '4 Bedded';
+            } else if (col1.includes('1 Bedded')) {
+                beddedType = '1 Bedded';
+            } else if (col1.includes('2 Bedded')) {
+                beddedType = '2 Bedded';
+            }
+
+            currentSection = {
+                title: col1,
+                beddedType: beddedType,
+                wards: []
+            };
+
+            console.log(`    📍 Found section: "${beddedType}" at row ${i + 1}`);
+            continue;
+        }
+
+        // Check for section end markers
+        if (col1.toLowerCase().includes('section iv') ||
+            col1.toLowerCase().includes('pre - existing') ||
+            (String(row[0] || '').trim() && !isNaN(parseInt(String(row[0] || '').trim())))) {
+            // Save current section if we hit a new numbered item or section marker
+            if (currentSection && currentSection.wards.length > 0) {
+                entitlements.push(currentSection);
+                currentSection = null;
+            }
+        }
+
+        // Extract ward class data within a section
+        if (currentSection) {
+            // Skip header rows
+            if (col1.toLowerCase() === 'class of ward' || col1.toLowerCase().includes('hospital cash benefit')) {
+                continue;
+            }
+
+            // Skip "All Restructured Hospitals" header row
+            if (col2.toLowerCase().includes('all restructured hospitals')) {
+                continue;
+            }
+
+            // Extract ward class and benefit
+            if (col1 && col2 && (col1.includes('B1') || col1.includes('B2') || col1 === 'C')) {
+                currentSection.wards.push({
+                    classOfWard: col1,
+                    benefit: col2
+                });
+                console.log(`    📊 Ward: "${col1}" → Benefit: "${col2}"`);
+            }
+        }
+    }
+
+    // Don't forget the last section
+    if (currentSection && currentSection.wards.length > 0) {
+        entitlements.push(currentSection);
+    }
+
+    console.log(`  ✅ Extracted ${entitlements.length} Room & Board entitlement sections`);
+    return entitlements;
 }
 
 /**
@@ -674,6 +918,9 @@ module.exports = {
     extractGDDData,
     extractGHSData,
     extractGHSCategoryPlans,
+    extractGHSScheduleOfBenefits,
+    extractGHSQualificationPeriod,
+    extractGHSRoomAndBoardEntitlements,
     extractGPAData,
     extractFieldByLabel,
     extractBasisOfCover,

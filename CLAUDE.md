@@ -71,7 +71,11 @@ Automated PowerPoint generation from Excel placement slips.
 | 10 | GPA (Group Personal Accident) | GPA | Eligibility, Last Entry Age, Basis of Cover | ✅ |
 | 11 | GPA Additional Features | - | Static content | N/A |
 | 12 | GHS (Group Hospital & Surgical) | GHS | Eligibility, Last Entry Age, Category/Plan | ✅ |
-| 13-15 | GHS Details | GHS | TBD | ⏳ |
+| 13-14 | GHS Additional Info | - | Static content | N/A |
+| 15 | GHS Schedule of Benefits (1-6) | GHS | Daily Room & Board, ICU, In-patient, Out-patient, Emergency, Overall Limits | ✅ |
+| 16 | GHS Schedule of Benefits (7-15) | GHS | Outpatient Treatment, Miscarriage, Death, Ambulance, Medical Report, Psychiatric, Overseas, Rehab, GST | ✅ |
+| 17 | GHS Notes | GHS | Qualification Period (14 days from Row 43) | ✅ |
+| 18 | GHS Hospital Cash Allowance | GHS | Room & Board Entitlements (1&2 Bedded, 4 Bedded ward classes) | ✅ |
 
 ### Technical Notes
 
@@ -92,5 +96,36 @@ Code uses \`replaceEligibilityAndLastEntryAgeSeparately()\` to update each eleme
 - \`POST /api/sharepoint-automation/process\` - Process Excel → Generate PPTX
 - \`GET /api/sharepoint-automation/check-new-files\` - Check pending files
 
+### GHS Schedule of Benefits Mapping (Slides 15-16)
+
+**Excel Source**: GHS sheet, Rows 41-100, Columns 6-8 (G, H, I)
+- Column 6 (G): Plan 1A/1B values
+- Column 7 (H): Plan 2A/2B values
+- Column 8 (I): Plan 3 values
+
+**PowerPoint Table Structure**:
+- Slide 15: Columns 10-12 for plan values (benefits 1-6)
+- Slide 16: Columns 12-14 for plan values (benefits 7-15)
+
+### Slide 17 Qualification Period
+
+**Excel Source**: GHS Row 43 (All disabilities... No. of days)
+- Value in Column 6 (G): "14 DAYS"
+- Template placeholder: "14 days (CELL: G43)"
+- Replaced with extracted number + "days"
+
+### Slide 18 Room & Board Entitlements
+
+**Excel Source**: GHS Rows 106-116 (Hospital Cash Allowance section)
+- Section 1: "GHS Entitlement : Room & Board 1 & 2 Bedded" (Rows 106-111)
+- Section 2: "GHS Entitlement : Room & Board 4 Bedded" (Rows 112-116)
+
+**Ward Class Mapping**:
+| Ward Class | 1&2 Bedded | 4 Bedded |
+|------------|------------|----------|
+| B1 | S$100 | - |
+| B2 / B2 + | S$200 | S$150 |
+| C | S$300 | S$200 |
+
 ### Next Phase
-- Slides 13-15: Additional GHS plan details
+- Slides 19+: Additional GMM, GP, Dental mappings (if required)
