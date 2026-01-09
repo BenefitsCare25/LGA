@@ -473,35 +473,19 @@ function updateSlide8GTLTable(zip, slide8Data) {
     try {
         let slideXml = getSlideXML(zip, 8);
 
-        // 1. Update Eligibility & Last Entry Age - Template has combined row "EligibilityLast Entry Age"
+        // 1. Update Eligibility & Last Entry Age - Replace as separate text elements to avoid duplication
         if (slide8Data.eligibility || slide8Data.lastEntryAge) {
-            console.log(`  🔍 Updating Eligibility/Last Entry Age combined row...`);
+            console.log(`  🔍 Updating Eligibility/Last Entry Age (separate elements)...`);
 
-            // Build combined value: "Eligibility value\nLast Entry Age: age value"
-            let combinedValue = '';
-            if (slide8Data.eligibility) {
-                combinedValue = escapeXml(slide8Data.eligibility);
-            }
-            if (slide8Data.lastEntryAge) {
-                if (combinedValue) combinedValue += '\nLast Entry Age: ';
-                combinedValue += escapeXml(slide8Data.lastEntryAge);
-            }
+            const eligResult = replaceEligibilityAndLastEntryAgeSeparately(
+                slideXml,
+                slide8Data.eligibility,
+                slide8Data.lastEntryAge
+            );
 
-            // Try to find combined label first, then fall back to individual
-            const combinedLabels = ['EligibilityLast Entry Age', 'Eligibility Last Entry Age', 'Eligibility/Last Entry Age'];
-            let combinedResult = { success: false, xml: slideXml };
-
-            for (const label of combinedLabels) {
-                combinedResult = replaceTableCellByLabel(slideXml, label, combinedValue);
-                if (combinedResult.success) {
-                    console.log(`  📍 Found combined row with label: "${label}"`);
-                    break;
-                }
-            }
-
-            if (combinedResult.success) {
-                slideXml = combinedResult.xml;
-                console.log(`  ✅ Updated Eligibility & Last Entry Age (combined row)`);
+            if (eligResult.success) {
+                slideXml = eligResult.xml;
+                console.log(`  ✅ Updated Eligibility & Last Entry Age`);
                 if (slide8Data.eligibility) {
                     results.updated.push({ field: 'Eligibility', value: slide8Data.eligibility.substring(0, 50) + '...' });
                 }
@@ -509,59 +493,9 @@ function updateSlide8GTLTable(zip, slide8Data) {
                     results.updated.push({ field: 'Last Entry Age', value: slide8Data.lastEntryAge });
                 }
             } else {
-                // Fall back to separate rows
-                console.log(`  🔄 Combined row not found, trying separate rows...`);
-
-                // Try Eligibility separately
+                console.log(`  ⚠️ Could not update Eligibility/Last Entry Age`);
                 if (slide8Data.eligibility) {
-                    const eligibilityValue = escapeXml(slide8Data.eligibility);
-                    const eligibilityLabels = ['Eligibility', 'Eligibility:'];
-                    let eligibilityResult = { success: false, xml: slideXml };
-
-                    for (const label of eligibilityLabels) {
-                        eligibilityResult = replaceTableCellByLabel(slideXml, label, eligibilityValue);
-                        if (eligibilityResult.success) break;
-                    }
-
-                    if (eligibilityResult.success) {
-                        slideXml = eligibilityResult.xml;
-                        console.log(`  ✅ Updated Eligibility`);
-                        results.updated.push({ field: 'Eligibility', value: slide8Data.eligibility.substring(0, 50) + '...' });
-                    } else {
-                        const availableLabels = eligibilityResult.availableLabels || [];
-                        console.log(`  ⚠️ Eligibility row not found. Available: ${availableLabels.join(', ')}`);
-                        results.errors.push({
-                            field: 'Eligibility',
-                            error: 'Row not found in table',
-                            hint: availableLabels.length > 0 ? `Available: ${availableLabels.slice(0, 5).join(', ')}` : 'No table rows found'
-                        });
-                    }
-                }
-
-                // Try Last Entry Age separately
-                if (slide8Data.lastEntryAge) {
-                    const lastEntryAgeValue = escapeXml(slide8Data.lastEntryAge);
-                    const lastEntryAgeLabels = ['Last Entry Age', 'Last Entry Age:'];
-                    let lastEntryAgeResult = { success: false, xml: slideXml };
-
-                    for (const label of lastEntryAgeLabels) {
-                        lastEntryAgeResult = replaceTableCellByLabel(slideXml, label, lastEntryAgeValue);
-                        if (lastEntryAgeResult.success) break;
-                    }
-
-                    if (lastEntryAgeResult.success) {
-                        slideXml = lastEntryAgeResult.xml;
-                        console.log(`  ✅ Updated Last Entry Age`);
-                        results.updated.push({ field: 'Last Entry Age', value: slide8Data.lastEntryAge });
-                    } else {
-                        const availableLabels = lastEntryAgeResult.availableLabels || [];
-                        console.log(`  ⚠️ Last Entry Age row not found. Available: ${availableLabels.join(', ')}`);
-                        results.errors.push({
-                            field: 'Last Entry Age',
-                            error: 'Row not found in table',
-                            hint: availableLabels.length > 0 ? `Available: ${availableLabels.slice(0, 5).join(', ')}` : 'No table rows found'
-                        });
-                    }
+                    results.errors.push({ field: 'Eligibility', error: 'Cell not found' });
                 }
             }
         }
@@ -713,33 +647,19 @@ function updateSlide9GDDTable(zip, slide9Data) {
     try {
         let slideXml = getSlideXML(zip, 9);
 
-        // 1. Update Eligibility & Last Entry Age - Template has combined row "EligibilityLast Entry Age"
+        // 1. Update Eligibility & Last Entry Age - Replace as separate text elements to avoid duplication
         if (slide9Data.eligibility || slide9Data.lastEntryAge) {
-            console.log(`  🔍 Updating Eligibility/Last Entry Age combined row...`);
+            console.log(`  🔍 Updating Eligibility/Last Entry Age (separate elements)...`);
 
-            let combinedValue = '';
-            if (slide9Data.eligibility) {
-                combinedValue = escapeXml(slide9Data.eligibility);
-            }
-            if (slide9Data.lastEntryAge) {
-                if (combinedValue) combinedValue += '\nLast Entry Age: ';
-                combinedValue += escapeXml(slide9Data.lastEntryAge);
-            }
+            const eligResult = replaceEligibilityAndLastEntryAgeSeparately(
+                slideXml,
+                slide9Data.eligibility,
+                slide9Data.lastEntryAge
+            );
 
-            const combinedLabels = ['EligibilityLast Entry Age', 'Eligibility Last Entry Age', 'Eligibility/Last Entry Age'];
-            let combinedResult = { success: false, xml: slideXml };
-
-            for (const label of combinedLabels) {
-                combinedResult = replaceTableCellByLabel(slideXml, label, combinedValue);
-                if (combinedResult.success) {
-                    console.log(`  📍 Found combined row with label: "${label}"`);
-                    break;
-                }
-            }
-
-            if (combinedResult.success) {
-                slideXml = combinedResult.xml;
-                console.log(`  ✅ Updated Eligibility & Last Entry Age (combined row)`);
+            if (eligResult.success) {
+                slideXml = eligResult.xml;
+                console.log(`  ✅ Updated Eligibility & Last Entry Age`);
                 if (slide9Data.eligibility) {
                     results.updated.push({ field: 'Eligibility', value: slide9Data.eligibility.substring(0, 50) + '...' });
                 }
@@ -747,12 +667,9 @@ function updateSlide9GDDTable(zip, slide9Data) {
                     results.updated.push({ field: 'Last Entry Age', value: slide9Data.lastEntryAge });
                 }
             } else {
-                console.log(`  ⚠️ Combined row not found in Slide 9`);
+                console.log(`  ⚠️ Could not update Eligibility/Last Entry Age`);
                 if (slide9Data.eligibility) {
-                    results.errors.push({ field: 'Eligibility', error: 'Combined row not found in table' });
-                }
-                if (slide9Data.lastEntryAge) {
-                    results.errors.push({ field: 'Last Entry Age', error: 'Combined row not found in table' });
+                    results.errors.push({ field: 'Eligibility', error: 'Cell not found' });
                 }
             }
         }
@@ -1158,33 +1075,19 @@ function updateSlide10GPATable(zip, slide10Data) {
     try {
         let slideXml = getSlideXML(zip, 10);
 
-        // 1. Update Eligibility & Last Entry Age - Template has combined row "EligibilityLast Entry Age"
+        // 1. Update Eligibility & Last Entry Age - Replace as separate text elements to avoid duplication
         if (slide10Data.eligibility || slide10Data.lastEntryAge) {
-            console.log(`  🔍 Updating Eligibility/Last Entry Age combined row...`);
+            console.log(`  🔍 Updating Eligibility/Last Entry Age (separate elements)...`);
 
-            let combinedValue = '';
-            if (slide10Data.eligibility) {
-                combinedValue = escapeXml(slide10Data.eligibility);
-            }
-            if (slide10Data.lastEntryAge) {
-                if (combinedValue) combinedValue += '\nLast Entry Age: ';
-                combinedValue += escapeXml(slide10Data.lastEntryAge);
-            }
+            const eligResult = replaceEligibilityAndLastEntryAgeSeparately(
+                slideXml,
+                slide10Data.eligibility,
+                slide10Data.lastEntryAge
+            );
 
-            const combinedLabels = ['EligibilityLast Entry Age', 'Eligibility Last Entry Age', 'Eligibility/Last Entry Age'];
-            let combinedResult = { success: false, xml: slideXml };
-
-            for (const label of combinedLabels) {
-                combinedResult = replaceTableCellByLabel(slideXml, label, combinedValue);
-                if (combinedResult.success) {
-                    console.log(`  📍 Found combined row with label: "${label}"`);
-                    break;
-                }
-            }
-
-            if (combinedResult.success) {
-                slideXml = combinedResult.xml;
-                console.log(`  ✅ Updated Eligibility & Last Entry Age (combined row)`);
+            if (eligResult.success) {
+                slideXml = eligResult.xml;
+                console.log(`  ✅ Updated Eligibility & Last Entry Age`);
                 if (slide10Data.eligibility) {
                     results.updated.push({ field: 'Eligibility', value: slide10Data.eligibility.substring(0, 50) + '...' });
                 }
@@ -1192,12 +1095,9 @@ function updateSlide10GPATable(zip, slide10Data) {
                     results.updated.push({ field: 'Last Entry Age', value: slide10Data.lastEntryAge });
                 }
             } else {
-                console.log(`  ⚠️ Combined row not found in Slide 10`);
+                console.log(`  ⚠️ Could not update Eligibility/Last Entry Age`);
                 if (slide10Data.eligibility) {
-                    results.errors.push({ field: 'Eligibility', error: 'Combined row not found in table' });
-                }
-                if (slide10Data.lastEntryAge) {
-                    results.errors.push({ field: 'Last Entry Age', error: 'Combined row not found in table' });
+                    results.errors.push({ field: 'Eligibility', error: 'Cell not found' });
                 }
             }
         }
