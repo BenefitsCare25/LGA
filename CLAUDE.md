@@ -219,17 +219,23 @@ Row 3: "Basis of Cover" → Bullet points with category: basis format
 Static informational slide describing GPA benefits - no data mapping needed.
 Contains descriptions of: Comatose State, Fractures, TCM Treatment, Mobility Extensions, Burns Benefits, Child Education Fund, Ambulance Costs.
 
-#### ✅ Slide 12 - GHS (Group Hospital & Surgical) Table
+#### ✅ Slide 12 - GHS (Group Hospital & Surgical) Tables
+Slide 12 has TWO tables with different structure than Slides 8-10:
+
+**Table 1 - Eligibility (2 rows)**
 | Field | Status | Notes |
 |-------|--------|-------|
-| Eligibility | ✅ | Combined row with Last Entry Age |
-| Last Entry Age | ✅ | Combined row with Eligibility |
-| Basis of Cover | ✅ | Cell replacement with bullet points |
-| Non-evidence Limit | ⚠️ | May not exist in template |
+| Eligibility | ✅ | Separate text element replacement |
+| Last Entry Age | ✅ | Separate text element replacement |
 
-**Source**: Excel "GHS" sheet
-**Template Structure**: Same 4-row table format as Slides 8-9
-**Note**: GHS is on Slide 12, not Slide 10 (Slide 10 is GPA)
+**Table 2 - Category/Plan (6 rows)**
+| Field | Status | Notes |
+|-------|--------|-------|
+| Category/Plan | ✅ | Maps Plan codes from Excel column I |
+
+**Source**: Excel "GHS" sheet (Category in col 3, Plan in col 8)
+**Template Structure**: Two separate tables (not combined like Slides 8-10)
+**Note**: Eligibility/Last Entry Age are replaced as SEPARATE text elements to avoid duplication
 
 ### Template Slide Mapping
 | Slide | Product | Excel Sheet | Status |

@@ -323,7 +323,7 @@ function extractGDDData(sheet) {
 /**
  * Extract GHS (Group Hospital & Surgical) specific data from the GHS sheet
  * @param {Object} sheet - XLSX sheet object
- * @returns {Object} GHS data including eligibility, last entry age, basis of cover, non-evidence limit
+ * @returns {Object} GHS data including eligibility, last entry age, categoryPlans
  */
 function extractGHSData(sheet) {
     if (!sheet) return null;
@@ -334,17 +334,83 @@ function extractGHSData(sheet) {
     // Extract individual fields (same structure as GTL/GDD)
     const eligibility = extractFieldByLabel(data, 'eligibility :', 2);
     const lastEntryAge = extractFieldByLabel(data, 'last entry age', 2);
-    const nonEvidenceLimit = extractFieldByLabel(data, 'non evidence limit', 2);
 
-    // Extract Basis of Cover - GHS has multiple plan tiers
-    const basisOfCover = extractBasisOfCover(data);
+    // Extract Category/Plan mapping for Slide 12 Table 2
+    // GHS uses: Category (col 3), Plan (col 8 - column I)
+    const categoryPlans = extractGHSCategoryPlans(data);
 
     return {
         eligibility: eligibility,
         lastEntryAge: lastEntryAge,
-        basisOfCover: basisOfCover,
-        nonEvidenceLimit: nonEvidenceLimit
+        categoryPlans: categoryPlans
     };
+}
+
+/**
+ * Extract Category/Plan mapping from GHS sheet
+ * GHS has Category in col 3, Plan in col 8 (column I)
+ * @param {Array} data - Sheet data as 2D array
+ * @returns {Array} Array of {category, plan} objects
+ */
+function extractGHSCategoryPlans(data) {
+    const categoryPlans = [];
+    let foundHeader = false;
+
+    console.log('  🔍 Searching for GHS Category/Plan table...');
+
+    for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        if (!row) continue;
+
+        const cellA = String(row[0] || '').toLowerCase().trim();
+
+        // Look for "Basis of Cover" header row (the Category/Plan table is under this)
+        if (cellA.includes('basis of cover')) {
+            foundHeader = true;
+            console.log(`  ✅ Found "Basis of Cover" header at row ${i}`);
+            continue;
+        }
+
+        // After finding header, look for data rows
+        if (foundHeader) {
+            // GHS structure: col 3 = Category, col 8 = Plan (column I)
+            const category = row[3] ? String(row[3]).trim() : '';
+            const plan = row[8] ? String(row[8]).trim() : '';
+
+            // Skip header row (contains "Category", "Plan", etc.)
+            if (category.toLowerCase() === 'category' || category.toLowerCase() === 'insured') {
+                console.log(`  📋 Skipping header row ${i}`);
+                continue;
+            }
+
+            // Stop at Rate section or notes
+            if (cellA.includes('rate') || cellA.includes('premium')) {
+                console.log(`  🛑 Stopping at row ${i} (found: "${cellA.substring(0, 30)}")`);
+                break;
+            }
+
+            // Stop if we hit the note row
+            if (String(row[1] || '').trim().startsWith('* FIGURES')) {
+                console.log(`  🛑 Stopping at note row ${i}`);
+                break;
+            }
+
+            // Valid data row: has category and plan
+            if (category && category.length > 0 && !category.startsWith('*') && plan) {
+                // Clean up category
+                const cleanCategory = category.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+
+                categoryPlans.push({
+                    category: cleanCategory,
+                    plan: plan
+                });
+                console.log(`  📊 Category: "${cleanCategory.substring(0, 40)}..." → Plan: "${plan}"`);
+            }
+        }
+    }
+
+    console.log(`  ✅ Extracted ${categoryPlans.length} GHS category/plan entries`);
+    return categoryPlans;
 }
 
 /**
@@ -533,8 +599,7 @@ function processPlacementSlip(buffer) {
         console.log('✅ GHS Data extracted successfully');
         console.log(`   - Eligibility: ${ghsData.eligibility ? 'Found' : 'Not found'}`);
         console.log(`   - Last Entry Age: ${ghsData.lastEntryAge ? 'Found' : 'Not found'}`);
-        console.log(`   - Basis of Cover: ${ghsData.basisOfCover?.length || 0} entries`);
-        console.log(`   - Non-Evidence Limit: ${ghsData.nonEvidenceLimit ? 'Found' : 'Not found'}`);
+        console.log(`   - Category/Plans: ${ghsData.categoryPlans?.length || 0} entries`);
     }
 
     // Extract GPA-specific data for Slide 10
@@ -581,8 +646,7 @@ function processPlacementSlip(buffer) {
         slide12Data: {
             eligibility: ghsData?.eligibility,
             lastEntryAge: ghsData?.lastEntryAge,
-            basisOfCover: ghsData?.basisOfCover,
-            nonEvidenceLimit: ghsData?.nonEvidenceLimit
+            categoryPlans: ghsData?.categoryPlans
         }
     };
 }
@@ -609,6 +673,7 @@ module.exports = {
     extractGTLData,
     extractGDDData,
     extractGHSData,
+    extractGHSCategoryPlans,
     extractGPAData,
     extractFieldByLabel,
     extractBasisOfCover,

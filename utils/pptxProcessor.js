@@ -801,11 +801,257 @@ function updateSlide9GDDTable(zip, slide9Data) {
 }
 
 /**
+ * Replace eligibility and last entry age as separate text elements in the cell
+ * The template cell has 3 text elements: ": " + eligibility + ": age XX next birthday"
+ * This function replaces them separately to avoid duplication
+ * @param {string} xml - Slide XML content
+ * @param {string} eligibility - Eligibility text
+ * @param {string} lastEntryAge - Last entry age text
+ * @returns {Object} { xml: updatedXml, success: boolean }
+ */
+function replaceEligibilityAndLastEntryAgeSeparately(xml, eligibility, lastEntryAge) {
+    console.log(`    🔎 Replacing eligibility and last entry age separately...`);
+
+    const rowPattern = /<a:tr\b[^>]*>([\s\S]*?)<\/a:tr>/g;
+    let match;
+    let updatedXml = xml;
+    let success = false;
+
+    while ((match = rowPattern.exec(xml)) !== null) {
+        const rowContent = match[1];
+        const fullRow = match[0];
+
+        // Check if this row contains "EligibilityLast Entry Age" label
+        if (!rowContent.includes('EligibilityLast Entry Age') &&
+            !rowContent.includes('>Eligibility<') ||
+            !rowContent.includes('>Last Entry Age<')) {
+            // Check combined label
+            const labelLower = rowContent.toLowerCase();
+            if (!labelLower.includes('eligibility') || !labelLower.includes('entry age')) {
+                continue;
+            }
+        }
+
+        // Found the row - now find and update the value cell
+        const cellPattern = /<a:tc\b[^>]*>([\s\S]*?)<\/a:tc>/g;
+        const cells = [];
+        let cellMatch;
+
+        while ((cellMatch = cellPattern.exec(rowContent)) !== null) {
+            cells.push({
+                full: cellMatch[0],
+                content: cellMatch[1]
+            });
+        }
+
+        if (cells.length < 2) continue;
+
+        // Value cell is the second cell
+        const valueCell = cells[1];
+        let updatedCellContent = valueCell.content;
+
+        // Find all text elements in the value cell
+        const textElementPattern = /<a:t>([^<]*)<\/a:t>/g;
+        const textElements = [];
+        let textMatch;
+
+        while ((textMatch = textElementPattern.exec(valueCell.content)) !== null) {
+            textElements.push({
+                full: textMatch[0],
+                text: textMatch[1],
+                index: textMatch.index
+            });
+        }
+
+        console.log(`    📝 Found ${textElements.length} text elements in value cell`);
+        textElements.forEach((elem, i) => {
+            console.log(`       Element ${i + 1}: "${elem.text.substring(0, 40)}${elem.text.length > 40 ? '...' : ''}"`);
+        });
+
+        // Replace elements:
+        // Element 1: ": " (keep as is - colon prefix)
+        // Element 2: eligibility text (replace with new eligibility)
+        // Element 3: ": age XX next birthday" (replace with new age - starts with ": age")
+
+        // First, find and replace the Last Entry Age element (starts with ": age")
+        if (lastEntryAge) {
+            for (const elem of textElements) {
+                // Last Entry Age element starts with ": age" (colon + space + age)
+                if (elem.text.trim().startsWith(': age') || elem.text.trim().startsWith(':age')) {
+                    const newAgeText = `<a:t>: age ${escapeXml(lastEntryAge)}</a:t>`;
+                    updatedCellContent = updatedCellContent.replace(elem.full, newAgeText);
+                    console.log(`    ✅ Replaced last entry age element: "${elem.text.substring(0, 30)}..." → ": age ${lastEntryAge}"`);
+                    success = true;
+                    break;
+                }
+            }
+        }
+
+        // Then, find and replace the eligibility element (the main text, not starting with ":")
+        if (eligibility) {
+            for (let i = 0; i < textElements.length; i++) {
+                const elem = textElements[i];
+                // Skip if it's just punctuation (colon prefix)
+                if (elem.text.trim() === ':' || elem.text.trim() === ': ') {
+                    continue;
+                }
+                // Skip if it starts with ": age" (that's the Last Entry Age)
+                if (elem.text.trim().startsWith(': age') || elem.text.trim().startsWith(':age')) {
+                    continue;
+                }
+                // This should be the eligibility text (the longest content element)
+                if (elem.text.length > 10) {
+                    const newEligibilityText = `<a:t>${escapeXml(eligibility)}</a:t>`;
+                    updatedCellContent = updatedCellContent.replace(elem.full, newEligibilityText);
+                    console.log(`    ✅ Replaced eligibility element: "${elem.text.substring(0, 40)}..." → "${eligibility.substring(0, 40)}..."`);
+                    success = true;
+                    break;
+                }
+            }
+        }
+
+        if (success) {
+            // Update the cell in the row
+            const updatedValueCell = valueCell.full.replace(valueCell.content, updatedCellContent);
+            const updatedRowContent = rowContent.replace(valueCell.full, updatedValueCell);
+            const updatedFullRow = fullRow.replace(rowContent, updatedRowContent);
+            updatedXml = updatedXml.replace(fullRow, updatedFullRow);
+            break;
+        }
+    }
+
+    return { xml: updatedXml, success };
+}
+
+/**
+ * Update Category/Plan table (Table 2) in Slide 12 with plan codes from Excel
+ * @param {string} xml - Slide XML content
+ * @param {Array} categoryPlans - Array of {category, plan} objects from Excel
+ * @returns {Object} { xml: updatedXml, success: boolean, updatedCount: number }
+ */
+function updateCategoryPlanTable(xml, categoryPlans) {
+    if (!categoryPlans || categoryPlans.length === 0) {
+        return { xml, success: false, updatedCount: 0 };
+    }
+
+    console.log(`    🔄 Updating Category/Plan table with ${categoryPlans.length} entries...`);
+
+    let updatedXml = xml;
+    let updatedCount = 0;
+
+    // Find all tables - we need Table 2 (Category/Plan table)
+    const tablePattern = /<a:tbl\b[^>]*>([\s\S]*?)<\/a:tbl>/g;
+    let tableMatch;
+    let tableNum = 0;
+
+    while ((tableMatch = tablePattern.exec(xml)) !== null) {
+        tableNum++;
+
+        // Table 2 is the Category/Plan table
+        if (tableNum !== 2) continue;
+
+        const tableContent = tableMatch[1];
+        const fullTable = tableMatch[0];
+        let updatedTableContent = tableContent;
+
+        // Find all rows in this table
+        const rowPattern = /<a:tr\b[^>]*>([\s\S]*?)<\/a:tr>/g;
+        let rowMatch;
+        let rowNum = 0;
+
+        while ((rowMatch = rowPattern.exec(tableContent)) !== null) {
+            rowNum++;
+            if (rowNum === 1) continue; // Skip header row
+
+            const rowContent = rowMatch[1];
+            const fullRow = rowMatch[0];
+
+            // Extract cells
+            const cellPattern = /<a:tc\b[^>]*>([\s\S]*?)<\/a:tc>/g;
+            const cells = [];
+            let cellMatch;
+
+            while ((cellMatch = cellPattern.exec(rowContent)) !== null) {
+                const textPattern = /<a:t>([^<]*)<\/a:t>/g;
+                let cellText = '';
+                let textMatch;
+                while ((textMatch = textPattern.exec(cellMatch[1])) !== null) {
+                    cellText += textMatch[1];
+                }
+                cells.push({
+                    full: cellMatch[0],
+                    content: cellMatch[1],
+                    text: cellText.trim()
+                });
+            }
+
+            if (cells.length < 2) continue;
+
+            const categoryCell = cells[0];
+            const planCell = cells[1];
+
+            // Find matching category in Excel data
+            const categoryTextLower = categoryCell.text.toLowerCase().replace(/&amp;/g, '&');
+
+            console.log(`    📋 Row ${rowNum}: Template category="${categoryTextLower.substring(0, 40)}..."`);
+
+            for (const excelData of categoryPlans) {
+                const excelCategoryLower = excelData.category.toLowerCase();
+
+                // Match by first significant words (ignoring minor differences)
+                // Extract first 3 words for matching
+                const templateWords = categoryTextLower.split(/\s+/).slice(0, 3).join(' ');
+                const excelWords = excelCategoryLower.split(/\s+/).slice(0, 3).join(' ');
+
+                const isMatch = templateWords === excelWords ||
+                    categoryTextLower.startsWith(excelCategoryLower.substring(0, 15)) ||
+                    excelCategoryLower.startsWith(categoryTextLower.substring(0, 15));
+
+                if (isMatch) {
+                    // Found a match - update the plan cell
+                    const oldPlanText = planCell.text;
+                    const newPlan = excelData.plan;
+
+                    console.log(`       ✓ Matched with Excel: "${excelCategoryLower.substring(0, 40)}..."`);
+                    console.log(`       Plan: "${oldPlanText}" → "${newPlan}"`);
+
+                    // Always update (even if same) to ensure correct value
+                    const planTextPattern = /<a:t>([^<]*)<\/a:t>/;
+                    const planTextMatch = planCell.content.match(planTextPattern);
+
+                    if (planTextMatch) {
+                        const newPlanCellContent = planCell.content.replace(
+                            planTextMatch[0],
+                            `<a:t>${escapeXml(newPlan)}</a:t>`
+                        );
+                        const newPlanCell = planCell.full.replace(planCell.content, newPlanCellContent);
+                        const newRowContent = rowContent.replace(planCell.full, newPlanCell);
+                        const newFullRow = fullRow.replace(rowContent, newRowContent);
+                        updatedTableContent = updatedTableContent.replace(fullRow, newFullRow);
+
+                        console.log(`    ✅ Updated Plan: "${categoryCell.text.substring(0, 30)}..." → ${newPlan}`);
+                        updatedCount++;
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Update the table in the XML
+        const updatedFullTable = fullTable.replace(tableContent, updatedTableContent);
+        updatedXml = updatedXml.replace(fullTable, updatedFullTable);
+        break;
+    }
+
+    return { xml: updatedXml, success: updatedCount > 0, updatedCount };
+}
+
+/**
  * Update Slide 12 GHS table with data from placement slip
  * Note: GHS is on Slide 12, not Slide 10 (Slide 10 is GPA)
- * Structure is identical to Slides 8-9: EligibilityLast Entry Age, Basis of Cover, Non-evidence Limit
+ * Slide 12 has TWO tables: Table 1 (Eligibility) and Table 2 (Category/Plan)
  * @param {Object} zip - PizZip instance
- * @param {Object} slide12Data - Data for slide 12 (eligibility, lastEntryAge, basisOfCover, nonEvidenceLimit)
+ * @param {Object} slide12Data - Data for slide 12 (eligibility, lastEntryAge, categoryPlans)
  * @returns {Object} Results of the update operation
  */
 function updateSlide12GHSTable(zip, slide12Data) {
@@ -817,7 +1063,7 @@ function updateSlide12GHSTable(zip, slide12Data) {
     };
 
     if (!slide12Data) {
-        console.log('⚠️ No slide 10 data provided');
+        console.log('⚠️ No slide 12 data provided');
         return results;
     }
 
@@ -825,39 +1071,24 @@ function updateSlide12GHSTable(zip, slide12Data) {
     console.log('📋 Slide 12 Data received:');
     console.log(`   - eligibility: "${slide12Data.eligibility?.substring(0, 60) || 'null'}..."`);
     console.log(`   - lastEntryAge: "${slide12Data.lastEntryAge || 'null'}"`);
-    console.log(`   - basisOfCover: ${slide12Data.basisOfCover?.length || 0} items`);
-    console.log(`   - nonEvidenceLimit: "${slide12Data.nonEvidenceLimit?.substring(0, 60) || 'null'}..."`);
+    console.log(`   - categoryPlans: ${slide12Data.categoryPlans?.length || 0} items`);
 
     try {
         let slideXml = getSlideXML(zip, 12);
 
-        // 1. Update Eligibility & Last Entry Age - Template has combined row "EligibilityLast Entry Age"
+        // 1. Update Eligibility & Last Entry Age - Replace separately to avoid duplication
         if (slide12Data.eligibility || slide12Data.lastEntryAge) {
-            console.log(`  🔍 Updating Eligibility/Last Entry Age combined row...`);
+            console.log(`  🔍 Updating Eligibility/Last Entry Age (separate elements)...`);
 
-            let combinedValue = '';
-            if (slide12Data.eligibility) {
-                combinedValue = escapeXml(slide12Data.eligibility);
-            }
-            if (slide12Data.lastEntryAge) {
-                if (combinedValue) combinedValue += '\nLast Entry Age: ';
-                combinedValue += escapeXml(slide12Data.lastEntryAge);
-            }
+            const eligResult = replaceEligibilityAndLastEntryAgeSeparately(
+                slideXml,
+                slide12Data.eligibility,
+                slide12Data.lastEntryAge
+            );
 
-            const combinedLabels = ['EligibilityLast Entry Age', 'Eligibility Last Entry Age', 'Eligibility/Last Entry Age'];
-            let combinedResult = { success: false, xml: slideXml };
-
-            for (const label of combinedLabels) {
-                combinedResult = replaceTableCellByLabel(slideXml, label, combinedValue);
-                if (combinedResult.success) {
-                    console.log(`  📍 Found combined row with label: "${label}"`);
-                    break;
-                }
-            }
-
-            if (combinedResult.success) {
-                slideXml = combinedResult.xml;
-                console.log(`  ✅ Updated Eligibility & Last Entry Age (combined row)`);
+            if (eligResult.success) {
+                slideXml = eligResult.xml;
+                console.log(`  ✅ Updated Eligibility & Last Entry Age`);
                 if (slide12Data.eligibility) {
                     results.updated.push({ field: 'Eligibility', value: slide12Data.eligibility.substring(0, 50) + '...' });
                 }
@@ -865,45 +1096,24 @@ function updateSlide12GHSTable(zip, slide12Data) {
                     results.updated.push({ field: 'Last Entry Age', value: slide12Data.lastEntryAge });
                 }
             } else {
-                console.log(`  ⚠️ Combined row not found in Slide 12`);
+                console.log(`  ⚠️ Could not update Eligibility/Last Entry Age`);
                 if (slide12Data.eligibility) {
-                    results.errors.push({ field: 'Eligibility', error: 'Combined row not found in table' });
-                }
-                if (slide12Data.lastEntryAge) {
-                    results.errors.push({ field: 'Last Entry Age', error: 'Combined row not found in table' });
+                    results.errors.push({ field: 'Eligibility', error: 'Cell not found' });
                 }
             }
         }
 
-        // 2. Update Basis of Cover - Use cell replacement approach
-        if (slide12Data.basisOfCover && slide12Data.basisOfCover.length > 0) {
-            console.log(`  🔄 Updating Basis of Cover with ${slide12Data.basisOfCover.length} entries...`);
+        // 2. Update Category/Plan table (Table 2)
+        if (slide12Data.categoryPlans && slide12Data.categoryPlans.length > 0) {
+            console.log(`  🔄 Updating Category/Plan table with ${slide12Data.categoryPlans.length} entries...`);
 
-            const basisResult = replaceBasisOfCoverCell(slideXml, slide12Data.basisOfCover);
+            const planResult = updateCategoryPlanTable(slideXml, slide12Data.categoryPlans);
 
-            if (basisResult.success) {
-                slideXml = basisResult.xml;
-                results.updated.push({ field: 'Basis of Cover', value: `${slide12Data.basisOfCover.length} categories` });
+            if (planResult.success) {
+                slideXml = planResult.xml;
+                results.updated.push({ field: 'Category/Plan', value: `${planResult.updatedCount} plans updated` });
             } else {
-                console.log(`  ⚠️ Could not update Basis of Cover in Slide 12`);
-                results.errors.push({ field: 'Basis of Cover', error: 'Cell not found in table' });
-            }
-        }
-
-        // 3. Update Non-evidence Limit (may not exist in Slide 12)
-        if (slide12Data.nonEvidenceLimit) {
-            const nonEvidenceValue = escapeXml(slide12Data.nonEvidenceLimit);
-            console.log(`  🔍 Updating Non-evidence Limit cell with: "${nonEvidenceValue.substring(0, 50)}..."`);
-
-            const nonEvidenceResult = replaceTableCellByLabel(slideXml, 'Non-evidence Limit', nonEvidenceValue);
-
-            if (nonEvidenceResult.success) {
-                slideXml = nonEvidenceResult.xml;
-                console.log(`  ✅ Updated Non-evidence Limit`);
-                results.updated.push({ field: 'Non-evidence Limit', value: slide12Data.nonEvidenceLimit.substring(0, 50) + '...' });
-            } else {
-                console.log(`  ⚠️ Non-evidence Limit row not found in Slide 12 (may not exist)`);
-                // Don't add to errors for slide 10 as this field may not exist
+                console.log(`  ⚠️ Could not update Category/Plan table`);
             }
         }
 
