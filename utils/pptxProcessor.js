@@ -2235,16 +2235,49 @@ function updateCellTextByIndex(rowXml, cells, cellIndex, newValue) {
     let newCellContent = cell.content;
 
     if (textMatches && textMatches.length > 0) {
-        // Replace the FIRST <a:t> with new value, REMOVE all subsequent <a:t> elements
-        let isFirst = true;
-        newCellContent = cell.content.replace(textPattern, (match) => {
-            if (isFirst) {
-                isFirst = false;
-                return `<a:t>${escapedValue}</a:t>`;
+        if (textMatches.length === 1) {
+            // Single text element - simple replacement
+            newCellContent = cell.content.replace(textPattern, `<a:t>${escapedValue}</a:t>`);
+        } else {
+            // Multiple text elements - need to consolidate into first run and remove others
+            // Strategy: Find all <a:r> runs, keep only the first one with updated text
+            const runPattern = /<a:r>([\s\S]*?)<\/a:r>/g;
+            const runs = [];
+            let runMatch;
+            while ((runMatch = runPattern.exec(cell.content)) !== null) {
+                // Check if this run contains a text element
+                if (runMatch[0].includes('<a:t>')) {
+                    runs.push({
+                        full: runMatch[0],
+                        content: runMatch[1],
+                        index: runMatch.index
+                    });
+                }
             }
-            // Remove subsequent text elements by replacing with empty
-            return '<a:t></a:t>';
-        });
+
+            if (runs.length > 0) {
+                // Update the first run's text
+                const firstRun = runs[0];
+                const updatedFirstRun = firstRun.full.replace(/<a:t>[^<]*<\/a:t>/, `<a:t>${escapedValue}</a:t>`);
+                newCellContent = cell.content.replace(firstRun.full, updatedFirstRun);
+
+                // Remove subsequent runs (they contain the split text)
+                for (let i = 1; i < runs.length; i++) {
+                    newCellContent = newCellContent.replace(runs[i].full, '');
+                }
+            } else {
+                // Fallback: just replace first text element
+                let isFirst = true;
+                newCellContent = cell.content.replace(textPattern, (match) => {
+                    if (isFirst) {
+                        isFirst = false;
+                        return `<a:t>${escapedValue}</a:t>`;
+                    }
+                    // Keep existing content if we couldn't find runs
+                    return match;
+                });
+            }
+        }
     } else {
         // No text elements found - try to insert into existing <a:r> run
         const runPattern = /(<a:r>[\s\S]*?)(<\/a:r>)/;
