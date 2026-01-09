@@ -189,9 +189,12 @@ function replaceTableCellByLabel(xml, labelText, newValue) {
     let updatedXml = xml;
     let success = false;
     let rowIndex = 0;
+    let totalRows = 0;
 
+    // First pass: count and log all rows for debugging
+    const allRows = [];
     while ((match = rowPattern.exec(xml)) !== null) {
-        rowIndex++;
+        totalRows++;
         const rowContent = match[1];
         const fullRow = match[0];
 
@@ -207,21 +210,39 @@ function replaceTableCellByLabel(xml, labelText, newValue) {
             });
         }
 
-        // Need at least 2 cells (label + value)
-        if (cells.length < 2) continue;
-
-        // Extract text from first cell (label cell)
-        const labelCell = cells[0].content;
-        const textPattern = /<a:t>([^<]*)<\/a:t>/g;
+        // Extract text from first cell
         let labelCellText = '';
-        let textMatch;
-
-        while ((textMatch = textPattern.exec(labelCell)) !== null) {
-            labelCellText += textMatch[1];
+        if (cells.length > 0) {
+            const textPattern = /<a:t>([^<]*)<\/a:t>/g;
+            let textMatch;
+            while ((textMatch = textPattern.exec(cells[0].content)) !== null) {
+                labelCellText += textMatch[1];
+            }
         }
 
+        allRows.push({
+            fullRow,
+            rowContent,
+            cells,
+            labelCellText: labelCellText.trim(),
+            cellCount: cells.length
+        });
+    }
+
+    console.log(`    📊 Total rows found: ${totalRows}`);
+    allRows.forEach((row, idx) => {
+        console.log(`       Row ${idx + 1}: ${row.cellCount} cells, label="${row.labelCellText.substring(0, 30)}${row.labelCellText.length > 30 ? '...' : ''}"`);
+    });
+
+    // Second pass: find and replace
+    for (const row of allRows) {
+        rowIndex++;
+
+        // Need at least 2 cells (label + value)
+        if (row.cellCount < 2) continue;
+
         // Normalize label cell text for comparison
-        const normalizedLabel = labelCellText.toLowerCase().trim();
+        const normalizedLabel = row.labelCellText.toLowerCase().trim();
 
         // More precise matching: check if the cell text STARTS WITH or EQUALS the label
         // This prevents "Eligibility" from matching "Eligibility Date"
@@ -231,10 +252,10 @@ function replaceTableCellByLabel(xml, labelText, newValue) {
                             normalizedLabel.startsWith(labelLower + ':');
 
         if (isExactMatch) {
-            console.log(`    📍 Row ${rowIndex}: Found exact match for "${labelText}" - cell text: "${labelCellText.trim()}"`);
+            console.log(`    📍 Row ${rowIndex}: Found exact match for "${labelText}" - cell text: "${row.labelCellText}"`);
 
             // Get the value cell (second cell)
-            const valueCell = cells[1];
+            const valueCell = row.cells[1];
             const valueCellContent = valueCell.content;
 
             // Find all <a:t> elements in value cell
@@ -278,11 +299,11 @@ function replaceTableCellByLabel(xml, labelText, newValue) {
                     const newValueCell = valueCell.full.replace(valueCellContent, newValueCellContent);
 
                     // Replace in the row
-                    const newRowContent = rowContent.replace(valueCell.full, newValueCell);
-                    const newFullRow = fullRow.replace(rowContent, newRowContent);
+                    const newRowContent = row.rowContent.replace(valueCell.full, newValueCell);
+                    const newFullRow = row.fullRow.replace(row.rowContent, newRowContent);
 
                     // Replace in the XML
-                    updatedXml = updatedXml.replace(fullRow, newFullRow);
+                    updatedXml = updatedXml.replace(row.fullRow, newFullRow);
                     success = true;
                     console.log(`    ✅ Successfully updated "${labelText}" cell`);
                     break;
