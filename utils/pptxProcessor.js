@@ -2119,9 +2119,13 @@ function updateSlide18RoomAndBoard(zip, slide18Data) {
                         // Clone and modify ward row template
                         let newWardRow = wardRowTemplate;
 
+                        // Escape values for XML and regex replacement ($ has special meaning)
+                        const safeWardClass = escapeXml(ward.classOfWard).replace(/\$/g, '$$$$');
+                        const safeBenefit = escapeXml(ward.benefit).replace(/\$/g, '$$$$');
+
                         // Replace ward class name (first cell text)
                         const wardClassPattern = /(<a:tc\b[^>]*>[\s\S]*?<a:t>)[^<]*(<\/a:t>)/;
-                        newWardRow = newWardRow.replace(wardClassPattern, `$1${escapeXml(ward.classOfWard)}$2`);
+                        newWardRow = newWardRow.replace(wardClassPattern, `$1${safeWardClass}$2`);
 
                         // Replace benefit value (second cell text)
                         // Find second <a:tc> and update its text
@@ -2130,7 +2134,7 @@ function updateSlide18RoomAndBoard(zip, slide18Data) {
                             const oldSecondCell = cells[1];
                             const newSecondCell = oldSecondCell.replace(
                                 /(<a:t>)[^<]*(<\/a:t>)/,
-                                `$1${escapeXml(ward.benefit)}$2`
+                                `$1${safeBenefit}$2`
                             );
                             newWardRow = newWardRow.replace(oldSecondCell, newSecondCell);
                         }
@@ -2237,7 +2241,8 @@ function updateCellTextByIndex(rowXml, cells, cellIndex, newValue) {
     if (textMatches && textMatches.length > 0) {
         if (textMatches.length === 1) {
             // Single text element - simple replacement
-            newCellContent = cell.content.replace(textPattern, `<a:t>${escapedValue}</a:t>`);
+            // Use safeValue to handle $ in currency values like S$100
+            newCellContent = cell.content.replace(textPattern, `<a:t>${safeValue}</a:t>`);
         } else {
             // Multiple text elements - need to consolidate into first run and remove others
             // Strategy: Find all <a:r> runs, keep only the first one with updated text
@@ -2257,8 +2262,9 @@ function updateCellTextByIndex(rowXml, cells, cellIndex, newValue) {
 
             if (runs.length > 0) {
                 // Update the first run's text
+                // Use safeValue to handle $ in currency values like S$100
                 const firstRun = runs[0];
-                const updatedFirstRun = firstRun.full.replace(/<a:t>[^<]*<\/a:t>/, `<a:t>${escapedValue}</a:t>`);
+                const updatedFirstRun = firstRun.full.replace(/<a:t>[^<]*<\/a:t>/, `<a:t>${safeValue}</a:t>`);
                 newCellContent = cell.content.replace(firstRun.full, updatedFirstRun);
 
                 // Remove subsequent runs (they contain the split text)
@@ -2267,11 +2273,12 @@ function updateCellTextByIndex(rowXml, cells, cellIndex, newValue) {
                 }
             } else {
                 // Fallback: just replace first text element
+                // Use safeValue to handle $ in currency values like S$100
                 let isFirst = true;
                 newCellContent = cell.content.replace(textPattern, (match) => {
                     if (isFirst) {
                         isFirst = false;
-                        return `<a:t>${escapedValue}</a:t>`;
+                        return `<a:t>${safeValue}</a:t>`;
                     }
                     // Keep existing content if we couldn't find runs
                     return match;
