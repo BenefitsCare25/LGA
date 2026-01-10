@@ -3112,8 +3112,13 @@ function updateSlide25GPScheduleOfBenefits(zip, slide25Data) {
                         currentBenefit = matchedBenefit;
                         let newRow = row.full;
 
-                        // Update plan value columns (typically cols 7 and 8 for slide 25)
-                        const planCols = [7, 8];
+                        // Dynamically determine plan columns based on actual table structure
+                        // PPTX table has: [identifier] [name] [...plan values at end]
+                        // Use last 2 cells for plan values (cells.length-2 and cells.length-1)
+                        const planCols = cells.length >= 4
+                            ? [cells.length - 2, cells.length - 1]
+                            : cells.length >= 3 ? [2, 2] : [1, 1]; // Fallback for merged columns
+
                         for (let p = 0; p < scheduleData.planHeaders.length && p < planCols.length; p++) {
                             const planHeader = scheduleData.planHeaders[p];
                             const value = matchedBenefit.values?.[planHeader] || '';
@@ -3138,7 +3143,11 @@ function updateSlide25GPScheduleOfBenefits(zip, slide25Data) {
                     if (matchedSubItem) {
                         let newRow = row.full;
 
-                        const planCols = [7, 8];
+                        // Use same dynamic plan column detection for sub-items
+                        const planCols = cells.length >= 4
+                            ? [cells.length - 2, cells.length - 1]
+                            : cells.length >= 3 ? [2, 2] : [1, 1];
+
                         for (let p = 0; p < scheduleData.planHeaders.length && p < planCols.length; p++) {
                             const planHeader = scheduleData.planHeaders[p];
                             const value = matchedSubItem.values?.[planHeader] || '';
@@ -3293,6 +3302,18 @@ function updateSlide26SPOverview(zip, slide26Data) {
 }
 
 /**
+ * Map PPT benefit numbers to Excel benefit numbers for SP Schedule of Benefits
+ * PPT consolidates some Excel benefits - use primary Excel number for values
+ */
+const SP_PPT_TO_EXCEL_MAPPING = {
+    1: 1,    // PPT "Panel & Non Panel Specialist" → Excel #1 (Panel Specialist)
+    2: 3,    // PPT "TCM" → Excel #3
+    3: 4,    // PPT "Diagnostic X-ray & Lab Test" → Excel #4 (Panel Diagnostic)
+    4: 8,    // PPT "Outpatient therapy" → Excel #8
+    5: null  // PPT "GST Extension" → Not in Excel, skip
+};
+
+/**
  * Update Slide 27 SP Schedule of Benefits
  * @param {Object} zip - PizZip instance
  * @param {Object} slide27Data - Data for slide 27 (scheduleOfBenefits)
@@ -3349,8 +3370,17 @@ function updateSlide27SPScheduleOfBenefits(zip, slide27Data) {
                 const benefitNum = parseInt(cell0Text, 10);
 
                 if (!isNaN(benefitNum) && benefitNum >= 1) {
-                    // Find matching benefit in Excel data
-                    const matchedBenefit = scheduleData.benefits?.find(b => b.number === benefitNum);
+                    // Map PPT benefit number to Excel benefit number
+                    const excelBenefitNum = SP_PPT_TO_EXCEL_MAPPING[benefitNum];
+
+                    // Skip GST Extension (not in Excel - keep template default)
+                    if (excelBenefitNum === null) {
+                        console.log(`    ⏭️ Skipping benefit ${benefitNum} (GST Extension - not in Excel)`);
+                        continue;
+                    }
+
+                    // Find matching benefit in Excel data using mapped number
+                    const matchedBenefit = scheduleData.benefits?.find(b => b.number === excelBenefitNum);
 
                     if (matchedBenefit) {
                         currentBenefit = matchedBenefit;
@@ -3367,8 +3397,10 @@ function updateSlide27SPScheduleOfBenefits(zip, slide27Data) {
                         }
 
                         updatedTableContent = updatedTableContent.replace(row.full, newRow);
-                        console.log(`    ✅ Updated benefit ${benefitNum}: ${matchedBenefit.name?.substring(0, 30) || 'N/A'}...`);
+                        console.log(`    ✅ Updated benefit ${benefitNum} (Excel #${excelBenefitNum}): ${matchedBenefit.name?.substring(0, 30) || 'N/A'}...`);
                         results.updated.push({ field: `Benefit ${benefitNum}`, value: matchedBenefit.name?.substring(0, 30) || '' });
+                    } else {
+                        console.log(`    ⚠️ No Excel benefit found for PPT #${benefitNum} (mapped to Excel #${excelBenefitNum})`);
                     }
                 }
                 // Check for sub-items of current benefit
