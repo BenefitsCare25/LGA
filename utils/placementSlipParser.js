@@ -16,6 +16,37 @@ const MONTHS = [
 const SHEET_NAMES = ['GTL', 'GDD ', 'GHS', 'GMM', 'GP', 'SP', 'Dental', 'GPA'];
 
 /**
+ * Find a sheet by name, handling whitespace variations
+ * Checks for trailing/leading spaces that may exist in some Excel files
+ * @param {Object} workbook - XLSX workbook object
+ * @param {string} baseName - Base sheet name to find
+ * @returns {Object|null} Sheet object or null if not found
+ */
+function findSheetByName(workbook, baseName) {
+    // Try variations with whitespace
+    const variations = [
+        baseName,
+        baseName + ' ',        // trailing space (common in some exports)
+        ' ' + baseName,        // leading space
+        baseName.toUpperCase(),
+        baseName.toLowerCase(),
+        baseName.trim()
+    ];
+
+    for (const variant of variations) {
+        if (workbook.Sheets[variant]) {
+            if (variant !== baseName && variant !== baseName.trim()) {
+                console.log(`⚠️ Sheet "${baseName}" found as "${variant}" (whitespace variation)`);
+            }
+            return workbook.Sheets[variant];
+        }
+    }
+
+    console.error(`❌ Sheet "${baseName}" not found. Available sheets: ${workbook.SheetNames.join(', ')}`);
+    return null;
+}
+
+/**
  * Parse Excel buffer into workbook
  * @param {Buffer} buffer - Excel file buffer
  * @returns {Object} XLSX workbook object
@@ -1295,7 +1326,7 @@ function processPlacementSlip(buffer) {
     }
 
     // Extract GDD-specific data for Slide 9 (note: sheet name has trailing space)
-    const gddSheet = workbook.Sheets['GDD '] || workbook.Sheets['GDD'];
+    const gddSheet = findSheetByName(workbook, 'GDD');
     const gddData = extractGDDData(gddSheet);
 
     if (gddData) {

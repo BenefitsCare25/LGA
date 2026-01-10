@@ -901,6 +901,101 @@
                     `;
                 }
 
+                // Show slide detection results if available
+                let detectionHtml = '';
+                if (data.slideDetection) {
+                    const detection = data.slideDetection;
+                    const warnings = detection.warnings || [];
+                    const validation = detection.validation || {};
+                    const results = detection.results || {};
+
+                    // Build detection confidence display
+                    let confidenceItems = [];
+                    Object.entries(results).forEach(([slideType, result]) => {
+                        const confidence = Math.round((result.confidence || 0) * 100);
+                        const status = result.usedFallback ? 'fallback' : 'detected';
+                        const color = confidence >= 70 ? '#00d4aa' : confidence >= 40 ? '#ffa500' : '#ff4444';
+                        const icon = confidence >= 70 ? '✓' : confidence >= 40 ? '~' : '✗';
+                        confidenceItems.push({
+                            slideType: slideType.replace(/_/g, ' '),
+                            slideNum: result.slideNum,
+                            confidence,
+                            color,
+                            icon,
+                            status
+                        });
+                    });
+
+                    // Sort by slide number
+                    confidenceItems.sort((a, b) => a.slideNum - b.slideNum);
+
+                    // Count by confidence level
+                    const highConf = confidenceItems.filter(i => i.confidence >= 70).length;
+                    const medConf = confidenceItems.filter(i => i.confidence >= 40 && i.confidence < 70).length;
+                    const lowConf = confidenceItems.filter(i => i.confidence < 40).length;
+
+                    // Build warnings display
+                    let warningsHtml = '';
+                    if (warnings.length > 0) {
+                        const criticalWarnings = warnings.filter(w => w.collisionType === 'fallback' || w.message.includes('CRITICAL'));
+                        const normalWarnings = warnings.filter(w => !w.collisionType && !w.message.includes('CRITICAL'));
+
+                        if (criticalWarnings.length > 0) {
+                            warningsHtml += `
+                                <div style="margin-top: 8px; padding: 6px 10px; background: rgba(255,68,68,0.15); border-radius: 4px;">
+                                    <strong style="color: #ff4444; font-size: 0.85em;">Critical Warnings</strong>
+                                    ${criticalWarnings.map(w => `<div style="color: #ff6666; font-size: 0.8em; margin-top: 4px;">⚠ ${w.message}</div>`).join('')}
+                                </div>
+                            `;
+                        }
+
+                        if (normalWarnings.length > 0) {
+                            warningsHtml += `
+                                <div style="margin-top: 8px; padding: 6px 10px; background: rgba(255,165,0,0.1); border-radius: 4px;">
+                                    <strong style="color: #ffa500; font-size: 0.85em;">Detection Warnings</strong>
+                                    ${normalWarnings.map(w => `<div style="color: #ffcc66; font-size: 0.8em; margin-top: 4px;">⚠ ${w.message}</div>`).join('')}
+                                </div>
+                            `;
+                        }
+                    }
+
+                    // Confidence summary
+                    const summaryColor = lowConf > 0 ? '#ff4444' : medConf > 0 ? '#ffa500' : '#00d4aa';
+                    const summaryText = lowConf > 0
+                        ? `${lowConf} slide(s) with low confidence`
+                        : medConf > 0
+                            ? `${medConf} slide(s) with medium confidence`
+                            : 'All slides detected with high confidence';
+
+                    detectionHtml = `
+                        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
+                            <details style="cursor: pointer;">
+                                <summary style="color: #888; font-size: 0.9em; margin-bottom: 8px;">
+                                    <strong>Slide Detection</strong>
+                                    <span style="color: ${summaryColor}; margin-left: 8px;">${summaryText}</span>
+                                </summary>
+                                <div style="margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px;">
+                                    <div style="display: flex; gap: 12px; margin-bottom: 8px; font-size: 0.8em;">
+                                        <span style="color: #00d4aa;">✓ High (${highConf})</span>
+                                        <span style="color: #ffa500;">~ Medium (${medConf})</span>
+                                        <span style="color: #ff4444;">✗ Low (${lowConf})</span>
+                                    </div>
+                                    <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                                        ${confidenceItems.map(item => `
+                                            <span style="display: inline-block; padding: 2px 6px; background: rgba(255,255,255,0.05); border-radius: 3px; font-size: 0.75em; border-left: 2px solid ${item.color};" title="${item.slideType}: Slide ${item.slideNum} (${item.status})">
+                                                <span style="color: ${item.color};">${item.icon}</span>
+                                                <span style="color: #aaa;">S${item.slideNum}</span>
+                                                <span style="color: #666;">${item.confidence}%</span>
+                                            </span>
+                                        `).join('')}
+                                    </div>
+                                    ${warningsHtml}
+                                </div>
+                            </details>
+                        </div>
+                    `;
+                }
+
                 resultBox.innerHTML = `
                     <h4 style="color: #00d4aa; margin-bottom: 10px;">Processing Complete</h4>
                     <p><strong>Input:</strong> ${data.input.file || data.input.fileName}</p>
@@ -911,6 +1006,7 @@
                         ${slideBreakdownHtml}
                         ${errorsHtml}
                     </div>
+                    ${detectionHtml}
                 `;
             } else {
                 resultBox.classList.add('error');

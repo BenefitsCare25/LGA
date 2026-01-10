@@ -172,6 +172,53 @@ function escapeXml(text) {
 }
 
 /**
+ * Calculate fuzzy match score between template and Excel category text
+ * Uses token overlap (Jaccard similarity) and substring containment
+ * @param {string} template - Category text from template
+ * @param {string} excel - Category text from Excel
+ * @returns {Object} { isMatch, similarity, matchedTokens }
+ */
+function calculateCategoryMatchScore(template, excel) {
+    // Normalize: lowercase, replace ampersands, remove extra whitespace
+    const normalize = (str) => str.toLowerCase()
+        .replace(/&amp;/g, '&')
+        .replace(/&/g, ' and ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const templateNorm = normalize(template);
+    const excelNorm = normalize(excel);
+
+    // Tokenize (words with length > 2 to filter out articles/prepositions)
+    const templateTokens = new Set(templateNorm.split(/\s+/).filter(t => t.length > 2));
+    const excelTokens = new Set(excelNorm.split(/\s+/).filter(t => t.length > 2));
+
+    // Calculate Jaccard similarity (intersection / union)
+    const intersection = [...templateTokens].filter(t => excelTokens.has(t));
+    const union = new Set([...templateTokens, ...excelTokens]);
+    const similarity = union.size > 0 ? intersection.length / union.size : 0;
+
+    // Also check substring containment (handles cases like "Management Staff" vs "Mgmt Staff")
+    const containsCheck = templateNorm.includes(excelNorm.substring(0, 15)) ||
+                          excelNorm.includes(templateNorm.substring(0, 15));
+
+    // First 3 words match (original logic, kept as fallback)
+    const templateWords = templateNorm.split(/\s+/).slice(0, 3).join(' ');
+    const excelWords = excelNorm.split(/\s+/).slice(0, 3).join(' ');
+    const first3Match = templateWords === excelWords;
+
+    // Match if any condition is met
+    const isMatch = similarity >= 0.6 || containsCheck || first3Match;
+
+    return {
+        isMatch,
+        similarity,
+        matchedTokens: intersection,
+        method: similarity >= 0.6 ? 'jaccard' : (containsCheck ? 'substring' : (first3Match ? 'first3words' : 'none'))
+    };
+}
+
+/**
  * Replace table cell value by finding row with matching label
  * Finds table row where first cell contains the label, then replaces content in value cell
  * @param {string} xml - Slide XML content
@@ -734,14 +781,15 @@ function replaceEligibilityAndLastEntryAgeSeparately(xml, eligibility, lastEntry
         const fullRow = match[0];
 
         // Check if this row contains "EligibilityLast Entry Age" label
-        if (!rowContent.includes('EligibilityLast Entry Age') &&
-            !rowContent.includes('>Eligibility<') ||
-            !rowContent.includes('>Last Entry Age<')) {
-            // Check combined label
-            const labelLower = rowContent.toLowerCase();
-            if (!labelLower.includes('eligibility') || !labelLower.includes('entry age')) {
-                continue;
-            }
+        // Row must contain Eligibility AND Last Entry Age references
+        const hasEligibility = rowContent.includes('EligibilityLast Entry Age') ||
+                              rowContent.includes('>Eligibility<') ||
+                              rowContent.toLowerCase().includes('eligibility');
+        const hasLastEntryAge = rowContent.includes('>Last Entry Age<') ||
+                               rowContent.toLowerCase().includes('entry age');
+
+        if (!hasEligibility || !hasLastEntryAge) {
+            continue;
         }
 
         // Found the row - now find and update the value cell
@@ -800,25 +848,31 @@ function replaceEligibilityAndLastEntryAgeSeparately(xml, eligibility, lastEntry
         }
 
         // Then, find and replace the eligibility element (the main text, not starting with ":")
+        // Use position-based detection instead of length assumption
         if (eligibility) {
+            let eligibilityElement = null;
             for (let i = 0; i < textElements.length; i++) {
                 const elem = textElements[i];
+                const trimmed = elem.text.trim();
+
                 // Skip if it's just punctuation (colon prefix)
-                if (elem.text.trim() === ':' || elem.text.trim() === ': ') {
+                if (trimmed === ':' || trimmed === ': ' || trimmed === '') {
                     continue;
                 }
                 // Skip if it starts with ": age" (that's the Last Entry Age)
-                if (elem.text.trim().startsWith(': age') || elem.text.trim().startsWith(':age')) {
+                if (trimmed.startsWith(': age') || trimmed.startsWith(':age')) {
                     continue;
                 }
-                // This should be the eligibility text (the longest content element)
-                if (elem.text.length > 10) {
-                    const newEligibilityText = `<a:t>${escapeXml(eligibility)}</a:t>`;
-                    updatedCellContent = updatedCellContent.replace(elem.full, newEligibilityText);
-                    console.log(`    ✅ Replaced eligibility element: "${elem.text.substring(0, 40)}..." → "${eligibility.substring(0, 40)}..."`);
-                    success = true;
-                    break;
-                }
+                // First meaningful content element is eligibility (position-based, not length-based)
+                eligibilityElement = elem;
+                break;
+            }
+
+            if (eligibilityElement) {
+                const newEligibilityText = `<a:t>${escapeXml(eligibility)}</a:t>`;
+                updatedCellContent = updatedCellContent.replace(eligibilityElement.full, newEligibilityText);
+                console.log(`    ✅ Replaced eligibility element: "${eligibilityElement.text.substring(0, 40)}${eligibilityElement.text.length > 40 ? '...' : ''}" → "${eligibility.substring(0, 40)}${eligibility.length > 40 ? '...' : ''}"`);
+                success = true;
             }
         }
 
@@ -908,23 +962,16 @@ function updateCategoryPlanTable(xml, categoryPlans) {
             console.log(`    📋 Row ${rowNum}: Template category="${categoryTextLower.substring(0, 40)}..."`);
 
             for (const excelData of categoryPlans) {
-                const excelCategoryLower = excelData.category.toLowerCase();
+                // Use fuzzy matching for better accuracy with category variations
+                const matchResult = calculateCategoryMatchScore(categoryCell.text, excelData.category);
 
-                // Match by first significant words (ignoring minor differences)
-                // Extract first 3 words for matching
-                const templateWords = categoryTextLower.split(/\s+/).slice(0, 3).join(' ');
-                const excelWords = excelCategoryLower.split(/\s+/).slice(0, 3).join(' ');
-
-                const isMatch = templateWords === excelWords ||
-                    categoryTextLower.startsWith(excelCategoryLower.substring(0, 15)) ||
-                    excelCategoryLower.startsWith(categoryTextLower.substring(0, 15));
-
-                if (isMatch) {
+                if (matchResult.isMatch) {
+                    console.log(`       Match method: ${matchResult.method}, similarity: ${Math.round(matchResult.similarity * 100)}%`);
                     // Found a match - update the plan cell
                     const oldPlanText = planCell.text;
                     const newPlan = excelData.plan;
 
-                    console.log(`       ✓ Matched with Excel: "${excelCategoryLower.substring(0, 40)}..."`);
+                    console.log(`       ✓ Matched with Excel: "${excelData.category.substring(0, 40)}${excelData.category.length > 40 ? '...' : ''}"`);
                     console.log(`       Plan: "${oldPlanText}" → "${newPlan}"`);
 
                     // Always update (even if same) to ensure correct value
@@ -1226,6 +1273,42 @@ function processPPTX(pptxBuffer, placementData) {
     const detection = slideDetector.detectSlidePositions(zip);
     const slideMap = detection.slideMap;
 
+    // Validate detection results before proceeding
+    const dataKeyToSlideType = {
+        'periodOfInsurance': 'PERIOD_OF_INSURANCE',
+        'slide8Data': 'GTL_OVERVIEW',
+        'slide9Data': 'GDD_OVERVIEW',
+        'slide10Data': 'GPA_OVERVIEW',
+        'slide12Data': 'GHS_OVERVIEW',
+        'slide15Data': 'GHS_SOB_1',
+        'slide16Data': 'GHS_SOB_2',
+        'slide17Data': 'GHS_NOTES',
+        'slide18Data': 'GHS_ROOM_BOARD',
+        'slide19Data': 'GMM_OVERVIEW',
+        'slide20Data': 'GMM_SOB',
+        'slide24Data': 'GP_OVERVIEW',
+        'slide25Data': 'GP_SOB',
+        'slide26Data': 'SP_OVERVIEW',
+        'slide27Data': 'SP_SOB',
+        'slide30Data': 'DENTAL_OVERVIEW',
+        'slide31Data': 'DENTAL_SOB_1',
+        'slide32Data': 'DENTAL_SOB_2'
+    };
+
+    const requiredSlideTypes = Object.keys(placementData)
+        .filter(key => placementData[key] && dataKeyToSlideType[key])
+        .map(key => dataKeyToSlideType[key]);
+
+    const validation = slideDetector.validateDetection(detection.detectionResults, requiredSlideTypes);
+
+    if (!validation.valid) {
+        console.error(`⚠️ DETECTION VALIDATION FAILED: ${validation.message}`);
+    }
+
+    if (validation.lowConfidence.length > 0) {
+        console.warn(`⚠️ Low confidence detection for: ${validation.lowConfidence.map(l => l.slideType).join(', ')}`);
+    }
+
     const results = {
         success: true,
         totalSlides: info.totalSlides,
@@ -1233,9 +1316,20 @@ function processPPTX(pptxBuffer, placementData) {
         errors: [],
         slideDetection: {
             results: detection.detectionResults,
-            warnings: detection.warnings
+            warnings: detection.warnings,
+            validation: validation
         }
     };
+
+    // Add validation errors to results if detection failed
+    if (!validation.valid || validation.lowConfidence.length > 0) {
+        results.errors.push({
+            field: 'SlideDetection',
+            error: validation.message,
+            missingSlides: validation.missing,
+            lowConfidenceSlides: validation.lowConfidence
+        });
+    }
 
     // Phase 1: Update Period of Insurance
     if (placementData.periodOfInsurance) {

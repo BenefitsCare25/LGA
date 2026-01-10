@@ -101,6 +101,7 @@ function extractAllSlideData(zip) {
 
 /**
  * Check if text matches a pattern (case-insensitive, word boundary aware)
+ * Handles special characters like & properly
  * @param {string} text - Text to search in
  * @param {string} pattern - Pattern to match
  * @returns {boolean} True if pattern matches
@@ -109,11 +110,38 @@ function matchPattern(text, pattern) {
     const textLower = text.toLowerCase();
     const patternLower = pattern.toLowerCase();
 
-    // Check for exact phrase match (word boundaries)
-    const escapedPattern = patternLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`\\b${escapedPattern}\\b`, 'i');
+    // Escape special regex characters and handle & specially
+    let escapedPattern = patternLower
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        .replace(/&/g, '(?:&|&amp;|and)'); // Match &, &amp;, or "and"
 
-    return regex.test(text);
+    // Use custom word boundary that handles special chars
+    // Match if preceded by start/whitespace/> and followed by end/whitespace/</punctuation
+    const regex = new RegExp(`(?:^|\\s|>)${escapedPattern}(?:$|\\s|<|[,;:.!?])`, 'i');
+
+    return regex.test(textLower);
+}
+
+/**
+ * Check if text matches a signal with word-boundary awareness
+ * Used for secondary and unique signal matching
+ * @param {string} text - Text to search in
+ * @param {string} signal - Signal to match
+ * @returns {boolean} True if signal matches with word boundaries
+ */
+function matchSignalWithBoundary(text, signal) {
+    const signalLower = signal.toLowerCase();
+    const textLower = text.toLowerCase();
+
+    // Escape special regex characters
+    const escaped = signalLower
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        .replace(/&/g, '(?:&|&amp;|and)');
+
+    // Match with word boundaries (handles XML and prose)
+    const regex = new RegExp(`(?:^|\\s|>|"|')${escaped}(?:$|\\s|<|"|'|[,;:.!?])`, 'i');
+
+    return regex.test(textLower);
 }
 
 /**
@@ -144,9 +172,10 @@ function scoreSlideMatch(slideData, signature) {
     }
 
     // Secondary signals (30 points max, proportional to matches)
+    // Use word-boundary matching to prevent false positives like "Panel" matching "Non-Panel"
     const secondarySignals = signature.secondarySignals || [];
     for (const signal of secondarySignals) {
-        if (slideData.allTextLower.includes(signal.toLowerCase())) {
+        if (matchSignalWithBoundary(slideData.allText, signal)) {
             details.secondaryMatches.push(signal);
         }
     }
@@ -156,9 +185,10 @@ function scoreSlideMatch(slideData, signature) {
     }
 
     // Unique signals bonus (20 points max - helps differentiate similar slides)
+    // Use word-boundary matching for precision
     const uniqueSignals = signature.uniqueSignals || [];
     for (const signal of uniqueSignals) {
-        if (slideData.allTextLower.includes(signal.toLowerCase())) {
+        if (matchSignalWithBoundary(slideData.allText, signal)) {
             details.uniqueMatches.push(signal);
         }
     }
@@ -172,7 +202,7 @@ function scoreSlideMatch(slideData, signature) {
         }
     }
 
-    // Exclude patterns (disqualify if matched)
+    // Exclude patterns (graduated penalty based on matches and context)
     const excludePatterns = signature.excludePatterns || [];
     for (const pattern of excludePatterns) {
         if (matchPattern(slideData.allText, pattern)) {
@@ -180,7 +210,13 @@ function scoreSlideMatch(slideData, signature) {
         }
     }
     if (details.excludeMatches.length > 0) {
-        score = Math.max(0, score - 40); // Heavy penalty for exclude matches
+        // Graduated penalty: first match = -25, each additional = -10
+        const basePenalty = 25;
+        const additionalPenalty = (details.excludeMatches.length - 1) * 10;
+        // If we have strong unique signal matches, reduce penalty
+        const uniqueBonus = details.uniqueMatches.length > 0 ? 10 : 0;
+        const finalPenalty = Math.max(15, basePenalty + additionalPenalty - uniqueBonus);
+        score = Math.max(0, score - finalPenalty);
     }
 
     const confidence = score / maxScore;
@@ -220,6 +256,7 @@ function detectSlidePositions(zip) {
 
     // Second pass: Find best match for each signature, respecting groups
     const assignedSlides = new Set();
+    const usedFallbacks = new Map(); // Track fallback assignments: slideNum -> slideType
     const groupAssignments = {};
 
     // Process signatures by group to maintain sequence order
@@ -284,8 +321,22 @@ function detectSlidePositions(zip) {
                 });
             }
 
-            // Mark slide as assigned (unless using fallback for an already-assigned slide)
-            if (!bestMatch.usedFallback) {
+            // Mark slide as assigned and track fallback collisions
+            if (bestMatch.usedFallback) {
+                // Check for fallback collision
+                if (assignedSlides.has(bestMatch.slideNum) || usedFallbacks.has(bestMatch.slideNum)) {
+                    const conflictWith = usedFallbacks.get(bestMatch.slideNum);
+                    warnings.push({
+                        slideType,
+                        displayName: signature.displayName,
+                        message: `CRITICAL: Fallback collision - Slide ${bestMatch.slideNum} already assigned to ${conflictWith || 'a detected slide'}. Data may be overwritten.`,
+                        confidence: bestMatch.confidence,
+                        collisionType: 'fallback'
+                    });
+                    console.warn(`    ⚠️ FALLBACK COLLISION: ${slideType} trying to use Slide ${bestMatch.slideNum} (already used by ${conflictWith || 'detected slide'})`);
+                }
+                usedFallbacks.set(bestMatch.slideNum, slideType);
+            } else {
                 assignedSlides.add(bestMatch.slideNum);
             }
 

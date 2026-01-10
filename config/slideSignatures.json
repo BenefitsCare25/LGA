@@ -5,7 +5,9 @@
     "PERIOD_OF_INSURANCE": {
       "displayName": "Period of Insurance",
       "primaryPatterns": ["Period of Insurance"],
-      "secondarySignals": ["to"],
+      "secondarySignals": ["effective", "policy period", "coverage", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+      "uniqueSignals": ["Period of Insurance"],
+      "excludePatterns": ["Schedule of Benefits", "Overview of Coverage", "Types of Benefits"],
       "fallbackPosition": 1,
       "dataKey": "periodOfInsurance",
       "group": "GENERAL"
