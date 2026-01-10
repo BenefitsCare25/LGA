@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "description": "Slide signature patterns for dynamic slide detection in PPTX processing",
   "signatures": {
     "PERIOD_OF_INSURANCE": {
@@ -12,36 +12,40 @@
     },
     "GTL_OVERVIEW": {
       "displayName": "Group Term Life Overview",
-      "primaryPatterns": ["Group Term Life", "GTL"],
+      "primaryPatterns": ["Group Term Life"],
       "secondarySignals": ["Eligibility", "Last Entry Age", "Basis of Cover", "Non-evidence Limit"],
-      "excludePatterns": ["Schedule of Benefits"],
+      "uniqueSignals": ["Types of Benefits"],
+      "excludePatterns": ["Schedule of Benefits", "Overview of Coverage", "Insurance Broker Overview"],
       "fallbackPosition": 8,
       "dataKey": "slide8Data",
       "group": "GTL"
     },
     "GDD_OVERVIEW": {
       "displayName": "Group Dread Disease Overview",
-      "primaryPatterns": ["Group Dread Disease", "GDD"],
+      "primaryPatterns": ["Group Dread Disease"],
       "secondarySignals": ["Eligibility", "Last Entry Age", "Basis of Cover", "Non-evidence Limit"],
-      "excludePatterns": ["Schedule of Benefits"],
+      "uniqueSignals": ["Types of Benefits"],
+      "excludePatterns": ["Schedule of Benefits", "Overview of Coverage", "Insurance Broker Overview"],
       "fallbackPosition": 9,
       "dataKey": "slide9Data",
       "group": "GDD"
     },
     "GPA_OVERVIEW": {
       "displayName": "Group Personal Accident Overview",
-      "primaryPatterns": ["Group Personal Accident", "GPA"],
+      "primaryPatterns": ["Group Personal Accident"],
       "secondarySignals": ["Eligibility", "Last Entry Age", "Basis of Cover"],
-      "excludePatterns": ["Schedule of Benefits"],
+      "uniqueSignals": ["Types of Benefits"],
+      "excludePatterns": ["Schedule of Benefits", "Overview of Coverage", "Insurance Broker Overview"],
       "fallbackPosition": 10,
       "dataKey": "slide10Data",
       "group": "GPA"
     },
     "GHS_OVERVIEW": {
       "displayName": "Group Hospital & Surgical Overview",
-      "primaryPatterns": ["Group Hospital & Surgical", "Group Hospital and Surgical", "GHS"],
+      "primaryPatterns": ["Group Hospital & Surgical", "Group Hospital and Surgical"],
       "secondarySignals": ["Eligibility", "Last Entry Age", "Category", "Plan"],
-      "excludePatterns": ["Schedule of Benefits"],
+      "uniqueSignals": ["Types of Benefits"],
+      "excludePatterns": ["Schedule of Benefits", "Notes", "Hospital Cash", "Exclusions", "Overview of Coverage", "Insurance Broker Overview"],
       "fallbackPosition": 12,
       "dataKey": "slide12Data",
       "group": "GHS"
@@ -49,8 +53,9 @@
     "GHS_SOB_1": {
       "displayName": "GHS Schedule of Benefits (Part 1)",
       "primaryPatterns": ["Schedule of Benefits"],
-      "secondarySignals": ["Daily Room & Board", "ICU", "In-patient", "Out-patient"],
-      "uniqueSignals": ["Daily Room & Board"],
+      "secondarySignals": ["Daily Room & Board", "ICU", "In-patient", "Out-patient", "Group Hospital"],
+      "uniqueSignals": ["Daily Room & Board", "MAXIMUM PER DISABILITY"],
+      "excludePatterns": ["Outpatient Treatment", "Cont'd", "Major Medical", "Dental", "Specialist", "General Practitioner"],
       "fallbackPosition": 15,
       "dataKey": "slide15Data",
       "group": "GHS",
@@ -59,8 +64,9 @@
     "GHS_SOB_2": {
       "displayName": "GHS Schedule of Benefits (Part 2)",
       "primaryPatterns": ["Schedule of Benefits"],
-      "secondarySignals": ["Outpatient Treatment", "Miscarriage", "Death", "Ambulance", "GST"],
-      "uniqueSignals": ["Psychiatric", "Overseas Treatment"],
+      "secondarySignals": ["Outpatient Treatment", "Miscarriage", "Death", "Ambulance", "GST", "Cont'd"],
+      "uniqueSignals": ["Psychiatric", "Overseas Treatment", "Cont'd"],
+      "excludePatterns": ["Daily Room & Board", "Major Medical", "Dental", "Specialist", "General Practitioner"],
       "fallbackPosition": 16,
       "dataKey": "slide16Data",
       "group": "GHS",
@@ -69,25 +75,30 @@
     },
     "GHS_NOTES": {
       "displayName": "GHS Notes / Qualification Period",
-      "primaryPatterns": ["Notes", "Qualification Period"],
-      "secondarySignals": ["days", "disabilities"],
+      "primaryPatterns": ["Notes"],
+      "secondarySignals": ["Per disability", "same Illness", "Qualification Period", "subsequent hospitalization"],
+      "uniqueSignals": ["subsequent hospitalization", "same Illness"],
+      "excludePatterns": ["Types of Benefits", "Schedule of Benefits"],
       "fallbackPosition": 17,
       "dataKey": "slide17Data",
       "group": "GHS"
     },
     "GHS_ROOM_BOARD": {
       "displayName": "GHS Room & Board Entitlements",
-      "primaryPatterns": ["Room & Board", "Hospital Cash", "GHS Entitlement"],
-      "secondarySignals": ["Ward Class", "B1", "B2", "C", "Bedded"],
+      "primaryPatterns": ["Hospital Cash Allowance", "Hospital Cash"],
+      "secondarySignals": ["Ward Class", "B1", "B2", "Bedded", "APPLICABLE"],
+      "uniqueSignals": ["Hospital Cash Allowance", "APPLICABLE FOR"],
+      "excludePatterns": ["Types of Benefits", "Schedule of Benefits"],
       "fallbackPosition": 18,
       "dataKey": "slide18Data",
       "group": "GHS"
     },
     "GMM_OVERVIEW": {
       "displayName": "Group Major Medical Overview",
-      "primaryPatterns": ["Group Major Medical", "GMM"],
-      "secondarySignals": ["Eligibility", "Last Entry Age"],
-      "excludePatterns": ["Schedule of Benefits"],
+      "primaryPatterns": ["Group Major Medical"],
+      "secondarySignals": ["Eligibility", "Last Entry Age", "Reimbursement"],
+      "uniqueSignals": ["Types of Benefits"],
+      "excludePatterns": ["Schedule of Benefits", "Exclusions", "Overview of Coverage", "Insurance Broker Overview"],
       "fallbackPosition": 19,
       "dataKey": "slide19Data",
       "group": "GMM"
@@ -95,17 +106,19 @@
     "GMM_SOB": {
       "displayName": "GMM Schedule of Benefits",
       "primaryPatterns": ["Schedule of Benefits"],
-      "secondarySignals": ["Deductible", "Co-insurance", "Daily Room & Board", "Inpatient"],
-      "uniqueSignals": ["Deductible", "Per disability"],
+      "secondarySignals": ["Deductible", "Co-insurance", "Daily Room & Board", "Inpatient", "Major Medical"],
+      "uniqueSignals": ["Deductible", "Per disability", "As per GHS"],
+      "excludePatterns": ["Group Hospital & Surgical", "Dental", "Specialist", "General Practitioner"],
       "fallbackPosition": 20,
       "dataKey": "slide20Data",
       "group": "GMM"
     },
     "GP_OVERVIEW": {
       "displayName": "General Practitioner Overview",
-      "primaryPatterns": ["General Practitioner", "GP"],
+      "primaryPatterns": ["Outpatient General Practitioner", "General Practitioner"],
       "secondarySignals": ["Eligibility", "Last Entry Age", "Category", "Plan"],
-      "excludePatterns": ["Schedule of Benefits"],
+      "uniqueSignals": ["Types of Benefits"],
+      "excludePatterns": ["Schedule of Benefits", "Overview of Coverage", "Insurance Broker Overview"],
       "fallbackPosition": 24,
       "dataKey": "slide24Data",
       "group": "GP"
@@ -115,15 +128,17 @@
       "primaryPatterns": ["Schedule of Benefits"],
       "secondarySignals": ["Panel", "Polyclinic", "Non Panel", "TCM", "A&E"],
       "uniqueSignals": ["Polyclinic", "Panel TCM"],
+      "excludePatterns": ["Major Medical", "Dental", "Group Hospital", "Specialist"],
       "fallbackPosition": 25,
       "dataKey": "slide25Data",
       "group": "GP"
     },
     "SP_OVERVIEW": {
       "displayName": "Specialist Overview",
-      "primaryPatterns": ["Specialist"],
-      "secondarySignals": ["Eligibility", "Last Entry Age", "Category", "Plan"],
-      "excludePatterns": ["Panel Specialist", "Non-Panel Specialist", "Schedule of Benefits"],
+      "primaryPatterns": ["Outpatient Specialist"],
+      "secondarySignals": ["Eligibility", "Last Entry Age", "Category", "Plan", "referred by GP"],
+      "uniqueSignals": ["Types of Benefits"],
+      "excludePatterns": ["Panel Specialist", "Non-Panel Specialist", "Schedule of Benefits", "Overview of Coverage", "Insurance Broker"],
       "fallbackPosition": 26,
       "dataKey": "slide26Data",
       "group": "SP"
@@ -133,15 +148,17 @@
       "primaryPatterns": ["Schedule of Benefits"],
       "secondarySignals": ["Panel Specialist", "Non-Panel Specialist", "Diagnostic X-ray", "TCM"],
       "uniqueSignals": ["Panel Specialist", "Diagnostic X-ray"],
+      "excludePatterns": ["Major Medical", "Dental", "Group Hospital", "General Practitioner", "Polyclinic"],
       "fallbackPosition": 27,
       "dataKey": "slide27Data",
       "group": "SP"
     },
     "DENTAL_OVERVIEW": {
       "displayName": "Group Dental Overview",
-      "primaryPatterns": ["Group Dental", "Dental"],
-      "secondarySignals": ["Eligibility", "Last Entry Age"],
-      "excludePatterns": ["Schedule of Benefits"],
+      "primaryPatterns": ["Group Dental"],
+      "secondarySignals": ["Eligibility", "Last Entry Age", "Outpatient Dental"],
+      "uniqueSignals": ["Types of Benefits"],
+      "excludePatterns": ["Schedule of Benefits", "Overview of Coverage", "Insurance Broker Overview"],
       "fallbackPosition": 30,
       "dataKey": "slide30Data",
       "group": "DENTAL"
@@ -149,8 +166,9 @@
     "DENTAL_SOB_1": {
       "displayName": "Dental Schedule of Benefits (Part 1)",
       "primaryPatterns": ["Schedule of Benefits"],
-      "secondarySignals": ["Overall Limit", "Scaling", "Polishing", "Extraction", "Filling"],
-      "uniqueSignals": ["Overall Limit", "Scaling"],
+      "secondarySignals": ["Overall Limit", "Scaling", "Polishing", "Extraction", "Filling", "Dental"],
+      "uniqueSignals": ["Overall Limit", "Scaling", "Polishing"],
+      "excludePatterns": ["Major Medical", "Group Hospital", "Specialist", "General Practitioner", "Crown", "Denture"],
       "fallbackPosition": 31,
       "dataKey": "slide31Data",
       "group": "DENTAL",
@@ -159,8 +177,9 @@
     "DENTAL_SOB_2": {
       "displayName": "Dental Schedule of Benefits (Part 2)",
       "primaryPatterns": ["Schedule of Benefits"],
-      "secondarySignals": ["Crown", "Denture", "GST Extension"],
+      "secondarySignals": ["Crown", "Denture", "GST Extension", "Dental"],
       "uniqueSignals": ["Crown", "Denture"],
+      "excludePatterns": ["Major Medical", "Group Hospital", "Specialist", "General Practitioner", "Scaling", "Polishing"],
       "fallbackPosition": 32,
       "dataKey": "slide32Data",
       "group": "DENTAL",
