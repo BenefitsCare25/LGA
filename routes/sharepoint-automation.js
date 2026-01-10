@@ -18,7 +18,6 @@ const CONFIG = {
     TEMPLATE_FOLDER: '/CBRE-Document-Automation/Templates',
     GENERATED_FOLDER: '/CBRE-Document-Automation/Generated',
     ARCHIVE_FOLDER: '/CBRE-Document-Automation/Archive',
-    TEMPLATE_FILENAME: 'CBRE Staff Communication 2025.pptx',
     WEBHOOK_CLIENT_STATE: 'cbre-document-automation-secret'
 };
 
@@ -153,6 +152,37 @@ async function ensureFolderExists(graphClient, folderPath) {
 }
 
 /**
+ * Find template PPTX file in Templates folder
+ * Returns the most recently modified .pptx file
+ * @param {object} graphClient - Microsoft Graph client
+ * @returns {Promise<object|null>} Template file info or null if not found
+ */
+async function findTemplateFile(graphClient) {
+    const result = await graphClient
+        .api(`/me/drive/root:${CONFIG.TEMPLATE_FOLDER}:/children`)
+        .select('id,name,size,lastModifiedDateTime,file')
+        .orderby('lastModifiedDateTime desc')
+        .get();
+
+    // Filter for .pptx files only
+    const pptxFiles = result.value.filter(f =>
+        f.file && f.name.toLowerCase().endsWith('.pptx')
+    );
+
+    if (pptxFiles.length === 0) {
+        return null;
+    }
+
+    // Return the most recently modified template
+    return {
+        id: pptxFiles[0].id,
+        name: pptxFiles[0].name,
+        size: pptxFiles[0].size,
+        lastModified: pptxFiles[0].lastModifiedDateTime
+    };
+}
+
+/**
  * Get status of automation system
  */
 router.get('/status', requireDelegatedAuth, async (req, res) => {
@@ -177,20 +207,18 @@ router.get('/status', requireDelegatedAuth, async (req, res) => {
             }
         }
 
-        // Check for template file
+        // Check for template file (dynamic lookup)
         let templateStatus = { exists: false };
         try {
-            const templatePath = `${CONFIG.TEMPLATE_FOLDER}/${CONFIG.TEMPLATE_FILENAME}`;
-            const result = await graphClient.api(`/me/drive/root:${templatePath}`).get();
-            templateStatus = {
-                exists: true,
-                id: result.id,
-                name: result.name,
-                size: result.size,
-                lastModified: result.lastModifiedDateTime
-            };
+            const template = await findTemplateFile(graphClient);
+            if (template) {
+                templateStatus = {
+                    exists: true,
+                    ...template
+                };
+            }
         } catch (error) {
-            templateStatus = { exists: false };
+            templateStatus = { exists: false, error: error.message };
         }
 
         res.json({
@@ -334,20 +362,29 @@ router.post('/process-slip', requireDelegatedAuth, async (req, res) => {
             });
         }
 
-        // Download template PPTX
-        const templatePath = `${CONFIG.TEMPLATE_FOLDER}/${CONFIG.TEMPLATE_FILENAME}`;
+        // Find and download template PPTX (dynamic lookup)
         let templateBuffer;
+        let templateFilename;
 
         try {
+            const template = await findTemplateFile(graphClient);
+            if (!template) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'No template file found in Templates folder. Please upload a .pptx template.'
+                });
+            }
+            templateFilename = template.name;
+
             const templateResponse = await graphClient
-                .api(`/me/drive/root:${templatePath}:/content`)
+                .api(`/me/drive/items/${template.id}/content`)
                 .get();
             templateBuffer = await ensureBuffer(templateResponse);
-            console.log(`📄 Downloaded template PPTX: ${templateBuffer.length} bytes`);
+            console.log(`📄 Downloaded template: ${templateFilename} (${templateBuffer.length} bytes)`);
         } catch (error) {
             return res.status(400).json({
                 success: false,
-                error: `Template file not found: ${CONFIG.TEMPLATE_FILENAME}`
+                error: `Failed to download template: ${error.message}`
             });
         }
 
@@ -362,7 +399,7 @@ router.post('/process-slip', requireDelegatedAuth, async (req, res) => {
         }
 
         // Generate output filename
-        const outputFilename = generateTimestampedFilename(CONFIG.TEMPLATE_FILENAME);
+        const outputFilename = generateTimestampedFilename(templateFilename);
 
         // Upload generated PPTX
         const uploadPath = `${CONFIG.GENERATED_FOLDER}/${outputFilename}`;
@@ -462,20 +499,29 @@ router.post('/manual-trigger', requireDelegatedAuth, async (req, res) => {
             });
         }
 
-        // Download template PPTX
-        const templatePath = `${CONFIG.TEMPLATE_FOLDER}/${CONFIG.TEMPLATE_FILENAME}`;
+        // Find and download template PPTX (dynamic lookup)
         let templateBuffer;
+        let templateFilename;
 
         try {
+            const template = await findTemplateFile(graphClient);
+            if (!template) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'No template file found in Templates folder. Please upload a .pptx template.'
+                });
+            }
+            templateFilename = template.name;
+
             const templateResponse = await graphClient
-                .api(`/me/drive/root:${templatePath}:/content`)
+                .api(`/me/drive/items/${template.id}/content`)
                 .get();
             templateBuffer = await ensureBuffer(templateResponse);
-            console.log(`📄 Downloaded template PPTX: ${templateBuffer.length} bytes`);
+            console.log(`📄 Downloaded template: ${templateFilename} (${templateBuffer.length} bytes)`);
         } catch (error) {
             return res.status(400).json({
                 success: false,
-                error: `Template file not found: ${CONFIG.TEMPLATE_FILENAME}. Please upload the template first.`
+                error: `Failed to download template: ${error.message}`
             });
         }
 
@@ -483,7 +529,7 @@ router.post('/manual-trigger', requireDelegatedAuth, async (req, res) => {
         const pptxResult = pptxProcessor.processPPTX(templateBuffer, placementData);
 
         // Upload result
-        const outputFilename = generateTimestampedFilename(CONFIG.TEMPLATE_FILENAME);
+        const outputFilename = generateTimestampedFilename(templateFilename);
         const uploadPath = `${CONFIG.GENERATED_FOLDER}/${outputFilename}`;
         const uploadResult = await graphClient
             .api(`/me/drive/root:${uploadPath}:/content`)
@@ -548,8 +594,9 @@ router.post('/upload-template', requireDelegatedAuth, upload.single('template'),
         // Ensure template folder exists
         await ensureFolderExists(graphClient, CONFIG.TEMPLATE_FOLDER);
 
-        // Upload template
-        const uploadPath = `${CONFIG.TEMPLATE_FOLDER}/${CONFIG.TEMPLATE_FILENAME}`;
+        // Upload template with original filename
+        const templateFilename = req.file.originalname;
+        const uploadPath = `${CONFIG.TEMPLATE_FOLDER}/${templateFilename}`;
         const result = await graphClient
             .api(`/me/drive/root:${uploadPath}:/content`)
             .put(req.file.buffer);
@@ -561,7 +608,7 @@ router.post('/upload-template', requireDelegatedAuth, upload.single('template'),
             success: true,
             message: 'Template uploaded successfully',
             template: {
-                filename: CONFIG.TEMPLATE_FILENAME,
+                filename: templateFilename,
                 fileId: result.id,
                 size: req.file.size,
                 totalSlides: pptxInfo.totalSlides
@@ -821,12 +868,18 @@ router.get('/inspect-slide8-tables', async (req, res) => {
             });
         }
 
-        // Download template from SharePoint
-        const templatePath = `${CONFIG.TEMPLATE_FOLDER}/${CONFIG.TEMPLATE_FILENAME}`;
-        console.log('Downloading template for inspection:', templatePath);
+        // Find and download template from SharePoint (dynamic lookup)
+        const template = await findTemplateFile(graphClient);
+        if (!template) {
+            return res.status(400).json({
+                success: false,
+                error: 'No template file found in Templates folder.'
+            });
+        }
+        console.log('Downloading template for inspection:', template.name);
 
         const response = await graphClient
-            .api(`/me/drive/root:${templatePath}:/content`)
+            .api(`/me/drive/items/${template.id}/content`)
             .header('Authorization', `Bearer ${accessToken}`)
             .responseType('arraybuffer')
             .get();
@@ -839,7 +892,7 @@ router.get('/inspect-slide8-tables', async (req, res) => {
 
         res.json({
             success: true,
-            templatePath: templatePath,
+            templateName: template.name,
             slide8Tables: tableInfo
         });
 
