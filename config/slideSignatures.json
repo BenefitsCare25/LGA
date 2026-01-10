@@ -14,6 +14,7 @@
       "displayName": "Group Term Life Overview",
       "primaryPatterns": ["Group Term Life", "GTL"],
       "secondarySignals": ["Eligibility", "Last Entry Age", "Basis of Cover", "Non-evidence Limit"],
+      "excludePatterns": ["Schedule of Benefits"],
       "fallbackPosition": 8,
       "dataKey": "slide8Data",
       "group": "GTL"
@@ -22,6 +23,7 @@
       "displayName": "Group Dread Disease Overview",
       "primaryPatterns": ["Group Dread Disease", "GDD"],
       "secondarySignals": ["Eligibility", "Last Entry Age", "Basis of Cover", "Non-evidence Limit"],
+      "excludePatterns": ["Schedule of Benefits"],
       "fallbackPosition": 9,
       "dataKey": "slide9Data",
       "group": "GDD"
@@ -30,6 +32,7 @@
       "displayName": "Group Personal Accident Overview",
       "primaryPatterns": ["Group Personal Accident", "GPA"],
       "secondarySignals": ["Eligibility", "Last Entry Age", "Basis of Cover"],
+      "excludePatterns": ["Schedule of Benefits"],
       "fallbackPosition": 10,
       "dataKey": "slide10Data",
       "group": "GPA"
@@ -38,6 +41,7 @@
       "displayName": "Group Hospital & Surgical Overview",
       "primaryPatterns": ["Group Hospital & Surgical", "Group Hospital and Surgical", "GHS"],
       "secondarySignals": ["Eligibility", "Last Entry Age", "Category", "Plan"],
+      "excludePatterns": ["Schedule of Benefits"],
       "fallbackPosition": 12,
       "dataKey": "slide12Data",
       "group": "GHS"
@@ -83,6 +87,7 @@
       "displayName": "Group Major Medical Overview",
       "primaryPatterns": ["Group Major Medical", "GMM"],
       "secondarySignals": ["Eligibility", "Last Entry Age"],
+      "excludePatterns": ["Schedule of Benefits"],
       "fallbackPosition": 19,
       "dataKey": "slide19Data",
       "group": "GMM"
@@ -100,6 +105,7 @@
       "displayName": "General Practitioner Overview",
       "primaryPatterns": ["General Practitioner", "GP"],
       "secondarySignals": ["Eligibility", "Last Entry Age", "Category", "Plan"],
+      "excludePatterns": ["Schedule of Benefits"],
       "fallbackPosition": 24,
       "dataKey": "slide24Data",
       "group": "GP"
@@ -117,7 +123,7 @@
       "displayName": "Specialist Overview",
       "primaryPatterns": ["Specialist"],
       "secondarySignals": ["Eligibility", "Last Entry Age", "Category", "Plan"],
-      "excludePatterns": ["Panel Specialist", "Non-Panel Specialist"],
+      "excludePatterns": ["Panel Specialist", "Non-Panel Specialist", "Schedule of Benefits"],
       "fallbackPosition": 26,
       "dataKey": "slide26Data",
       "group": "SP"
@@ -135,6 +141,7 @@
       "displayName": "Group Dental Overview",
       "primaryPatterns": ["Group Dental", "Dental"],
       "secondarySignals": ["Eligibility", "Last Entry Age"],
+      "excludePatterns": ["Schedule of Benefits"],
       "fallbackPosition": 30,
       "dataKey": "slide30Data",
       "group": "DENTAL"
