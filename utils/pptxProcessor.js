@@ -5,6 +5,7 @@
  */
 
 const PizZip = require('pizzip');
+const slideDetector = require('./slideDetector');
 
 /**
  * Read PPTX buffer and extract ZIP structure
@@ -112,17 +113,17 @@ function findAndReplaceText(xml, searchText, replaceText) {
  * @param {Object} dateRange - Object with formatted date string
  * @returns {boolean} True if update was successful
  */
-function updateSlide1PeriodOfInsurance(zip, dateRange) {
-    console.log('📝 Updating Slide 1 Period of Insurance...');
+function updateSlide1PeriodOfInsurance(zip, dateRange, slideNumber = 1) {
+    console.log(`📝 Updating Slide ${slideNumber} Period of Insurance...`);
 
     try {
-        let slideXml = getSlideXML(zip, 1);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // Pattern 1: Date range in same element with "Period of Insurance:"
         const combinedPattern = /(Period of Insurance:\s*)(\d{1,2}\s+\w+\s+\d{4}\s+to\s+\d{1,2}\s+\w+\s+\d{4})/gi;
         if (combinedPattern.test(slideXml)) {
             slideXml = slideXml.replace(combinedPattern, `$1${dateRange.formatted}`);
-            setSlideXML(zip, 1, slideXml);
+            setSlideXML(zip, slideNumber, slideXml);
             console.log(`✅ Updated Period of Insurance to: ${dateRange.formatted}`);
             return true;
         }
@@ -132,7 +133,7 @@ function updateSlide1PeriodOfInsurance(zip, dateRange) {
         const separateDatePattern = /<a:t>(\d{1,2}\s+\w+\s+\d{4}\s+to\s+\d{1,2}\s+\w+\s+\d{4})<\/a:t>/gi;
         if (separateDatePattern.test(slideXml)) {
             slideXml = slideXml.replace(separateDatePattern, `<a:t>${dateRange.formatted}</a:t>`);
-            setSlideXML(zip, 1, slideXml);
+            setSlideXML(zip, slideNumber, slideXml);
             console.log(`✅ Updated Period of Insurance to: ${dateRange.formatted}`);
             return true;
         }
@@ -141,16 +142,16 @@ function updateSlide1PeriodOfInsurance(zip, dateRange) {
         const genericDatePattern = /(\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4})\s+to\s+(\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4})/gi;
         if (genericDatePattern.test(slideXml)) {
             slideXml = slideXml.replace(genericDatePattern, dateRange.formatted);
-            setSlideXML(zip, 1, slideXml);
+            setSlideXML(zip, slideNumber, slideXml);
             console.log(`✅ Updated Period of Insurance to: ${dateRange.formatted}`);
             return true;
         }
 
-        console.log('⚠️ Period of Insurance date pattern not found in Slide 1');
+        console.log(`⚠️ Period of Insurance date pattern not found in Slide ${slideNumber}`);
         return false;
 
     } catch (error) {
-        console.error('❌ Error updating Slide 1:', error.message);
+        console.error(`❌ Error updating Slide ${slideNumber}:`, error.message);
         return false;
     }
 }
@@ -450,8 +451,8 @@ function replaceBasisOfCoverCell(xml, basisOfCover) {
  * @param {Object} slide8Data - Data for slide 8 (eligibility, lastEntryAge, basisOfCover, nonEvidenceLimit)
  * @returns {Object} Results of the update operation
  */
-function updateSlide8GTLTable(zip, slide8Data) {
-    console.log('📝 Updating Slide 8 GTL Table...');
+function updateSlide8GTLTable(zip, slide8Data, slideNumber = 8) {
+    console.log(`📝 Updating Slide ${slideNumber} GTL Table...`);
 
     const results = {
         updated: [],
@@ -459,19 +460,19 @@ function updateSlide8GTLTable(zip, slide8Data) {
     };
 
     if (!slide8Data) {
-        console.log('⚠️ No slide 8 data provided');
+        console.log(`⚠️ No GTL data provided for slide ${slideNumber}`);
         return results;
     }
 
     // Debug: Log all incoming data
-    console.log('📋 Slide 8 Data received:');
+    console.log(`📋 Slide ${slideNumber} GTL Data received:`);
     console.log(`   - eligibility: "${slide8Data.eligibility?.substring(0, 60) || 'null'}..."`);
     console.log(`   - lastEntryAge: "${slide8Data.lastEntryAge || 'null'}"`);
     console.log(`   - basisOfCover: ${slide8Data.basisOfCover?.length || 0} items`);
     console.log(`   - nonEvidenceLimit: "${slide8Data.nonEvidenceLimit?.substring(0, 60) || 'null'}..."`);
 
     try {
-        let slideXml = getSlideXML(zip, 8);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // 1. Update Eligibility & Last Entry Age - Replace as separate text elements to avoid duplication
         if (slide8Data.eligibility || slide8Data.lastEntryAge) {
@@ -603,12 +604,12 @@ function updateSlide8GTLTable(zip, slide8Data) {
         }
 
         // Save updated XML
-        setSlideXML(zip, 8, slideXml);
-        console.log(`📝 Slide 8 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
+        setSlideXML(zip, slideNumber, slideXml);
+        console.log(`📝 Slide ${slideNumber} GTL update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
 
     } catch (error) {
-        console.error('❌ Error updating Slide 8:', error.message);
-        results.errors.push({ field: 'Slide 8', error: error.message });
+        console.error(`❌ Error updating Slide ${slideNumber} GTL:`, error.message);
+        results.errors.push({ field: `Slide ${slideNumber} GTL`, error: error.message });
     }
 
     return results;
@@ -621,8 +622,8 @@ function updateSlide8GTLTable(zip, slide8Data) {
  * @param {Object} slide9Data - Data for slide 9 (eligibility, lastEntryAge, basisOfCover, nonEvidenceLimit)
  * @returns {Object} Results of the update operation
  */
-function updateSlide9GDDTable(zip, slide9Data) {
-    console.log('📝 Updating Slide 9 GDD Table...');
+function updateSlide9GDDTable(zip, slide9Data, slideNumber = 9) {
+    console.log(`📝 Updating Slide ${slideNumber} GDD Table...`);
 
     const results = {
         updated: [],
@@ -642,7 +643,7 @@ function updateSlide9GDDTable(zip, slide9Data) {
     console.log(`   - nonEvidenceLimit: "${slide9Data.nonEvidenceLimit?.substring(0, 60) || 'null'}..."`);
 
     try {
-        let slideXml = getSlideXML(zip, 9);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // 1. Update Eligibility & Last Entry Age - Replace as separate text elements to avoid duplication
         if (slide9Data.eligibility || slide9Data.lastEntryAge) {
@@ -700,12 +701,12 @@ function updateSlide9GDDTable(zip, slide9Data) {
             }
         }
 
-        setSlideXML(zip, 9, slideXml);
-        console.log(`📝 Slide 9 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
+        setSlideXML(zip, slideNumber, slideXml);
+        console.log(`📝 Slide ${slideNumber} GDD update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
 
     } catch (error) {
-        console.error('❌ Error updating Slide 9:', error.message);
-        results.errors.push({ field: 'Slide 9', error: error.message });
+        console.error(`❌ Error updating Slide ${slideNumber} GDD:`, error.message);
+        results.errors.push({ field: `Slide ${slideNumber} GDD`, error: error.message });
     }
 
     return results;
@@ -965,7 +966,7 @@ function updateCategoryPlanTable(xml, categoryPlans) {
  * @param {Object} slide12Data - Data for slide 12 (eligibility, lastEntryAge, categoryPlans)
  * @returns {Object} Results of the update operation
  */
-function updateSlide12GHSTable(zip, slide12Data) {
+function updateSlide12GHSTable(zip, slide12Data, slideNumber = 12) {
     console.log('📝 Updating Slide 12 GHS Table...');
 
     const results = {
@@ -985,7 +986,7 @@ function updateSlide12GHSTable(zip, slide12Data) {
     console.log(`   - categoryPlans: ${slide12Data.categoryPlans?.length || 0} items`);
 
     try {
-        let slideXml = getSlideXML(zip, 12);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // 1. Update Eligibility & Last Entry Age - Replace separately to avoid duplication
         if (slide12Data.eligibility || slide12Data.lastEntryAge) {
@@ -1026,7 +1027,7 @@ function updateSlide12GHSTable(zip, slide12Data) {
             }
         }
 
-        setSlideXML(zip, 12, slideXml);
+        setSlideXML(zip, slideNumber, slideXml);
         console.log(`📝 Slide 12 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
 
     } catch (error) {
@@ -1045,7 +1046,7 @@ function updateSlide12GHSTable(zip, slide12Data) {
  * @param {Object} slide10Data - Data for slide 10 (eligibility, lastEntryAge, basisOfCover)
  * @returns {Object} Results of the update operation
  */
-function updateSlide10GPATable(zip, slide10Data) {
+function updateSlide10GPATable(zip, slide10Data, slideNumber = 10) {
     console.log('📝 Updating Slide 10 GPA Table...');
 
     const results = {
@@ -1065,7 +1066,7 @@ function updateSlide10GPATable(zip, slide10Data) {
     console.log(`   - basisOfCover: ${slide10Data.basisOfCover?.length || 0} items`);
 
     try {
-        let slideXml = getSlideXML(zip, 10);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // 1. Update Eligibility & Last Entry Age - Replace as separate text elements to avoid duplication
         if (slide10Data.eligibility || slide10Data.lastEntryAge) {
@@ -1109,7 +1110,7 @@ function updateSlide10GPATable(zip, slide10Data) {
 
         // Note: GPA does NOT have Non-evidence Limit (unlike GTL, GDD, GHS)
 
-        setSlideXML(zip, 10, slideXml);
+        setSlideXML(zip, slideNumber, slideXml);
         console.log(`📝 Slide 10 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
 
     } catch (error) {
@@ -1220,39 +1221,50 @@ function processPPTX(pptxBuffer, placementData) {
 
     console.log(`📋 PPTX has ${info.totalSlides} slides`);
 
+    // Detect slide positions by content
+    console.log('🔍 Detecting slide positions by content...');
+    const detection = slideDetector.detectSlidePositions(zip);
+    const slideMap = detection.slideMap;
+
     const results = {
         success: true,
         totalSlides: info.totalSlides,
         updatedSlides: [],
-        errors: []
+        errors: [],
+        slideDetection: {
+            results: detection.detectionResults,
+            warnings: detection.warnings
+        }
     };
 
-    // Phase 1: Update Slide 1 - Period of Insurance
+    // Phase 1: Update Period of Insurance
     if (placementData.periodOfInsurance) {
-        const slide1Updated = updateSlide1PeriodOfInsurance(zip, placementData.periodOfInsurance);
+        const slideNum = slideMap.PERIOD_OF_INSURANCE || 1;
+        const slide1Updated = updateSlide1PeriodOfInsurance(zip, placementData.periodOfInsurance, slideNum);
         if (slide1Updated) {
             results.updatedSlides.push({
-                slide: 1,
+                slide: slideNum,
                 field: 'Period of Insurance',
                 value: placementData.periodOfInsurance.formatted
             });
         } else {
             results.errors.push({
-                slide: 1,
+                slide: slideNum,
                 field: 'Period of Insurance',
                 error: 'Pattern not found in slide'
             });
         }
     }
 
-    // Phase 2: Update Slide 8 - GTL Table (Eligibility, Last Entry Age, Basis of Cover, Non-evidence Limit)
+    // Phase 2: Update GTL Table (Eligibility, Last Entry Age, Basis of Cover, Non-evidence Limit)
     if (placementData.slide8Data) {
-        console.log('📊 Processing Slide 8 GTL data...');
-        const slide8Results = updateSlide8GTLTable(zip, placementData.slide8Data);
+        const slideNum = slideMap.GTL_OVERVIEW || 8;
+        console.log(`📊 Processing Slide ${slideNum} GTL data...`);
+        const slide8Results = updateSlide8GTLTable(zip, placementData.slide8Data, slideNum);
 
         for (const update of slide8Results.updated) {
             results.updatedSlides.push({
-                slide: 8,
+                slide: slideNum,
                 field: update.field,
                 value: update.value
             });
@@ -1260,7 +1272,7 @@ function processPPTX(pptxBuffer, placementData) {
 
         for (const error of slide8Results.errors) {
             results.errors.push({
-                slide: 8,
+                slide: slideNum,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1268,14 +1280,15 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Phase 3: Update Slide 9 - GDD Table (Group Dread Disease)
+    // Phase 3: Update GDD Table (Group Dread Disease)
     if (placementData.slide9Data) {
-        console.log('📊 Processing Slide 9 GDD data...');
-        const slide9Results = updateSlide9GDDTable(zip, placementData.slide9Data);
+        const slideNum = slideMap.GDD_OVERVIEW || 9;
+        console.log(`📊 Processing Slide ${slideNum} GDD data...`);
+        const slide9Results = updateSlide9GDDTable(zip, placementData.slide9Data, slideNum);
 
         for (const update of slide9Results.updated) {
             results.updatedSlides.push({
-                slide: 9,
+                slide: slideNum,
                 field: update.field,
                 value: update.value
             });
@@ -1283,7 +1296,7 @@ function processPPTX(pptxBuffer, placementData) {
 
         for (const error of slide9Results.errors) {
             results.errors.push({
-                slide: 9,
+                slide: slideNum,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1291,14 +1304,15 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Phase 4: Update Slide 10 - GPA Table (Group Personal Accident)
+    // Phase 4: Update GPA Table (Group Personal Accident)
     if (placementData.slide10Data) {
-        console.log('📊 Processing Slide 10 GPA data...');
-        const slide10Results = updateSlide10GPATable(zip, placementData.slide10Data);
+        const slideNum = slideMap.GPA_OVERVIEW || 10;
+        console.log(`📊 Processing Slide ${slideNum} GPA data...`);
+        const slide10Results = updateSlide10GPATable(zip, placementData.slide10Data, slideNum);
 
         for (const update of slide10Results.updated) {
             results.updatedSlides.push({
-                slide: 10,
+                slide: slideNum,
                 field: update.field,
                 value: update.value
             });
@@ -1306,7 +1320,7 @@ function processPPTX(pptxBuffer, placementData) {
 
         for (const error of slide10Results.errors) {
             results.errors.push({
-                slide: 10,
+                slide: slideNum,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1314,14 +1328,15 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Phase 5: Update Slide 12 - GHS Table (Group Hospital & Surgical)
+    // Phase 5: Update GHS Table (Group Hospital & Surgical)
     if (placementData.slide12Data) {
-        console.log('📊 Processing Slide 12 GHS data...');
-        const slide12Results = updateSlide12GHSTable(zip, placementData.slide12Data);
+        const slideNum = slideMap.GHS_OVERVIEW || 12;
+        console.log(`📊 Processing Slide ${slideNum} GHS data...`);
+        const slide12Results = updateSlide12GHSTable(zip, placementData.slide12Data, slideNum);
 
         for (const update of slide12Results.updated) {
             results.updatedSlides.push({
-                slide: 12,
+                slide: slideNum,
                 field: update.field,
                 value: update.value
             });
@@ -1329,7 +1344,7 @@ function processPPTX(pptxBuffer, placementData) {
 
         for (const error of slide12Results.errors) {
             results.errors.push({
-                slide: 12,
+                slide: slideNum,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1337,14 +1352,15 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Phase 6: Update Slide 15 - GHS Schedule of Benefits (Items 1-6)
+    // Phase 6: Update GHS Schedule of Benefits (Items 1-6)
     if (placementData.slide15Data) {
-        console.log('📊 Processing Slide 15 GHS Schedule of Benefits...');
-        const slide15Results = updateSlide15ScheduleOfBenefits(zip, placementData.slide15Data);
+        const slideNum = slideMap.GHS_SOB_1 || 15;
+        console.log(`📊 Processing Slide ${slideNum} GHS Schedule of Benefits...`);
+        const slide15Results = updateSlide15ScheduleOfBenefits(zip, placementData.slide15Data, slideNum);
 
         for (const update of slide15Results.updated) {
             results.updatedSlides.push({
-                slide: 15,
+                slide: slideNum,
                 field: update.field,
                 value: update.value
             });
@@ -1352,7 +1368,7 @@ function processPPTX(pptxBuffer, placementData) {
 
         for (const error of slide15Results.errors) {
             results.errors.push({
-                slide: 15,
+                slide: slideNum,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1360,14 +1376,15 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Phase 7: Update Slide 16 - GHS Schedule of Benefits (Items 7-15)
+    // Phase 7: Update GHS Schedule of Benefits (Items 7-15)
     if (placementData.slide16Data) {
-        console.log('📊 Processing Slide 16 GHS Schedule of Benefits...');
-        const slide16Results = updateSlide16ScheduleOfBenefits(zip, placementData.slide16Data);
+        const slideNum = slideMap.GHS_SOB_2 || 16;
+        console.log(`📊 Processing Slide ${slideNum} GHS Schedule of Benefits...`);
+        const slide16Results = updateSlide16ScheduleOfBenefits(zip, placementData.slide16Data, slideNum);
 
         for (const update of slide16Results.updated) {
             results.updatedSlides.push({
-                slide: 16,
+                slide: slideNum,
                 field: update.field,
                 value: update.value
             });
@@ -1375,7 +1392,7 @@ function processPPTX(pptxBuffer, placementData) {
 
         for (const error of slide16Results.errors) {
             results.errors.push({
-                slide: 16,
+                slide: slideNum,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1383,14 +1400,15 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Phase 8: Update Slide 17 - GHS Qualification Period (14 days)
+    // Phase 8: Update GHS Qualification Period (14 days)
     if (placementData.slide17Data) {
-        console.log('📊 Processing Slide 17 GHS Qualification Period...');
-        const slide17Results = updateSlide17QualificationPeriod(zip, placementData.slide17Data);
+        const slideNum = slideMap.GHS_NOTES || 17;
+        console.log(`📊 Processing Slide ${slideNum} GHS Qualification Period...`);
+        const slide17Results = updateSlide17QualificationPeriod(zip, placementData.slide17Data, slideNum);
 
         for (const update of slide17Results.updated) {
             results.updatedSlides.push({
-                slide: 17,
+                slide: slideNum,
                 field: update.field,
                 value: update.value
             });
@@ -1398,7 +1416,7 @@ function processPPTX(pptxBuffer, placementData) {
 
         for (const error of slide17Results.errors) {
             results.errors.push({
-                slide: 17,
+                slide: slideNum,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1406,14 +1424,15 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Phase 9: Update Slide 18 - GHS Room & Board Entitlements
+    // Phase 9: Update GHS Room & Board Entitlements
     if (placementData.slide18Data) {
-        console.log('📊 Processing Slide 18 GHS Room & Board...');
-        const slide18Results = updateSlide18RoomAndBoard(zip, placementData.slide18Data);
+        const slideNum = slideMap.GHS_ROOM_BOARD || 18;
+        console.log(`📊 Processing Slide ${slideNum} GHS Room & Board...`);
+        const slide18Results = updateSlide18RoomAndBoard(zip, placementData.slide18Data, slideNum);
 
         for (const update of slide18Results.updated) {
             results.updatedSlides.push({
-                slide: 18,
+                slide: slideNum,
                 field: update.field,
                 value: update.value
             });
@@ -1421,7 +1440,7 @@ function processPPTX(pptxBuffer, placementData) {
 
         for (const error of slide18Results.errors) {
             results.errors.push({
-                slide: 18,
+                slide: slideNum,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1429,14 +1448,15 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Phase 10: Update Slide 19 - GMM Overview (Eligibility, Last Entry Age)
+    // Phase 10: Update GMM Overview (Eligibility, Last Entry Age)
     if (placementData.slide19Data) {
-        console.log('📊 Processing Slide 19 GMM Overview...');
-        const slide19Results = updateSlide19GMMOverview(zip, placementData.slide19Data);
+        const slideNum = slideMap.GMM_OVERVIEW || 19;
+        console.log(`📊 Processing Slide ${slideNum} GMM Overview...`);
+        const slide19Results = updateSlide19GMMOverview(zip, placementData.slide19Data, slideNum);
 
         for (const update of slide19Results.updated) {
             results.updatedSlides.push({
-                slide: 19,
+                slide: slideNum,
                 field: update.field,
                 value: update.value
             });
@@ -1444,7 +1464,7 @@ function processPPTX(pptxBuffer, placementData) {
 
         for (const error of slide19Results.errors) {
             results.errors.push({
-                slide: 19,
+                slide: slideNum,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1452,14 +1472,15 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Phase 11: Update Slide 20 - GMM Schedule of Benefits
+    // Phase 11: Update GMM Schedule of Benefits
     if (placementData.slide20Data) {
-        console.log('📊 Processing Slide 20 GMM Schedule of Benefits...');
-        const slide20Results = updateSlide20GMMScheduleOfBenefits(zip, placementData.slide20Data);
+        const slideNum = slideMap.GMM_SOB || 20;
+        console.log(`📊 Processing Slide ${slideNum} GMM Schedule of Benefits...`);
+        const slide20Results = updateSlide20GMMScheduleOfBenefits(zip, placementData.slide20Data, slideNum);
 
         for (const update of slide20Results.updated) {
             results.updatedSlides.push({
-                slide: 20,
+                slide: slideNum,
                 field: update.field,
                 value: update.value
             });
@@ -1467,7 +1488,7 @@ function processPPTX(pptxBuffer, placementData) {
 
         for (const error of slide20Results.errors) {
             results.errors.push({
-                slide: 20,
+                slide: slideNum,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1475,14 +1496,15 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Phase 12: Update Slide 24 - GP Overview
+    // Phase 12: Update GP Overview
     if (placementData.slide24Data) {
-        console.log('📊 Processing Slide 24 GP Overview...');
-        const slide24Results = updateSlide24GPOverview(zip, placementData.slide24Data);
+        const slideNum = slideMap.GP_OVERVIEW || 24;
+        console.log(`📊 Processing Slide ${slideNum} GP Overview...`);
+        const slide24Results = updateSlide24GPOverview(zip, placementData.slide24Data, slideNum);
 
         for (const update of slide24Results.updated) {
             results.updatedSlides.push({
-                slide: 24,
+                slide: slideNum,
                 field: update.field,
                 value: update.value
             });
@@ -1490,7 +1512,7 @@ function processPPTX(pptxBuffer, placementData) {
 
         for (const error of slide24Results.errors) {
             results.errors.push({
-                slide: 24,
+                slide: slideNum,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1498,14 +1520,15 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Phase 13: Update Slide 25 - GP Schedule of Benefits
+    // Phase 13: Update GP Schedule of Benefits
     if (placementData.slide25Data) {
-        console.log('📊 Processing Slide 25 GP Schedule of Benefits...');
-        const slide25Results = updateSlide25GPScheduleOfBenefits(zip, placementData.slide25Data);
+        const slideNum = slideMap.GP_SOB || 25;
+        console.log(`📊 Processing Slide ${slideNum} GP Schedule of Benefits...`);
+        const slide25Results = updateSlide25GPScheduleOfBenefits(zip, placementData.slide25Data, slideNum);
 
         for (const update of slide25Results.updated) {
             results.updatedSlides.push({
-                slide: 25,
+                slide: slideNum,
                 field: update.field,
                 value: update.value
             });
@@ -1513,7 +1536,7 @@ function processPPTX(pptxBuffer, placementData) {
 
         for (const error of slide25Results.errors) {
             results.errors.push({
-                slide: 25,
+                slide: slideNum,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1521,14 +1544,15 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Phase 14: Update Slide 26 - SP Overview
+    // Phase 14: Update SP Overview
     if (placementData.slide26Data) {
-        console.log('📊 Processing Slide 26 SP Overview...');
-        const slide26Results = updateSlide26SPOverview(zip, placementData.slide26Data);
+        const slideNum = slideMap.SP_OVERVIEW || 26;
+        console.log(`📊 Processing Slide ${slideNum} SP Overview...`);
+        const slide26Results = updateSlide26SPOverview(zip, placementData.slide26Data, slideNum);
 
         for (const update of slide26Results.updated) {
             results.updatedSlides.push({
-                slide: 26,
+                slide: slideNum,
                 field: update.field,
                 value: update.value
             });
@@ -1536,7 +1560,7 @@ function processPPTX(pptxBuffer, placementData) {
 
         for (const error of slide26Results.errors) {
             results.errors.push({
-                slide: 26,
+                slide: slideNum,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1544,14 +1568,15 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Phase 15: Update Slide 27 - SP Schedule of Benefits
+    // Phase 15: Update SP Schedule of Benefits
     if (placementData.slide27Data) {
-        console.log('📊 Processing Slide 27 SP Schedule of Benefits...');
-        const slide27Results = updateSlide27SPScheduleOfBenefits(zip, placementData.slide27Data);
+        const slideNum = slideMap.SP_SOB || 27;
+        console.log(`📊 Processing Slide ${slideNum} SP Schedule of Benefits...`);
+        const slide27Results = updateSlide27SPScheduleOfBenefits(zip, placementData.slide27Data, slideNum);
 
         for (const update of slide27Results.updated) {
             results.updatedSlides.push({
-                slide: 27,
+                slide: slideNum,
                 field: update.field,
                 value: update.value
             });
@@ -1559,7 +1584,7 @@ function processPPTX(pptxBuffer, placementData) {
 
         for (const error of slide27Results.errors) {
             results.errors.push({
-                slide: 27,
+                slide: slideNum,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1567,13 +1592,15 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Update Slide 30: Dental Overview (Eligibility, Last Entry Age)
+    // Phase 16: Update Dental Overview (Eligibility, Last Entry Age)
     if (placementData.slide30Data) {
-        const slide30Results = updateSlide30DentalOverview(zip, placementData.slide30Data);
+        const slideNum = slideMap.DENTAL_OVERVIEW || 30;
+        console.log(`📊 Processing Slide ${slideNum} Dental Overview...`);
+        const slide30Results = updateSlide30DentalOverview(zip, placementData.slide30Data, slideNum);
 
         for (const update of slide30Results.updated) {
             results.updatedSlides.push({
-                slide: 30,
+                slide: slideNum,
                 field: update.field,
                 value: update.value
             });
@@ -1581,7 +1608,7 @@ function processPPTX(pptxBuffer, placementData) {
 
         for (const error of slide30Results.errors) {
             results.errors.push({
-                slide: 30,
+                slide: slideNum,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1589,13 +1616,15 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Update Slide 31: Dental SOB Part 1 (Overall Limit)
+    // Phase 17: Update Dental SOB Part 1 (Overall Limit)
     if (placementData.slide31Data) {
-        const slide31Results = updateSlide31DentalSOB(zip, placementData.slide31Data);
+        const slideNum = slideMap.DENTAL_SOB_1 || 31;
+        console.log(`📊 Processing Slide ${slideNum} Dental SOB Part 1...`);
+        const slide31Results = updateSlide31DentalSOB(zip, placementData.slide31Data, slideNum);
 
         for (const update of slide31Results.updated) {
             results.updatedSlides.push({
-                slide: 31,
+                slide: slideNum,
                 field: update.field,
                 value: update.value
             });
@@ -1603,7 +1632,7 @@ function processPPTX(pptxBuffer, placementData) {
 
         for (const error of slide31Results.errors) {
             results.errors.push({
-                slide: 31,
+                slide: slideNum,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1611,13 +1640,15 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
-    // Update Slide 32: Dental SOB Part 2 (Overall Limit)
+    // Phase 18: Update Dental SOB Part 2 (Overall Limit)
     if (placementData.slide32Data) {
-        const slide32Results = updateSlide32DentalSOB(zip, placementData.slide32Data);
+        const slideNum = slideMap.DENTAL_SOB_2 || 32;
+        console.log(`📊 Processing Slide ${slideNum} Dental SOB Part 2...`);
+        const slide32Results = updateSlide32DentalSOB(zip, placementData.slide32Data, slideNum);
 
         for (const update of slide32Results.updated) {
             results.updatedSlides.push({
-                slide: 32,
+                slide: slideNum,
                 field: update.field,
                 value: update.value
             });
@@ -1625,7 +1656,7 @@ function processPPTX(pptxBuffer, placementData) {
 
         for (const error of slide32Results.errors) {
             results.errors.push({
-                slide: 32,
+                slide: slideNum,
                 field: error.field,
                 error: error.error,
                 hint: error.hint || null
@@ -1770,7 +1801,7 @@ function inspectSlide8Tables(buffer) {
  * @param {Object} slide15Data - Data for slide 15 (scheduleOfBenefits)
  * @returns {Object} Results of the update operation
  */
-function updateSlide15ScheduleOfBenefits(zip, slide15Data) {
+function updateSlide15ScheduleOfBenefits(zip, slide15Data, slideNumber = 15) {
     console.log('📝 Updating Slide 15 Schedule of Benefits...');
 
     const results = {
@@ -1787,7 +1818,7 @@ function updateSlide15ScheduleOfBenefits(zip, slide15Data) {
     console.log(`📋 Schedule data: ${scheduleData.benefits?.length || 0} benefits, plans: ${scheduleData.planHeaders?.join(', ')}`);
 
     try {
-        let slideXml = getSlideXML(zip, 15);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // Find and update table rows
         const tablePattern = /<a:tbl\b[^>]*>([\s\S]*?)<\/a:tbl>/g;
@@ -1972,7 +2003,7 @@ function updateSlide15ScheduleOfBenefits(zip, slide15Data) {
             slideXml = slideXml.replace(tableMatch[0], updatedTable);
         }
 
-        setSlideXML(zip, 15, slideXml);
+        setSlideXML(zip, slideNumber, slideXml);
         console.log(`📝 Slide 15 update complete: ${results.updated.length} fields updated`);
 
     } catch (error) {
@@ -1990,7 +2021,7 @@ function updateSlide15ScheduleOfBenefits(zip, slide15Data) {
  * @param {Object} slide16Data - Data for slide 16 (scheduleOfBenefits)
  * @returns {Object} Results of the update operation
  */
-function updateSlide16ScheduleOfBenefits(zip, slide16Data) {
+function updateSlide16ScheduleOfBenefits(zip, slide16Data, slideNumber = 16) {
     console.log('📝 Updating Slide 16 Schedule of Benefits...');
 
     const results = {
@@ -2006,7 +2037,7 @@ function updateSlide16ScheduleOfBenefits(zip, slide16Data) {
     const scheduleData = slide16Data.scheduleOfBenefits;
 
     try {
-        let slideXml = getSlideXML(zip, 16);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // Find and update table rows
         const tablePattern = /<a:tbl\b[^>]*>([\s\S]*?)<\/a:tbl>/g;
@@ -2114,7 +2145,7 @@ function updateSlide16ScheduleOfBenefits(zip, slide16Data) {
             slideXml = slideXml.replace(tableMatch[0], updatedTable);
         }
 
-        setSlideXML(zip, 16, slideXml);
+        setSlideXML(zip, slideNumber, slideXml);
         console.log(`📝 Slide 16 update complete: ${results.updated.length} fields updated`);
 
     } catch (error) {
@@ -2132,7 +2163,7 @@ function updateSlide16ScheduleOfBenefits(zip, slide16Data) {
  * @param {Object} slide17Data - Data for slide 17 (qualificationPeriodDays)
  * @returns {Object} Results of the update operation
  */
-function updateSlide17QualificationPeriod(zip, slide17Data) {
+function updateSlide17QualificationPeriod(zip, slide17Data, slideNumber = 17) {
     console.log('📝 Updating Slide 17 Qualification Period...');
 
     const results = {
@@ -2149,7 +2180,7 @@ function updateSlide17QualificationPeriod(zip, slide17Data) {
     console.log(`📋 Qualification period value: "${daysValue}"`);
 
     try {
-        let slideXml = getSlideXML(zip, 17);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // Extract just the number from "14 DAYS" format
         const daysMatch = daysValue.match(/(\d+)/);
@@ -2173,7 +2204,7 @@ function updateSlide17QualificationPeriod(zip, slide17Data) {
             console.log(`  ✅ Updated standalone text to: ${daysNumber} days`);
         }
 
-        setSlideXML(zip, 17, slideXml);
+        setSlideXML(zip, slideNumber, slideXml);
         console.log(`📝 Slide 17 update complete: ${results.updated.length} fields updated`);
 
     } catch (error) {
@@ -2191,7 +2222,7 @@ function updateSlide17QualificationPeriod(zip, slide17Data) {
  * @param {Object} slide18Data - Data for slide 18 (roomAndBoardEntitlements)
  * @returns {Object} Results of the update operation
  */
-function updateSlide18RoomAndBoard(zip, slide18Data) {
+function updateSlide18RoomAndBoard(zip, slide18Data, slideNumber = 18) {
     console.log('📝 Updating Slide 18 Room & Board...');
 
     const results = {
@@ -2208,7 +2239,7 @@ function updateSlide18RoomAndBoard(zip, slide18Data) {
     console.log(`📋 Room & Board entitlements: ${entitlements.length} sections`);
 
     try {
-        let slideXml = getSlideXML(zip, 18);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // Find the first entitlement section to use for mapping
         const firstEntitlement = entitlements[0];
@@ -2378,7 +2409,7 @@ function updateSlide18RoomAndBoard(zip, slide18Data) {
             }
         }
 
-        setSlideXML(zip, 18, slideXml);
+        setSlideXML(zip, slideNumber, slideXml);
         console.log(`📝 Slide 18 update complete: ${results.updated.length} fields updated`);
 
     } catch (error) {
@@ -2671,7 +2702,7 @@ function formatBenefitValue(value) {
  * @param {Object} slide19Data - Data for slide 19 (eligibility, lastEntryAge)
  * @returns {Object} Results of the update operation
  */
-function updateSlide19GMMOverview(zip, slide19Data) {
+function updateSlide19GMMOverview(zip, slide19Data, slideNumber = 19) {
     console.log('📝 Updating Slide 19 GMM Overview...');
 
     const results = {
@@ -2690,7 +2721,7 @@ function updateSlide19GMMOverview(zip, slide19Data) {
     console.log(`   - categoryPlans: ${slide19Data.categoryPlans?.length || 0} entries`);
 
     try {
-        let slideXml = getSlideXML(zip, 19);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // Update Eligibility & Last Entry Age - Replace as separate text elements
         if (slide19Data.eligibility || slide19Data.lastEntryAge) {
@@ -2788,7 +2819,7 @@ function updateSlide19GMMOverview(zip, slide19Data) {
             }
         }
 
-        setSlideXML(zip, 19, slideXml);
+        setSlideXML(zip, slideNumber, slideXml);
         console.log(`📝 Slide 19 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
 
     } catch (error) {
@@ -2805,7 +2836,7 @@ function updateSlide19GMMOverview(zip, slide19Data) {
  * @param {Object} slide20Data - Data for slide 20 (scheduleOfBenefits with planHeaders, planColumns, benefits)
  * @returns {Object} Results of the update operation
  */
-function updateSlide20GMMScheduleOfBenefits(zip, slide20Data) {
+function updateSlide20GMMScheduleOfBenefits(zip, slide20Data, slideNumber = 20) {
     console.log('📝 Updating Slide 20 GMM Schedule of Benefits...');
 
     const results = {
@@ -2823,7 +2854,7 @@ function updateSlide20GMMScheduleOfBenefits(zip, slide20Data) {
     console.log(`📋 Dynamic plan headers: ${scheduleData.planHeaders?.join(', ') || 'None'}`);
 
     try {
-        let slideXml = getSlideXML(zip, 20);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // Find and update table rows
         const tablePattern = /<a:tbl\b[^>]*>([\s\S]*?)<\/a:tbl>/g;
@@ -2974,7 +3005,7 @@ function updateSlide20GMMScheduleOfBenefits(zip, slide20Data) {
             results.errors.push({ field: 'Slide 20 Table', error: 'Table not found' });
         }
 
-        setSlideXML(zip, 20, slideXml);
+        setSlideXML(zip, slideNumber, slideXml);
         console.log(`📝 Slide 20 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
 
     } catch (error) {
@@ -2991,7 +3022,7 @@ function updateSlide20GMMScheduleOfBenefits(zip, slide20Data) {
  * @param {Object} slide24Data - Data for slide 24 (eligibility, lastEntryAge, categoryPlans)
  * @returns {Object} Results of the update operation
  */
-function updateSlide24GPOverview(zip, slide24Data) {
+function updateSlide24GPOverview(zip, slide24Data, slideNumber = 24) {
     console.log('📝 Updating Slide 24 GP Overview...');
 
     const results = {
@@ -3005,7 +3036,7 @@ function updateSlide24GPOverview(zip, slide24Data) {
     }
 
     try {
-        let slideXml = getSlideXML(zip, 24);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // 1. Update Eligibility & Last Entry Age
         if (slide24Data.eligibility || slide24Data.lastEntryAge) {
@@ -3095,7 +3126,7 @@ function updateSlide24GPOverview(zip, slide24Data) {
             }
         }
 
-        setSlideXML(zip, 24, slideXml);
+        setSlideXML(zip, slideNumber, slideXml);
         console.log(`📝 Slide 24 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
 
     } catch (error) {
@@ -3112,7 +3143,7 @@ function updateSlide24GPOverview(zip, slide24Data) {
  * @param {Object} slide25Data - Data for slide 25 (scheduleOfBenefits)
  * @returns {Object} Results of the update operation
  */
-function updateSlide25GPScheduleOfBenefits(zip, slide25Data) {
+function updateSlide25GPScheduleOfBenefits(zip, slide25Data, slideNumber = 25) {
     console.log('📝 Updating Slide 25 GP Schedule of Benefits...');
 
     const results = {
@@ -3128,7 +3159,7 @@ function updateSlide25GPScheduleOfBenefits(zip, slide25Data) {
     const scheduleData = slide25Data.scheduleOfBenefits;
 
     try {
-        let slideXml = getSlideXML(zip, 25);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // Find the Schedule of Benefits table
         const tablePattern = /<a:tbl\b[^>]*>([\s\S]*?)<\/a:tbl>/;
@@ -3235,7 +3266,7 @@ function updateSlide25GPScheduleOfBenefits(zip, slide25Data) {
             results.errors.push({ field: 'Slide 25 Table', error: 'Table not found' });
         }
 
-        setSlideXML(zip, 25, slideXml);
+        setSlideXML(zip, slideNumber, slideXml);
         console.log(`📝 Slide 25 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
 
     } catch (error) {
@@ -3252,7 +3283,7 @@ function updateSlide25GPScheduleOfBenefits(zip, slide25Data) {
  * @param {Object} slide26Data - Data for slide 26 (eligibility, lastEntryAge, categoryPlans)
  * @returns {Object} Results of the update operation
  */
-function updateSlide26SPOverview(zip, slide26Data) {
+function updateSlide26SPOverview(zip, slide26Data, slideNumber = 26) {
     console.log('📝 Updating Slide 26 SP Overview...');
 
     const results = {
@@ -3266,7 +3297,7 @@ function updateSlide26SPOverview(zip, slide26Data) {
     }
 
     try {
-        let slideXml = getSlideXML(zip, 26);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // 1. Update Eligibility & Last Entry Age
         if (slide26Data.eligibility || slide26Data.lastEntryAge) {
@@ -3356,7 +3387,7 @@ function updateSlide26SPOverview(zip, slide26Data) {
             }
         }
 
-        setSlideXML(zip, 26, slideXml);
+        setSlideXML(zip, slideNumber, slideXml);
         console.log(`📝 Slide 26 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
 
     } catch (error) {
@@ -3385,7 +3416,7 @@ const SP_PPT_TO_EXCEL_MAPPING = {
  * @param {Object} slide27Data - Data for slide 27 (scheduleOfBenefits)
  * @returns {Object} Results of the update operation
  */
-function updateSlide27SPScheduleOfBenefits(zip, slide27Data) {
+function updateSlide27SPScheduleOfBenefits(zip, slide27Data, slideNumber = 27) {
     console.log('📝 Updating Slide 27 SP Schedule of Benefits...');
 
     const results = {
@@ -3401,7 +3432,7 @@ function updateSlide27SPScheduleOfBenefits(zip, slide27Data) {
     const scheduleData = slide27Data.scheduleOfBenefits;
 
     try {
-        let slideXml = getSlideXML(zip, 27);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // Find the Schedule of Benefits table
         const tablePattern = /<a:tbl\b[^>]*>([\s\S]*?)<\/a:tbl>/;
@@ -3502,7 +3533,7 @@ function updateSlide27SPScheduleOfBenefits(zip, slide27Data) {
             results.errors.push({ field: 'Slide 27 Table', error: 'Table not found' });
         }
 
-        setSlideXML(zip, 27, slideXml);
+        setSlideXML(zip, slideNumber, slideXml);
         console.log(`📝 Slide 27 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
 
     } catch (error) {
@@ -3519,7 +3550,7 @@ function updateSlide27SPScheduleOfBenefits(zip, slide27Data) {
  * @param {Object} slide30Data - Data for slide 30 (eligibility, lastEntryAge)
  * @returns {Object} Results of the update operation
  */
-function updateSlide30DentalOverview(zip, slide30Data) {
+function updateSlide30DentalOverview(zip, slide30Data, slideNumber = 30) {
     console.log('📝 Updating Slide 30 Dental Overview...');
 
     const results = {
@@ -3533,7 +3564,7 @@ function updateSlide30DentalOverview(zip, slide30Data) {
     }
 
     try {
-        let slideXml = getSlideXML(zip, 30);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // Update Eligibility & Last Entry Age
         if (slide30Data.eligibility || slide30Data.lastEntryAge) {
@@ -3555,7 +3586,7 @@ function updateSlide30DentalOverview(zip, slide30Data) {
             }
         }
 
-        setSlideXML(zip, 30, slideXml);
+        setSlideXML(zip, slideNumber, slideXml);
         console.log(`📝 Slide 30 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
 
     } catch (error) {
@@ -3572,7 +3603,7 @@ function updateSlide30DentalOverview(zip, slide30Data) {
  * @param {Object} slide31Data - Data for slide 31 (overallLimit)
  * @returns {Object} Results of the update operation
  */
-function updateSlide31DentalSOB(zip, slide31Data) {
+function updateSlide31DentalSOB(zip, slide31Data, slideNumber = 31) {
     console.log('📝 Updating Slide 31 Dental SOB Part 1...');
 
     const results = {
@@ -3586,7 +3617,7 @@ function updateSlide31DentalSOB(zip, slide31Data) {
     }
 
     try {
-        let slideXml = getSlideXML(zip, 31);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // Update overall limit text (e.g., "S$500" → extracted value)
         if (slide31Data.overallLimit) {
@@ -3609,7 +3640,7 @@ function updateSlide31DentalSOB(zip, slide31Data) {
             }
         }
 
-        setSlideXML(zip, 31, slideXml);
+        setSlideXML(zip, slideNumber, slideXml);
         console.log(`📝 Slide 31 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
 
     } catch (error) {
@@ -3626,7 +3657,7 @@ function updateSlide31DentalSOB(zip, slide31Data) {
  * @param {Object} slide32Data - Data for slide 32 (overallLimit)
  * @returns {Object} Results of the update operation
  */
-function updateSlide32DentalSOB(zip, slide32Data) {
+function updateSlide32DentalSOB(zip, slide32Data, slideNumber = 32) {
     console.log('📝 Updating Slide 32 Dental SOB Part 2...');
 
     const results = {
@@ -3640,7 +3671,7 @@ function updateSlide32DentalSOB(zip, slide32Data) {
     }
 
     try {
-        let slideXml = getSlideXML(zip, 32);
+        let slideXml = getSlideXML(zip, slideNumber);
 
         // Update overall limit text (e.g., "S$500" → extracted value)
         if (slide32Data.overallLimit) {
@@ -3663,7 +3694,7 @@ function updateSlide32DentalSOB(zip, slide32Data) {
             }
         }
 
-        setSlideXML(zip, 32, slideXml);
+        setSlideXML(zip, slideNumber, slideXml);
         console.log(`📝 Slide 32 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
 
     } catch (error) {

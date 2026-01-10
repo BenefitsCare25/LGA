@@ -397,7 +397,8 @@ router.post('/process-slip', requireDelegatedAuth, async (req, res) => {
                 size: pptxResult.bufferSize,
                 updatedSlides: pptxResult.updatedSlides,
                 errors: pptxResult.errors || []
-            }
+            },
+            slideDetection: pptxResult.slideDetection || null
         });
 
     } catch (error) {
@@ -509,7 +510,8 @@ router.post('/manual-trigger', requireDelegatedAuth, async (req, res) => {
                 fileId: uploadResult.id,
                 updatedSlides: pptxResult.updatedSlides,
                 errors: pptxResult.errors || []
-            }
+            },
+            slideDetection: pptxResult.slideDetection || null
         });
 
     } catch (error) {

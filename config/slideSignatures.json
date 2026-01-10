@@ -1,0 +1,179 @@
+{
+  "version": "1.0",
+  "description": "Slide signature patterns for dynamic slide detection in PPTX processing",
+  "signatures": {
+    "PERIOD_OF_INSURANCE": {
+      "displayName": "Period of Insurance",
+      "primaryPatterns": ["Period of Insurance"],
+      "secondarySignals": ["to"],
+      "fallbackPosition": 1,
+      "dataKey": "periodOfInsurance",
+      "group": "GENERAL"
+    },
+    "GTL_OVERVIEW": {
+      "displayName": "Group Term Life Overview",
+      "primaryPatterns": ["Group Term Life", "GTL"],
+      "secondarySignals": ["Eligibility", "Last Entry Age", "Basis of Cover", "Non-evidence Limit"],
+      "fallbackPosition": 8,
+      "dataKey": "slide8Data",
+      "group": "GTL"
+    },
+    "GDD_OVERVIEW": {
+      "displayName": "Group Dread Disease Overview",
+      "primaryPatterns": ["Group Dread Disease", "GDD"],
+      "secondarySignals": ["Eligibility", "Last Entry Age", "Basis of Cover", "Non-evidence Limit"],
+      "fallbackPosition": 9,
+      "dataKey": "slide9Data",
+      "group": "GDD"
+    },
+    "GPA_OVERVIEW": {
+      "displayName": "Group Personal Accident Overview",
+      "primaryPatterns": ["Group Personal Accident", "GPA"],
+      "secondarySignals": ["Eligibility", "Last Entry Age", "Basis of Cover"],
+      "fallbackPosition": 10,
+      "dataKey": "slide10Data",
+      "group": "GPA"
+    },
+    "GHS_OVERVIEW": {
+      "displayName": "Group Hospital & Surgical Overview",
+      "primaryPatterns": ["Group Hospital & Surgical", "Group Hospital and Surgical", "GHS"],
+      "secondarySignals": ["Eligibility", "Last Entry Age", "Category", "Plan"],
+      "fallbackPosition": 12,
+      "dataKey": "slide12Data",
+      "group": "GHS"
+    },
+    "GHS_SOB_1": {
+      "displayName": "GHS Schedule of Benefits (Part 1)",
+      "primaryPatterns": ["Schedule of Benefits"],
+      "secondarySignals": ["Daily Room & Board", "ICU", "In-patient", "Out-patient"],
+      "uniqueSignals": ["Daily Room & Board"],
+      "fallbackPosition": 15,
+      "dataKey": "slide15Data",
+      "group": "GHS",
+      "sequenceOrder": 1
+    },
+    "GHS_SOB_2": {
+      "displayName": "GHS Schedule of Benefits (Part 2)",
+      "primaryPatterns": ["Schedule of Benefits"],
+      "secondarySignals": ["Outpatient Treatment", "Miscarriage", "Death", "Ambulance", "GST"],
+      "uniqueSignals": ["Psychiatric", "Overseas Treatment"],
+      "fallbackPosition": 16,
+      "dataKey": "slide16Data",
+      "group": "GHS",
+      "sequenceOrder": 2,
+      "followsSlide": "GHS_SOB_1"
+    },
+    "GHS_NOTES": {
+      "displayName": "GHS Notes / Qualification Period",
+      "primaryPatterns": ["Notes", "Qualification Period"],
+      "secondarySignals": ["days", "disabilities"],
+      "fallbackPosition": 17,
+      "dataKey": "slide17Data",
+      "group": "GHS"
+    },
+    "GHS_ROOM_BOARD": {
+      "displayName": "GHS Room & Board Entitlements",
+      "primaryPatterns": ["Room & Board", "Hospital Cash", "GHS Entitlement"],
+      "secondarySignals": ["Ward Class", "B1", "B2", "C", "Bedded"],
+      "fallbackPosition": 18,
+      "dataKey": "slide18Data",
+      "group": "GHS"
+    },
+    "GMM_OVERVIEW": {
+      "displayName": "Group Major Medical Overview",
+      "primaryPatterns": ["Group Major Medical", "GMM"],
+      "secondarySignals": ["Eligibility", "Last Entry Age"],
+      "fallbackPosition": 19,
+      "dataKey": "slide19Data",
+      "group": "GMM"
+    },
+    "GMM_SOB": {
+      "displayName": "GMM Schedule of Benefits",
+      "primaryPatterns": ["Schedule of Benefits"],
+      "secondarySignals": ["Deductible", "Co-insurance", "Daily Room & Board", "Inpatient"],
+      "uniqueSignals": ["Deductible", "Per disability"],
+      "fallbackPosition": 20,
+      "dataKey": "slide20Data",
+      "group": "GMM"
+    },
+    "GP_OVERVIEW": {
+      "displayName": "General Practitioner Overview",
+      "primaryPatterns": ["General Practitioner", "GP"],
+      "secondarySignals": ["Eligibility", "Last Entry Age", "Category", "Plan"],
+      "fallbackPosition": 24,
+      "dataKey": "slide24Data",
+      "group": "GP"
+    },
+    "GP_SOB": {
+      "displayName": "GP Schedule of Benefits",
+      "primaryPatterns": ["Schedule of Benefits"],
+      "secondarySignals": ["Panel", "Polyclinic", "Non Panel", "TCM", "A&E"],
+      "uniqueSignals": ["Polyclinic", "Panel TCM"],
+      "fallbackPosition": 25,
+      "dataKey": "slide25Data",
+      "group": "GP"
+    },
+    "SP_OVERVIEW": {
+      "displayName": "Specialist Overview",
+      "primaryPatterns": ["Specialist"],
+      "secondarySignals": ["Eligibility", "Last Entry Age", "Category", "Plan"],
+      "excludePatterns": ["Panel Specialist", "Non-Panel Specialist"],
+      "fallbackPosition": 26,
+      "dataKey": "slide26Data",
+      "group": "SP"
+    },
+    "SP_SOB": {
+      "displayName": "SP Schedule of Benefits",
+      "primaryPatterns": ["Schedule of Benefits"],
+      "secondarySignals": ["Panel Specialist", "Non-Panel Specialist", "Diagnostic X-ray", "TCM"],
+      "uniqueSignals": ["Panel Specialist", "Diagnostic X-ray"],
+      "fallbackPosition": 27,
+      "dataKey": "slide27Data",
+      "group": "SP"
+    },
+    "DENTAL_OVERVIEW": {
+      "displayName": "Group Dental Overview",
+      "primaryPatterns": ["Group Dental", "Dental"],
+      "secondarySignals": ["Eligibility", "Last Entry Age"],
+      "fallbackPosition": 30,
+      "dataKey": "slide30Data",
+      "group": "DENTAL"
+    },
+    "DENTAL_SOB_1": {
+      "displayName": "Dental Schedule of Benefits (Part 1)",
+      "primaryPatterns": ["Schedule of Benefits"],
+      "secondarySignals": ["Overall Limit", "Scaling", "Polishing", "Extraction", "Filling"],
+      "uniqueSignals": ["Overall Limit", "Scaling"],
+      "fallbackPosition": 31,
+      "dataKey": "slide31Data",
+      "group": "DENTAL",
+      "sequenceOrder": 1
+    },
+    "DENTAL_SOB_2": {
+      "displayName": "Dental Schedule of Benefits (Part 2)",
+      "primaryPatterns": ["Schedule of Benefits"],
+      "secondarySignals": ["Crown", "Denture", "GST Extension"],
+      "uniqueSignals": ["Crown", "Denture"],
+      "fallbackPosition": 32,
+      "dataKey": "slide32Data",
+      "group": "DENTAL",
+      "sequenceOrder": 2,
+      "followsSlide": "DENTAL_SOB_1"
+    }
+  },
+  "groups": {
+    "GENERAL": ["PERIOD_OF_INSURANCE"],
+    "GTL": ["GTL_OVERVIEW"],
+    "GDD": ["GDD_OVERVIEW"],
+    "GPA": ["GPA_OVERVIEW"],
+    "GHS": ["GHS_OVERVIEW", "GHS_SOB_1", "GHS_SOB_2", "GHS_NOTES", "GHS_ROOM_BOARD"],
+    "GMM": ["GMM_OVERVIEW", "GMM_SOB"],
+    "GP": ["GP_OVERVIEW", "GP_SOB"],
+    "SP": ["SP_OVERVIEW", "SP_SOB"],
+    "DENTAL": ["DENTAL_OVERVIEW", "DENTAL_SOB_1", "DENTAL_SOB_2"]
+  },
+  "confidenceThresholds": {
+    "high": 0.7,
+    "medium": 0.4
+  }
+}

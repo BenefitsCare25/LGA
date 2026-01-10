@@ -58,8 +58,68 @@ Automated PowerPoint generation from Excel placement slips.
 
 ### Key Files
 - `utils/pptxProcessor.js` - PowerPoint XML manipulation (PizZip)
+- `utils/slideDetector.js` - Dynamic slide detection by content patterns
 - `utils/placementSlipParser.js` - Excel data extraction (XLSX)
 - `routes/sharepoint-automation.js` - API endpoints
+- `config/slideSignatures.json` - Slide signature patterns configuration
+
+### Dynamic Slide Detection
+
+The system uses content-based slide detection instead of hardcoded slide numbers, making it robust to template variations where slides may be inserted or deleted.
+
+**Architecture**:
+```
+slideDetector.js
+├── loadSignatures() - Load patterns from slideSignatures.json
+├── extractAllSlideData() - Extract text from all slides via <a:t> elements
+├── scoreSlideMatch() - Score slides against signatures
+├── detectSlidePositions() - Main detection with confidence scoring
+└── getSlideNumber() - Get detected slide number with fallback
+```
+
+**Confidence Scoring** (max 100 points):
+- Primary pattern match: 50 points (e.g., "Group Term Life", "Schedule of Benefits")
+- Secondary signals: 30 points (e.g., "Eligibility", "Last Entry Age")
+- Unique signals: 20 points (differentiates similar slides like multiple SOB slides)
+
+**Thresholds**:
+- ≥70%: High confidence - use detected position
+- 40-69%: Medium confidence - use detected + warn frontend
+- <40%: Low confidence - use fallback position + notify frontend
+
+**Slide Signatures** (18 total):
+| Slide Type | Primary Pattern | Unique Signals | Fallback |
+|------------|-----------------|----------------|----------|
+| PERIOD_OF_INSURANCE | Period of Insurance | - | 1 |
+| GTL_OVERVIEW | Group Term Life | - | 8 |
+| GDD_OVERVIEW | Group Dread Disease | - | 9 |
+| GPA_OVERVIEW | Group Personal Accident | - | 10 |
+| GHS_OVERVIEW | Group Hospital & Surgical | - | 12 |
+| GHS_SOB_1 | Schedule of Benefits | Daily Room & Board | 15 |
+| GHS_SOB_2 | Schedule of Benefits | Psychiatric, Overseas Treatment | 16 |
+| GHS_NOTES | Notes, Qualification Period | - | 17 |
+| GHS_ROOM_BOARD | Room & Board, Hospital Cash | - | 18 |
+| GMM_OVERVIEW | Group Major Medical | - | 19 |
+| GMM_SOB | Schedule of Benefits | Deductible, Per disability | 20 |
+| GP_OVERVIEW | General Practitioner | - | 24 |
+| GP_SOB | Schedule of Benefits | Polyclinic, Panel TCM | 25 |
+| SP_OVERVIEW | Specialist | - | 26 |
+| SP_SOB | Schedule of Benefits | Panel Specialist, Diagnostic X-ray | 27 |
+| DENTAL_OVERVIEW | Group Dental | - | 30 |
+| DENTAL_SOB_1 | Schedule of Benefits | Overall Limit, Scaling | 31 |
+| DENTAL_SOB_2 | Schedule of Benefits | Crown, Denture | 32 |
+
+**API Response** includes detection results:
+```json
+{
+  "slideDetection": {
+    "results": {
+      "GTL_OVERVIEW": { "detected": true, "slideNum": 8, "confidence": 0.85 }
+    },
+    "warnings": ["GHS_SOB_1 detected with medium confidence (55%) at Slide 15"]
+  }
+}
+```
 
 ### Slide Mapping Status
 
