@@ -1567,6 +1567,72 @@ function processPPTX(pptxBuffer, placementData) {
         }
     }
 
+    // Update Slide 30: Dental Overview (Eligibility, Last Entry Age)
+    if (placementData.slide30Data) {
+        const slide30Results = updateSlide30DentalOverview(zip, placementData.slide30Data);
+
+        for (const update of slide30Results.updated) {
+            results.updatedSlides.push({
+                slide: 30,
+                field: update.field,
+                value: update.value
+            });
+        }
+
+        for (const error of slide30Results.errors) {
+            results.errors.push({
+                slide: 30,
+                field: error.field,
+                error: error.error,
+                hint: error.hint || null
+            });
+        }
+    }
+
+    // Update Slide 31: Dental SOB Part 1 (Overall Limit)
+    if (placementData.slide31Data) {
+        const slide31Results = updateSlide31DentalSOB(zip, placementData.slide31Data);
+
+        for (const update of slide31Results.updated) {
+            results.updatedSlides.push({
+                slide: 31,
+                field: update.field,
+                value: update.value
+            });
+        }
+
+        for (const error of slide31Results.errors) {
+            results.errors.push({
+                slide: 31,
+                field: error.field,
+                error: error.error,
+                hint: error.hint || null
+            });
+        }
+    }
+
+    // Update Slide 32: Dental SOB Part 2 (Overall Limit)
+    if (placementData.slide32Data) {
+        const slide32Results = updateSlide32DentalSOB(zip, placementData.slide32Data);
+
+        for (const update of slide32Results.updated) {
+            results.updatedSlides.push({
+                slide: 32,
+                field: update.field,
+                value: update.value
+            });
+        }
+
+        for (const error of slide32Results.errors) {
+            results.errors.push({
+                slide: 32,
+                field: error.field,
+                error: error.error,
+                hint: error.hint || null
+            });
+        }
+    }
+
     // Generate updated PPTX buffer
     const updatedBuffer = writePPTX(zip);
 
@@ -3447,6 +3513,167 @@ function updateSlide27SPScheduleOfBenefits(zip, slide27Data) {
     return results;
 }
 
+/**
+ * Update Slide 30 Dental Overview with Eligibility and Last Entry Age
+ * @param {Object} zip - PizZip instance
+ * @param {Object} slide30Data - Data for slide 30 (eligibility, lastEntryAge)
+ * @returns {Object} Results of the update operation
+ */
+function updateSlide30DentalOverview(zip, slide30Data) {
+    console.log('📝 Updating Slide 30 Dental Overview...');
+
+    const results = {
+        updated: [],
+        errors: []
+    };
+
+    if (!slide30Data) {
+        console.log('⚠️ No slide 30 data provided');
+        return results;
+    }
+
+    try {
+        let slideXml = getSlideXML(zip, 30);
+
+        // Update Eligibility & Last Entry Age
+        if (slide30Data.eligibility || slide30Data.lastEntryAge) {
+            const eligResult = replaceEligibilityAndLastEntryAgeSeparately(
+                slideXml,
+                slide30Data.eligibility,
+                slide30Data.lastEntryAge
+            );
+
+            if (eligResult.success) {
+                slideXml = eligResult.xml;
+                console.log(`  ✅ Updated Eligibility & Last Entry Age`);
+                if (slide30Data.eligibility) {
+                    results.updated.push({ field: 'Eligibility', value: slide30Data.eligibility.substring(0, 50) + '...' });
+                }
+                if (slide30Data.lastEntryAge) {
+                    results.updated.push({ field: 'Last Entry Age', value: slide30Data.lastEntryAge });
+                }
+            }
+        }
+
+        setSlideXML(zip, 30, slideXml);
+        console.log(`📝 Slide 30 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
+
+    } catch (error) {
+        console.error('❌ Error updating Slide 30:', error.message);
+        results.errors.push({ field: 'Slide 30', error: error.message });
+    }
+
+    return results;
+}
+
+/**
+ * Update Slide 31 Dental SOB Part 1 - Update Overall Limit text
+ * @param {Object} zip - PizZip instance
+ * @param {Object} slide31Data - Data for slide 31 (overallLimit)
+ * @returns {Object} Results of the update operation
+ */
+function updateSlide31DentalSOB(zip, slide31Data) {
+    console.log('📝 Updating Slide 31 Dental SOB Part 1...');
+
+    const results = {
+        updated: [],
+        errors: []
+    };
+
+    if (!slide31Data) {
+        console.log('⚠️ No slide 31 data provided');
+        return results;
+    }
+
+    try {
+        let slideXml = getSlideXML(zip, 31);
+
+        // Update overall limit text (e.g., "S$500" → extracted value)
+        if (slide31Data.overallLimit) {
+            // Look for pattern "at S$XXX" or "at $XXX" and replace the dollar amount
+            const limitPattern = /at\s+(S?\$[\d,]+)/gi;
+            const newLimit = slide31Data.overallLimit.startsWith('$') ? 'S' + slide31Data.overallLimit : slide31Data.overallLimit;
+
+            if (slideXml.match(limitPattern)) {
+                slideXml = slideXml.replace(limitPattern, `at ${newLimit}`);
+                results.updated.push({ field: 'Overall Limit', value: newLimit });
+                console.log(`  ✅ Updated Overall Limit to ${newLimit}`);
+            } else {
+                // Try direct replacement of dollar amounts in "Overall limit" context
+                const directPattern = /(Overall\s+limit[^<]*)(S?\$[\d,]+)/gi;
+                if (slideXml.match(directPattern)) {
+                    slideXml = slideXml.replace(directPattern, `$1${newLimit}`);
+                    results.updated.push({ field: 'Overall Limit', value: newLimit });
+                    console.log(`  ✅ Updated Overall Limit to ${newLimit}`);
+                }
+            }
+        }
+
+        setSlideXML(zip, 31, slideXml);
+        console.log(`📝 Slide 31 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
+
+    } catch (error) {
+        console.error('❌ Error updating Slide 31:', error.message);
+        results.errors.push({ field: 'Slide 31', error: error.message });
+    }
+
+    return results;
+}
+
+/**
+ * Update Slide 32 Dental SOB Part 2 - Update Overall Limit text
+ * @param {Object} zip - PizZip instance
+ * @param {Object} slide32Data - Data for slide 32 (overallLimit)
+ * @returns {Object} Results of the update operation
+ */
+function updateSlide32DentalSOB(zip, slide32Data) {
+    console.log('📝 Updating Slide 32 Dental SOB Part 2...');
+
+    const results = {
+        updated: [],
+        errors: []
+    };
+
+    if (!slide32Data) {
+        console.log('⚠️ No slide 32 data provided');
+        return results;
+    }
+
+    try {
+        let slideXml = getSlideXML(zip, 32);
+
+        // Update overall limit text (e.g., "S$500" → extracted value)
+        if (slide32Data.overallLimit) {
+            // Look for pattern "at S$XXX" or "at $XXX" and replace the dollar amount
+            const limitPattern = /at\s+(S?\$[\d,]+)/gi;
+            const newLimit = slide32Data.overallLimit.startsWith('$') ? 'S' + slide32Data.overallLimit : slide32Data.overallLimit;
+
+            if (slideXml.match(limitPattern)) {
+                slideXml = slideXml.replace(limitPattern, `at ${newLimit}`);
+                results.updated.push({ field: 'Overall Limit', value: newLimit });
+                console.log(`  ✅ Updated Overall Limit to ${newLimit}`);
+            } else {
+                // Try direct replacement of dollar amounts in "Overall limit" context
+                const directPattern = /(Overall\s+limit[^<]*)(S?\$[\d,]+)/gi;
+                if (slideXml.match(directPattern)) {
+                    slideXml = slideXml.replace(directPattern, `$1${newLimit}`);
+                    results.updated.push({ field: 'Overall Limit', value: newLimit });
+                    console.log(`  ✅ Updated Overall Limit to ${newLimit}`);
+                }
+            }
+        }
+
+        setSlideXML(zip, 32, slideXml);
+        console.log(`📝 Slide 32 update complete: ${results.updated.length} fields updated, ${results.errors.length} errors`);
+
+    } catch (error) {
+        console.error('❌ Error updating Slide 32:', error.message);
+        results.errors.push({ field: 'Slide 32', error: error.message });
+    }
+
+    return results;
+}
+
 module.exports = {
     readPPTX,
     getSlideFiles,
@@ -3468,6 +3695,9 @@ module.exports = {
     updateSlide25GPScheduleOfBenefits,
     updateSlide26SPOverview,
     updateSlide27SPScheduleOfBenefits,
+    updateSlide30DentalOverview,
+    updateSlide31DentalSOB,
+    updateSlide32DentalSOB,
     generateBasisOfCoverParagraph,
     generateBasisOfCoverCellContent,
     escapeXml,

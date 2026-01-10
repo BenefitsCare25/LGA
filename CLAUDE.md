@@ -83,6 +83,10 @@ Automated PowerPoint generation from Excel placement slips.
 | 25 | GP Schedule of Benefits | GP | Dynamic plan columns, 6 benefits (Panel, Polyclinic, Non-Panel, A&E, Overseas, TCM) | ✅ |
 | 26 | SP (Specialist) Overview | SP | Eligibility, Last Entry Age, Category/Plan | ✅ |
 | 27 | SP Schedule of Benefits | SP | Dynamic plan columns, 7 benefits with sub-items | ✅ |
+| 28-29 | Additional Content | - | Static content | N/A |
+| 30 | Group Dental Overview | Dental | Eligibility, Last Entry Age | ✅ |
+| 31 | Group Dental SOB Part 1 | Dental | Overall Limit (S$500), Benefits 1-11 | ✅ |
+| 32 | Group Dental SOB Part 2 | Dental | Benefits 12-19, GST Extension | ✅ |
 
 ### Technical Notes
 
@@ -175,5 +179,51 @@ Code uses \`replaceEligibilityAndLastEntryAgeSeparately()\` to update each eleme
 - Co-insurance decimals (0.2) → percentages (20%)
 - Literal strings preserved: "As per GHS", "As charged", "NA"
 
-### Next Phase
-- Slides 21+: Additional GP, SP, Dental mappings (if required)
+### Slide 25 GP Schedule of Benefits
+
+**Excel-to-PPT Benefit Mapping**:
+| PPT # | PPT Benefit | Excel ID | Excel Benefit |
+|-------|-------------|----------|---------------|
+| (1) | Panel (Fullerton) | -1 | Panel |
+| (2) | Polyclinic | -2 | Polyclinic |
+| (3) | Non Panel | -3 | Non Panel |
+| (4) | A&E of a hospital | -4 | For Emergencies at A&E |
+| (5) | Overseas GP/Specialist | -5 | Overseas GP/Specialist |
+| (6) | Panel TCM | -6 | Panel TCM |
+| (7) | Extension to cover GST | N/A | Not in Excel - keep template |
+
+**Dynamic Plan Column Detection**: Uses `cells.length - 2` and `cells.length - 1` for last two columns.
+
+### Slide 27 SP Schedule of Benefits
+
+**Excel-to-PPT Benefit Mapping** (PPT consolidates Excel benefits):
+| PPT # | PPT Benefit (Consolidated) | Excel # | Excel Benefit (Primary) |
+|-------|---------------------------|---------|------------------------|
+| 1 | Panel & Non Panel Specialist | 1 | Panel Specialist |
+| 2 | Traditional Chinese Medicine | 3 | TCM |
+| 3 | Panel & Non-Panel Diagnostic X-ray | 4 | Panel Diagnostic X-ray |
+| 4 | Outpatient therapy treatment | 8 | Outpatient therapy |
+| 5 | Extension to cover GST | null | Not in Excel - skip |
+
+**Mapping Constant** (`SP_PPT_TO_EXCEL_MAPPING`):
+```javascript
+{ 1: 1, 2: 3, 3: 4, 4: 8, 5: null }
+```
+
+### Slides 30-32 Group Dental
+
+**Excel Source**: Dental sheet
+- Row 11, Col C: Eligibility (merged cell)
+- Row 13, Col C: Last Entry Age
+- Row 36, Col E: Overall Limit (merged E36:E92)
+
+**Slide 30 (Dental Overview)**: Eligibility/Last Entry Age pattern (same as other overview slides)
+**Slides 31-32 (SOB)**: Static benefit list with overall limit "S$500" - only update limit value
+
+**Key Difference from GP/SP**:
+- Single plan only (no dynamic plan columns)
+- Benefits have descriptions but no individual plan values
+- Overall limit applies to all benefits
+
+### Completed Mappings
+All slides 1-32 mapped. Dental is simpler due to single plan structure.

@@ -1369,6 +1369,17 @@ function processPlacementSlip(buffer) {
         console.log(`   - Plan Types: ${spData.scheduleOfBenefits?.planHeaders?.join(', ') || 'None'}`);
     }
 
+    // Extract Dental-specific data for Slides 30-32
+    const dentalSheet = workbook.Sheets['Dental'];
+    const dentalData = extractDentalData(dentalSheet);
+
+    if (dentalData) {
+        console.log('✅ Dental Data extracted successfully');
+        console.log(`   - Eligibility: ${dentalData.eligibility ? 'Found' : 'Not found'}`);
+        console.log(`   - Last Entry Age: ${dentalData.lastEntryAge ? 'Found' : 'Not found'}`);
+        console.log(`   - Overall Limit: ${dentalData.overallLimit || 'Not found'}`);
+    }
+
     return {
         success: true,
         periodOfInsurance: periodOfInsurance,
@@ -1450,9 +1461,23 @@ function processPlacementSlip(buffer) {
         slide27Data: {
             scheduleOfBenefits: spData?.scheduleOfBenefits
         },
+        // Slide 30: Dental Overview (Eligibility, Last Entry Age)
+        slide30Data: {
+            eligibility: dentalData?.eligibility,
+            lastEntryAge: dentalData?.lastEntryAge
+        },
+        // Slide 31: Dental Schedule of Benefits Part 1
+        slide31Data: {
+            overallLimit: dentalData?.overallLimit
+        },
+        // Slide 32: Dental Schedule of Benefits Part 2
+        slide32Data: {
+            overallLimit: dentalData?.overallLimit
+        },
         // Raw data for additional processing
         gpData: gpData,
-        spData: spData
+        spData: spData,
+        dentalData: dentalData
     };
 }
 
@@ -1705,6 +1730,71 @@ function extractGHSRoomAndBoardEntitlements(data) {
 }
 
 /**
+ * Extract Dental Data for Slides 30-32
+ * Simpler structure than GP/SP - single plan with overall limit
+ * @param {Object} sheet - XLSX sheet object
+ * @returns {Object} Dental data
+ */
+function extractDentalData(sheet) {
+    if (!sheet) {
+        console.log('⚠️ Dental sheet not found');
+        return null;
+    }
+
+    console.log('📋 Extracting Dental Data...');
+    const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+    // Extract eligibility (Row 11, Col C - index 2)
+    const eligibility = extractFieldByLabel(data, 'eligibility', 2);
+    console.log(`  ✅ Dental Eligibility: ${eligibility ? eligibility.substring(0, 50) + '...' : 'Not found'}`);
+
+    // Extract last entry age (Row 13, Col C - index 2)
+    const lastEntryAge = extractFieldByLabel(data, 'last entry age', 2);
+    console.log(`  ✅ Dental Last Entry Age: ${lastEntryAge || 'Not found'}`);
+
+    // Extract overall limit from Row 36, Col E (index 4) - merged cell
+    let overallLimit = null;
+    for (let i = 30; i < Math.min(50, data.length); i++) {
+        const row = data[i];
+        if (!row) continue;
+
+        const colE = String(row[4] || '').trim();
+        if (colE.toLowerCase().includes('overall limit') && colE.includes('$')) {
+            // Extract the dollar amount (e.g., "$500" from "Overall limit per policy year at $500")
+            const match = colE.match(/\$[\d,]+/);
+            overallLimit = match ? match[0] : colE;
+            console.log(`  ✅ Dental Overall Limit: ${overallLimit}`);
+            break;
+        }
+    }
+
+    // If not found in standard location, search more broadly
+    if (!overallLimit) {
+        for (let i = 0; i < data.length; i++) {
+            const row = data[i];
+            if (!row) continue;
+
+            for (let col = 0; col < row.length; col++) {
+                const cellValue = String(row[col] || '').trim();
+                if (cellValue.toLowerCase().includes('overall limit') && cellValue.includes('$')) {
+                    const match = cellValue.match(/\$[\d,]+/);
+                    overallLimit = match ? match[0] : cellValue;
+                    console.log(`  ✅ Dental Overall Limit (found at ${i},${col}): ${overallLimit}`);
+                    break;
+                }
+            }
+            if (overallLimit) break;
+        }
+    }
+
+    return {
+        eligibility: eligibility,
+        lastEntryAge: lastEntryAge,
+        overallLimit: overallLimit || 'S$500' // Default if not found
+    };
+}
+
+/**
  * Validate if buffer is a valid Excel file
  * @param {Buffer} buffer - File buffer
  * @returns {boolean} True if valid Excel file
@@ -1739,6 +1829,7 @@ module.exports = {
     extractSPData,
     extractSPCategoryPlans,
     extractSPScheduleOfBenefits,
+    extractDentalData,
     extractFieldByLabel,
     extractBasisOfCover,
     extractGPABasisOfCover,
